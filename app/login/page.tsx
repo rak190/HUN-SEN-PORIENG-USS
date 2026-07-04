@@ -49,9 +49,13 @@ export default function LoginPage() {
     }
   }
 
-  async function handleQuickDemo(demoRole: 'teacher' | 'principal' | 'admin') {
+  async function handleQuickDemo(demoRole: 'teacher' | 'principal' | 'admin' | 'monitor') {
     setLoading(true);
-    const demoUser = demoRole === 'admin' ? 'admin' : demoRole === 'principal' ? 'kruadmin041030' : 'teacher';
+    let demoUser = 'teacher';
+    if (demoRole === 'admin') demoUser = 'admin';
+    if (demoRole === 'principal') demoUser = 'kruadmin041030';
+    if (demoRole === 'monitor') demoUser = 'monitor';
+    
     await login(demoUser, 'password123');
     router.push('/dashboard');
   }

@@ -407,7 +407,7 @@ export default function MonthlyAttendanceForm() {
                     <td className="py-4 px-5 font-black text-slate-800">
                       <div className="flex items-center gap-2">
                         {std.full_name}
-                        {isHighAbsent && <AlertTriangle className="w-3.5 h-3.5 text-rose-500" title="ប្រឈមគ្រោះថ្នាក់បោះបង់ការសិក្សា" />}
+                        {isHighAbsent && <span title="ប្រឈមគ្រោះថ្នាក់បោះបង់ការសិក្សា"><AlertTriangle className="w-3.5 h-3.5 text-rose-500" /></span>}
                       </div>
                     </td>
                     <td className="py-4 px-3 text-center">

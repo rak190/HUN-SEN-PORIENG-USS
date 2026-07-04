@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import * as XLSX from 'xlsx';
 import {
   Users, Search, UserPlus, Download, Edit, MapPin, Heart,
-  Phone, AlertCircle, FileText, UserSquare2
+  Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp
 } from 'lucide-react';
 
 interface MassiveProfilingStudent {
@@ -93,6 +93,7 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<MassiveProfilingStudent[]>(INITIAL_STUDENTS);
   const [searchQuery, setSearchQuery] = useState('');
   
+  const [mainTab, setMainTab] = useState<'list' | 'info' | 'stats'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTableView, setActiveTableView] = useState(1);
   const [activeModalTab, setActiveModalTab] = useState(1);
@@ -195,7 +196,32 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* Toolbar & Add Button */}
+      {/* Main Tabs Navigation */}
+      <div className="flex space-x-2 border-b border-slate-200 pb-px overflow-x-auto">
+        <button
+          onClick={() => setMainTab('list')}
+          className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'list' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+        >
+          <Users className="w-4 h-4" /> បញ្ជីរាយនាមសិស្ស (Student List)
+        </button>
+        <button
+          onClick={() => setMainTab('info')}
+          className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'info' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+        >
+          <Info className="w-4 h-4" /> ព័ត៌មានថ្នាក់រៀន (Class Info)
+        </button>
+        <button
+          onClick={() => setMainTab('stats')}
+          className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'stats' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+        >
+          <BarChart3 className="w-4 h-4" /> ស្ថិតិថ្នាក់រៀន (Class Statistics)
+        </button>
+      </div>
+
+      {/* Tab 1: Student List (Existing Table) */}
+      {mainTab === 'list' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Toolbar & Add Button */}
       <div className="bg-white p-4 rounded-[20px] border border-slate-200 shadow-2xs flex flex-wrap justify-between items-center gap-4">
         <div className="flex gap-4 items-center">
           <div className="text-sm font-extrabold text-slate-700">សិស្សសរុប៖ <span className="text-[#155EEF]">{students.length} នាក់</span></div>
@@ -339,6 +365,188 @@ export default function StudentsPage() {
           {filteredStudents.length === 0 && <div className="py-12 text-center text-slate-500 font-bold">មិនមានទិន្នន័យសិស្សទេ</div>}
         </div>
       </div>
+      </div>
+      )}
+
+      {/* Tab 2: Class Info */}
+      {mainTab === 'info' && (
+        <div className="space-y-6 animate-fadeIn">
+          <div className="bg-white p-6 sm:p-8 rounded-[24px] border border-slate-200 shadow-2xs">
+            <h2 className="text-xl font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-4 mb-6">
+              <BookOpen className="w-6 h-6 text-[#155EEF]" /> ព័ត៌មានទូទៅនៃថ្នាក់រៀន
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-sm font-bold text-slate-500">ឈ្មោះថ្នាក់រៀន (Class Name)</span>
+                  <span className="text-sm font-black text-slate-900">{activeClass?.name || '១២ ក'}</span>
+                </div>
+                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-sm font-bold text-slate-500">កម្រិតថ្នាក់ (Grade)</span>
+                  <span className="text-sm font-black text-slate-900">ទី ១២</span>
+                </div>
+                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-sm font-bold text-slate-500">ឆ្នាំសិក្សា (Academic Year)</span>
+                  <span className="text-sm font-black text-slate-900">2026-2027</span>
+                </div>
+                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-sm font-bold text-slate-500">គ្រូបន្ទុកថ្នាក់ (Homeroom Teacher)</span>
+                  <span className="text-sm font-black text-slate-900">លោកគ្រូ/អ្នកគ្រូ សុខា</span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-sm font-bold text-slate-500">សិស្សសរុប (Total Students)</span>
+                  <span className="text-sm font-black text-slate-900">{students.length} នាក់</span>
+                </div>
+                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-sm font-bold text-slate-500">សិស្សស្រី (Total Girls)</span>
+                  <span className="text-sm font-black text-slate-900">{students.filter(s => s.gender === 'F').length} នាក់</span>
+                </div>
+                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-sm font-bold text-slate-500">ប្រធានថ្នាក់ (Class Monitor)</span>
+                  <span className="text-sm font-black text-slate-900 text-[#155EEF]">កែវ ច័ន្ទធីតា</span>
+                </div>
+              </div>
+            </div>
+
+            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 mt-10 mb-4">
+              <Clock className="w-5 h-5 text-amber-500" /> កាលវិភាគសិក្សា (Class Schedule)
+            </h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-sm text-left whitespace-nowrap">
+                <thead className="bg-slate-50 text-slate-600 font-black">
+                  <tr>
+                    <th className="px-6 py-3 border-b border-slate-200">ម៉ោង/ថ្ងៃ</th>
+                    <th className="px-6 py-3 border-b border-slate-200">ចន្ទ</th>
+                    <th className="px-6 py-3 border-b border-slate-200">អង្គារ</th>
+                    <th className="px-6 py-3 border-b border-slate-200">ពុធ</th>
+                    <th className="px-6 py-3 border-b border-slate-200">ព្រហស្បតិ៍</th>
+                    <th className="px-6 py-3 border-b border-slate-200">សុក្រ</th>
+                    <th className="px-6 py-3 border-b border-slate-200">សៅរ៍</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white font-bold text-slate-700">
+                  <tr>
+                    <td className="px-6 py-4 bg-slate-50">៧:០០ - ៨:០០</td>
+                    <td className="px-6 py-4 text-rose-600 bg-rose-50/30">គណិតវិទ្យា</td>
+                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">រូបវិទ្យា</td>
+                    <td className="px-6 py-4 text-rose-600 bg-rose-50/30">គណិតវិទ្យា</td>
+                    <td className="px-6 py-4 text-blue-600 bg-blue-50/30">គីមីវិទ្យា</td>
+                    <td className="px-6 py-4 text-amber-600 bg-amber-50/30">អក្សរសាស្ត្រខ្មែរ</td>
+                    <td className="px-6 py-4 text-purple-600 bg-purple-50/30">ភាសាអង់គ្លេស</td>
+                  </tr>
+                  <tr>
+                    <td className="px-6 py-4 bg-slate-50">៨:០០ - ៩:០០</td>
+                    <td className="px-6 py-4 text-rose-600 bg-rose-50/30">គណិតវិទ្យា</td>
+                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">រូបវិទ្យា</td>
+                    <td className="px-6 py-4 text-rose-600 bg-rose-50/30">គណិតវិទ្យា</td>
+                    <td className="px-6 py-4 text-blue-600 bg-blue-50/30">គីមីវិទ្យា</td>
+                    <td className="px-6 py-4 text-amber-600 bg-amber-50/30">អក្សរសាស្ត្រខ្មែរ</td>
+                    <td className="px-6 py-4 text-purple-600 bg-purple-50/30">ភាសាអង់គ្លេស</td>
+                  </tr>
+                  <tr>
+                    <td className="px-6 py-4 bg-slate-50">៩:០០ - ៩:១៥</td>
+                    <td colSpan={6} className="px-6 py-2 text-center text-slate-400 font-bold bg-slate-100">ម៉ោងចេញលេង</td>
+                  </tr>
+                  <tr>
+                    <td className="px-6 py-4 bg-slate-50">៩:១៥ - ១០:១៥</td>
+                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">ជីវវិទ្យា</td>
+                    <td className="px-6 py-4 text-purple-600 bg-purple-50/30">ប្រវត្តិវិទ្យា</td>
+                    <td className="px-6 py-4 text-amber-600 bg-amber-50/30">ផែនដីវិទ្យា</td>
+                    <td className="px-6 py-4 text-rose-600 bg-rose-50/30">សីលធម៌</td>
+                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">ជីវវិទ្យា</td>
+                    <td className="px-6 py-4">-</td>
+                  </tr>
+                  <tr>
+                    <td className="px-6 py-4 bg-slate-50">១០:១៥ - ១១:១៥</td>
+                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">ជីវវិទ្យា</td>
+                    <td className="px-6 py-4 text-purple-600 bg-purple-50/30">ប្រវត្តិវិទ្យា</td>
+                    <td className="px-6 py-4 text-amber-600 bg-amber-50/30">ផែនដីវិទ្យា</td>
+                    <td className="px-6 py-4 text-blue-600 bg-blue-50/30">កីឡា</td>
+                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">ជីវវិទ្យា</td>
+                    <td className="px-6 py-4">-</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 3: Class Statistics */}
+      {mainTab === 'stats' && (
+        <div className="space-y-6 animate-fadeIn">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Gender Breakdown */}
+            <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs">
+              <h3 className="text-sm font-black text-slate-800 mb-6 flex items-center gap-2">
+                <Users className="w-5 h-5 text-indigo-500" /> សមាមាត្រសិស្ស (Gender)
+              </h3>
+              <div className="flex items-end justify-center h-32 gap-8">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-16 bg-blue-500 rounded-t-xl" style={{ height: '70px' }}></div>
+                  <span className="text-xs font-black text-slate-600">ប្រុស ({students.length - students.filter(s => s.gender === 'F').length})</span>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-16 bg-pink-500 rounded-t-xl" style={{ height: '90px' }}></div>
+                  <span className="text-xs font-black text-slate-600">ស្រី ({students.filter(s => s.gender === 'F').length})</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Attendance Rate */}
+            <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs flex flex-col items-center justify-center relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/3" />
+              <h3 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2 w-full">
+                <Activity className="w-5 h-5 text-emerald-500" /> អត្រាវត្តមាន (Attendance)
+              </h3>
+              <div className="relative w-32 h-32 flex items-center justify-center">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                  <path className="text-slate-100" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                  <path className="text-emerald-500" strokeDasharray="94, 100" strokeWidth="3" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                </svg>
+                <div className="absolute text-3xl font-black text-slate-900">94<span className="text-base text-slate-500">%</span></div>
+              </div>
+              <p className="text-xs font-bold text-slate-500 mt-4 text-center">អត្រាវត្តមានមធ្យមប្រចាំខែនេះ</p>
+            </div>
+
+            {/* Academic Performance */}
+            <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs">
+              <h3 className="text-sm font-black text-slate-800 mb-6 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-amber-500" /> លទ្ធផលសិក្សា (Academics)
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between text-xs font-black text-slate-700 mb-1">
+                    <span>សិស្សជាប់ (Pass)</span>
+                    <span className="text-emerald-600">85%</span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2.5">
+                    <div className="bg-emerald-500 h-2.5 rounded-full" style={{ width: '85%' }}></div>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs font-black text-slate-700 mb-1">
+                    <span>សិស្សធ្លាក់ (Fail)</span>
+                    <span className="text-rose-600">15%</span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-2.5">
+                    <div className="bg-rose-500 h-2.5 rounded-full" style={{ width: '15%' }}></div>
+                  </div>
+                </div>
+                <div className="pt-4 mt-4 border-t border-slate-100">
+                  <p className="text-xs font-bold text-slate-500">មុខវិជ្ជាដែលសិស្សធ្លាក់ច្រើនជាងគេ៖ <span className="text-rose-600 font-black">គណិតវិទ្យា (១២នាក់)</span></p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Massive Modal (Synchronized with activeModalTab) */}
       {isModalOpen && (
