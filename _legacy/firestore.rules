@@ -1,0 +1,235 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(userPath());
+    }
+
+    function profile() {
+      return get(userPath()).data;
+    }
+
+    function userSchoolId() {
+      return hasProfile() ? profile().schoolId : null;
+    }
+
+    function userSchoolCode() {
+      return hasProfile() ? profile().schoolCode : null;
+    }
+
+    function userRole() {
+      return hasProfile() ? profile().role : null;
+    }
+
+    function isTeacher() {
+      return userRole() == 'teacher';
+    }
+
+    function isPrincipal() {
+      return userRole() == 'principal';
+    }
+
+    function isAdmin() {
+      return userRole() == 'admin';
+    }
+
+    function isWebsiteAdminAuth() {
+      return signedIn() && request.auth.token.email == 'u_6b727561646d696e303431303330@kruai-login.app';
+    }
+
+    function validAdminClaim(data) {
+      return data.role != 'admin' || isWebsiteAdminAuth();
+    }
+
+    function isSchoolManager() {
+      return isPrincipal() || isAdmin();
+    }
+
+    function isParent() {
+      return userRole() == 'parent';
+    }
+
+    function sameSchool(schoolId) {
+      return hasProfile() && (
+        schoolId == userSchoolId() ||
+        schoolId == userSchoolCode() ||
+        (userSchoolId() == 'main-school' && schoolId == 'Porieng-2026') ||
+        (userSchoolId() == 'main-school' && schoolId == 'porieng-2026') ||
+        (userSchoolId() == 'porieng-2026' && (schoolId == 'main-school' || schoolId == 'Porieng-2026')) ||
+        (userSchoolCode() == 'Porieng-2026' && (schoolId == 'main-school' || schoolId == 'porieng-2026'))
+      );
+    }
+
+    function legacyPoriengDoc(data) {
+      return hasProfile()
+        && (userSchoolId() == 'main-school' || userSchoolId() == 'porieng-2026' || userSchoolCode() == 'Porieng-2026')
+        && (
+          data.schoolId == null ||
+          data.schoolId == '' ||
+          data.schoolId == 'porieng-2026' ||
+          data.schoolCode == null ||
+          data.schoolCode == '' ||
+          data.schoolCode == 'main-school' ||
+          data.schoolCode == 'Porieng-2026'
+        );
+    }
+
+    function docInMySchool(data) {
+      return sameSchool(data.schoolId) ||
+        sameSchool(data.schoolCode) ||
+        legacyPoriengDoc(data);
+    }
+
+    function principalForSchool(schoolId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/schools/$(schoolId)).data.principalUid == request.auth.uid;
+    }
+
+    function keepsOwnWorkspace() {
+      return (
+          request.resource.data.schoolId == resource.data.schoolId ||
+          (resource.data.schoolId == 'porieng-2026' && request.resource.data.schoolId == 'main-school')
+        )
+        && (
+          request.resource.data.schoolCode == resource.data.schoolCode ||
+          (resource.data.schoolCode == 'main-school' && request.resource.data.schoolCode == 'Porieng-2026')
+        )
+        && request.resource.data.role == resource.data.role;
+    }
+
+    function fillsMissingWorkspace() {
+      return (resource.data.schoolId == null || resource.data.schoolId == '')
+        && request.resource.data.schoolId != null
+        && request.resource.data.role == resource.data.role;
+    }
+
+    function classPath(classId) {
+      return /databases/$(database)/documents/classes/$(classId);
+    }
+
+    function classInMySchool(classId) {
+      return hasProfile() && docInMySchool(get(classPath(classId)).data);
+    }
+
+    function canManageClass(classId) {
+      return classInMySchool(classId) && (
+        isSchoolManager() ||
+        (isTeacher() && get(classPath(classId)).data.teacherId == request.auth.uid)
+      );
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn()
+        && userId == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && validAdminClaim(request.resource.data)
+        && !exists(/databases/$(database)/documents/deletedUsers/$(userId));
+
+      allow read: if signedIn() && (
+        userId == request.auth.uid ||
+        (isSchoolManager() && docInMySchool(resource.data))
+      );
+
+      allow update: if signedIn() && (
+        (userId == request.auth.uid && (
+          keepsOwnWorkspace() ||
+          fillsMissingWorkspace() ||
+          (request.resource.data.role == 'principal' && principalForSchool(request.resource.data.schoolId)) ||
+          (request.resource.data.role == 'admin' && isWebsiteAdminAuth())
+        )) ||
+        (isSchoolManager() && docInMySchool(resource.data))
+      );
+
+      allow delete: if signedIn()
+        && isAdmin()
+        && userId != request.auth.uid
+        && docInMySchool(resource.data);
+    }
+
+    match /deletedUsers/{userId} {
+      allow read: if signedIn() && (
+        userId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create, update: if signedIn()
+        && isAdmin()
+        && userId != request.auth.uid
+        && request.resource.data.uid == userId
+        && request.resource.data.deletedBy == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    match /schools/{schoolId} {
+      allow read: if signedIn() && (!hasProfile() || sameSchool(schoolId));
+
+      allow create, update: if signedIn()
+        && request.resource.data.schoolId == schoolId
+        && (!hasProfile() || schoolId == userSchoolId() || isAdmin());
+
+      allow delete: if false;
+    }
+
+    match /{path=**}/students/{studentId} {
+      allow read: if signedIn() && docInMySchool(resource.data);
+    }
+
+    match /classes/{classId} {
+      allow create: if signedIn()
+        && sameSchool(request.resource.data.schoolId)
+        && (isTeacher() || isSchoolManager());
+
+      allow read: if signedIn()
+        && docInMySchool(resource.data)
+        && (isSchoolManager() || isParent() || resource.data.teacherId == request.auth.uid);
+
+      allow update, delete: if signedIn()
+        && docInMySchool(resource.data)
+        && (isSchoolManager() || (isTeacher() && resource.data.teacherId == request.auth.uid));
+
+      match /students/{studentId} {
+        allow read: if signedIn()
+          && (classInMySchool(classId) || docInMySchool(resource.data));
+
+        allow create: if signedIn()
+          && canManageClass(classId)
+          && request.resource.data.schoolId == userSchoolId();
+
+        allow update, delete: if signedIn() && canManageClass(classId);
+      }
+
+      match /attendance/{attendanceId} {
+        allow read: if signedIn() && classInMySchool(classId);
+        allow create, update, delete: if signedIn() && canManageClass(classId);
+      }
+
+      match /grades/{gradeId} {
+        allow read: if signedIn() && classInMySchool(classId);
+        allow create, update, delete: if signedIn() && canManageClass(classId);
+      }
+
+      match /meta/{metaId} {
+        allow read: if signedIn() && classInMySchool(classId);
+        allow create, update, delete: if signedIn() && canManageClass(classId);
+      }
+
+      match /lessonPlans/{planId} {
+        allow read: if signedIn() && classInMySchool(classId);
+        allow create, update, delete: if signedIn() && canManageClass(classId);
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "ប្រព័ន្ធគ្រប់គ្រងសាលារៀន",
+  "short_name": "សាលារៀន GEIP",
+  "description": "ប្រព័ន្ធគ្រប់គ្រងសាលារៀនសម្រាប់វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#155EEF",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/assets/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/brand-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
