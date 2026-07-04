@@ -298,6 +298,16 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
               <button className="text-xs font-bold text-[#155EEF] hover:underline print:hidden cursor-pointer">+ បន្ថែម</button>
             </div>
             
+            <div className="mb-6 flex flex-col gap-2">
+              <textarea 
+                placeholder="សរសេរកំណត់ហេតុ ឬការសង្កេតថ្មី..." 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-700 resize-none h-20 focus:outline-none focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 transition-all"
+              ></textarea>
+              <div className="flex justify-end">
+                <button className="px-4 py-2 bg-[#155EEF] text-white rounded-lg text-xs font-black shadow-md hover:bg-blue-700 transition-colors">រក្សាទុកកំណត់ហេតុ</button>
+              </div>
+            </div>
+
             <div className="space-y-4">
               {student.teacher_notes.length === 0 ? (
                 <p className="text-xs text-slate-500 font-bold italic text-center py-4">មិនទាន់មានកំណត់ត្រានៅឡើយទេ</p>
@@ -310,7 +320,6 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
                 ))
               )}
             </div>
-
             <div className="mt-6 pt-4 border-t border-slate-100 print:border-slate-400">
               <h3 className="text-xs font-black text-slate-500 uppercase mb-2">កំណត់ត្រាអាកប្បកិរិយា</h3>
               <div className="flex flex-wrap gap-2">

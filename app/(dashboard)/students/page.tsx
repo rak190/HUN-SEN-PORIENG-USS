@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import * as XLSX from 'xlsx';
 import {
   Users, Search, UserPlus, Download, Edit, MapPin, Heart,
-  Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp
+  Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp, AlertTriangle, LogOut
 } from 'lucide-react';
 
 interface MassiveProfilingStudent {
@@ -93,7 +93,7 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<MassiveProfilingStudent[]>(INITIAL_STUDENTS);
   const [searchQuery, setSearchQuery] = useState('');
   
-  const [mainTab, setMainTab] = useState<'list' | 'info' | 'stats'>('list');
+  const [mainTab, setMainTab] = useState<'list' | 'info' | 'stats' | 'at-risk' | 'transfer'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTableView, setActiveTableView] = useState(1);
   const [activeModalTab, setActiveModalTab] = useState(1);
@@ -215,6 +215,18 @@ export default function StudentsPage() {
           className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'stats' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
           <BarChart3 className="w-4 h-4" /> ស្ថិតិថ្នាក់រៀន (Class Statistics)
+        </button>
+        <button
+          onClick={() => setMainTab('at-risk')}
+          className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'at-risk' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+        >
+          <AlertTriangle className="w-4 h-4" /> សិស្សប្រឈម (At-Risk)
+        </button>
+        <button
+          onClick={() => setMainTab('transfer')}
+          className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'transfer' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+        >
+          <LogOut className="w-4 h-4" /> ផ្ទេរ / បោះបង់ (Transfer / Dropout)
         </button>
       </div>
 
@@ -546,6 +558,96 @@ export default function StudentsPage() {
 
           </div>
         </div>
+      )}
+
+      {/* Tab 4: At-Risk Students */}
+      {mainTab === 'at-risk' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Summary Dashboard */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-rose-50 p-6 rounded-[24px] border border-rose-200">
+              <h3 className="text-rose-800 font-black flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> ហានិភ័យកម្រិតខ្ពស់ (High Risk)</h3>
+              <div className="text-3xl font-black text-rose-600 mt-2">{students.filter(s => s.risk_level === 'high').length} នាក់</div>
+            </div>
+            <div className="bg-amber-50 p-6 rounded-[24px] border border-amber-200">
+              <h3 className="text-amber-800 font-black flex items-center gap-2"><AlertCircle className="w-5 h-5" /> ហានិភ័យមធ្យម (Medium Risk)</h3>
+              <div className="text-3xl font-black text-amber-600 mt-2">{students.filter(s => s.risk_level === 'medium').length} នាក់</div>
+            </div>
+            <div className="bg-emerald-50 p-6 rounded-[24px] border border-emerald-200">
+              <h3 className="text-emerald-800 font-black flex items-center gap-2"><Heart className="w-5 h-5" /> ហានិភ័យទាប (Low Risk)</h3>
+              <div className="text-3xl font-black text-emerald-600 mt-2">{students.filter(s => s.risk_level === 'low').length} នាក់</div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-[24px] border border-slate-200 overflow-hidden shadow-2xs">
+             <div className="p-6 border-b border-slate-100"><h3 className="text-lg font-black text-slate-800">សិស្សប្រឈមគ្រោះថ្នាក់បោះបង់ការសិក្សា</h3></div>
+             <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="bg-slate-50 text-slate-600 font-black text-xs">
+                    <tr>
+                      <th className="px-6 py-4">អត្តលេខ</th>
+                      <th className="px-6 py-4">ឈ្មោះសិស្ស</th>
+                      <th className="px-6 py-4">កម្រិតហានិភ័យ</th>
+                      <th className="px-6 py-4">អត្រាវត្តមាន</th>
+                      <th className="px-6 py-4">សកម្មភាព</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+                    {students.filter(s => s.risk_level !== 'low').map(s => (
+                       <tr key={s.id} className="hover:bg-slate-50">
+                         <td className="px-6 py-4 font-mono text-slate-500">{s.student_id_number}</td>
+                         <td className="px-6 py-4">{s.full_name}</td>
+                         <td className="px-6 py-4">
+                           <span className={`px-3 py-1 rounded-full text-xs ${s.risk_level === 'high' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                             {s.risk_level === 'high' ? 'ខ្ពស់' : 'មធ្យម'}
+                           </span>
+                         </td>
+                         <td className="px-6 py-4">
+                            <span className={s.attendance_rate < 90 ? 'text-rose-600' : 'text-slate-700'}>{s.attendance_rate}%</span>
+                         </td>
+                         <td className="px-6 py-4 flex gap-2">
+                           <button className="px-3 py-1.5 bg-blue-50 text-[#155EEF] rounded-lg hover:bg-blue-100 flex items-center gap-1.5 transition-colors">
+                             <Phone className="w-3.5 h-3.5" /> ទាក់ទងអាណាព្យាបាល
+                           </button>
+                         </td>
+                       </tr>
+                    ))}
+                  </tbody>
+                </table>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 5: Transfer / Dropout */}
+      {mainTab === 'transfer' && (
+         <div className="space-y-6 animate-fadeIn">
+            <div className="flex justify-end">
+              <button className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs shadow-md shadow-rose-500/20 flex items-center gap-2 transition-colors">
+                <LogOut className="w-4 h-4" /> ធ្វើការស្នើសុំផ្ទេរ/បោះបង់
+              </button>
+            </div>
+            
+            <div className="bg-white rounded-[24px] border border-slate-200 overflow-hidden shadow-2xs">
+               <div className="p-6 border-b border-slate-100"><h3 className="text-lg font-black text-slate-800">ប្រវត្តិសិស្សផ្ទេរ ឬបោះបង់ការសិក្សា</h3></div>
+               <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="bg-slate-50 text-slate-600 font-black text-xs">
+                      <tr>
+                        <th className="px-6 py-4">អត្តលេខ</th>
+                        <th className="px-6 py-4">ឈ្មោះសិស្ស</th>
+                        <th className="px-6 py-4">ស្ថានភាព</th>
+                        <th className="px-6 py-4">កាលបរិច្ឆេទ</th>
+                        <th className="px-6 py-4">មូលហេតុ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-bold text-slate-700 text-center">
+                       <tr><td colSpan={5} className="py-12 text-slate-400">មិនមានទិន្នន័យ</td></tr>
+                    </tbody>
+                  </table>
+               </div>
+            </div>
+         </div>
       )}
 
       {/* Massive Modal (Synchronized with activeModalTab) */}
