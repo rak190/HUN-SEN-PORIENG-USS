@@ -31,7 +31,7 @@ export async function createActivityLog(data: {
     throw new Error('Failed to create activity log');
   }
 
-  revalidatePath('/dashboard');
+  revalidatePath('/homeroom');
 }
 
 export async function deleteActivityLog(id: string) {
@@ -44,5 +44,5 @@ export async function deleteActivityLog(id: string) {
     throw new Error('Failed to delete activity log');
   }
 
-  revalidatePath('/dashboard');
+  revalidatePath('/homeroom');
 }

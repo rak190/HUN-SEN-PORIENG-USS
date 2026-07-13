@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
-import { Student, MonthlyAttendanceSummary, RootCauseAbsence } from '@/types';
+import { Student, MonthlyAttendanceSummary, RootCauseAbsence, AttendanceRecord } from '@/types';
 import {
   CalendarCheck,
   CheckCircle2,
@@ -13,7 +13,10 @@ import {
   Calendar,
   Users,
   AlertCircle,
-  Percent
+  Percent,
+  Activity,
+  ShieldAlert,
+  Smartphone
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -46,9 +49,14 @@ export default function MonthlyAttendanceForm() {
   const [loading, setLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [viewMode, setViewMode] = useState<'monthly' | 'daily'>('monthly');
+  const [rawDailyRecords, setRawDailyRecords] = useState<AttendanceRecord[]>([]);
   
-  // Stats
+  // Stats & Command Center Data
   const [totalSchoolDays, setTotalSchoolDays] = useState<number>(25);
+  const [monitorDaysSubmitted, setMonitorDaysSubmitted] = useState<number>(0);
+  const [totalMonthlyAbsences, setTotalMonthlyAbsences] = useState<number>(0);
+  const [dropoutAlertsCount, setDropoutAlertsCount] = useState<number>(0);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -75,11 +83,28 @@ export default function MonthlyAttendanceForm() {
   useEffect(() => {
     if (isDemoMode || !activeClass) {
       setStudents(DEMO_STUDENTS_ATT);
+      // Demo Command Center Stats
+      setMonitorDaysSubmitted(15);
+      setTotalMonthlyAbsences(12);
+      setDropoutAlertsCount(1);
+      
       // Demo data
       setFormData({
         'std-1': { absent_count: 0, permission_count: 0, late_count: 0 },
         'std-5': { absent_count: 4, permission_count: 1, late_count: 0, root_cause: 'farming', needs_home_visit: true },
       });
+      
+      // Demo daily records for visual testing
+      setRawDailyRecords([
+        { id: '1', student_id: 'std-5', date: `${currentMonthStr}-18`, status: 'absent', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: '2', student_id: 'std-5', date: `${currentMonthStr}-19`, status: 'absent', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: '3', student_id: 'std-5', date: `${currentMonthStr}-20`, status: 'absent', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: '4', student_id: 'std-5', date: `${currentMonthStr}-21`, status: 'absent', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: '5', student_id: 'std-5', date: `${currentMonthStr}-15`, status: 'permission', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: '6', student_id: 'std-2', date: `${currentMonthStr}-10`, status: 'late', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: '7', student_id: 'std-2', date: `${currentMonthStr}-11`, status: 'late', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { id: '8', student_id: 'std-1', date: `${currentMonthStr}-12`, status: 'present', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+      ] as any[]);
       return;
     }
 
@@ -98,32 +123,73 @@ export default function MonthlyAttendanceForm() {
           setStudents(DEMO_STUDENTS_ATT);
         }
 
-        const { data: attData } = await supabase
+        const { data: summaryData } = await supabase
           .from('monthly_attendance_summaries')
           .select('*')
           .eq('class_id', activeClass?.id || '')
           .eq('month', selectedMonth);
 
+        const startDate = `${selectedMonth}-01`;
+        const endDate = `${selectedMonth}-31`;
+
+        const { data: dailyRecords } = await supabase
+          .from('attendance_records')
+          .select('*')
+          .eq('class_id', activeClass?.id || '')
+          .gte('date', startDate)
+          .lte('date', endDate);
+
+        const allStudents = stdData && stdData.length > 0 ? stdData : DEMO_STUDENTS_ATT;
         const newMap: Record<string, any> = {};
         
-        // Initialize empty for all students
-        const allStudents = stdData && stdData.length > 0 ? stdData : DEMO_STUDENTS_ATT;
+        let daysSubmitted = new Set<string>();
+        let totalAbsences = 0;
+        let dropoutCount = 0;
+
+        // 1. Calculate auto-sums from Monitor's daily records
+        const autoSums: Record<string, any> = {};
         allStudents.forEach((s) => {
-          newMap[s.id] = { absent_count: 0, permission_count: 0, late_count: 0, root_cause: null, needs_home_visit: false };
+          autoSums[s.id] = { absent_count: 0, permission_count: 0, late_count: 0 };
         });
 
-        // Fill with fetched data
-        if (attData) {
-          attData.forEach((rec: any) => {
+        if (dailyRecords) {
+          setRawDailyRecords(dailyRecords as AttendanceRecord[]);
+          dailyRecords.forEach(rec => {
+            daysSubmitted.add(rec.date);
+            if (!autoSums[rec.student_id]) autoSums[rec.student_id] = { absent_count: 0, permission_count: 0, late_count: 0 };
+            
+            if (rec.status === 'absent') { autoSums[rec.student_id].absent_count++; totalAbsences++; }
+            if (rec.status === 'permission') autoSums[rec.student_id].permission_count++;
+            if (rec.status === 'late') autoSums[rec.student_id].late_count++;
+          });
+        }
+        
+        setMonitorDaysSubmitted(daysSubmitted.size);
+
+        // 2. Initialize with Auto-Sums, then OVERRIDE with Teacher's manual input if it exists
+        allStudents.forEach((s) => {
+          newMap[s.id] = { ...autoSums[s.id], root_cause: null, needs_home_visit: false };
+        });
+
+        if (summaryData) {
+          summaryData.forEach((rec: any) => {
+            // Only override if teacher explicitly saved it (we can assume if it exists in this table, it's a teacher override)
             newMap[rec.student_id] = {
-              absent_count: rec.absent_count || 0,
-              permission_count: rec.permission_count || 0,
-              late_count: rec.late_count || 0,
+              absent_count: rec.absent_count !== null ? rec.absent_count : autoSums[rec.student_id].absent_count,
+              permission_count: rec.permission_count !== null ? rec.permission_count : autoSums[rec.student_id].permission_count,
+              late_count: rec.late_count !== null ? rec.late_count : autoSums[rec.student_id].late_count,
               root_cause: rec.root_cause || null,
               needs_home_visit: rec.needs_home_visit || false
             };
+            if (newMap[rec.student_id].absent_count >= 3) {
+              dropoutCount++;
+            }
           });
         }
+
+        setTotalMonthlyAbsences(totalAbsences);
+        setDropoutAlertsCount(dropoutCount);
+
         setFormData(newMap);
         setHasUnsavedChanges(false);
       } catch (e) {
@@ -250,9 +316,6 @@ export default function MonthlyAttendanceForm() {
     
     Object.values(formData).forEach(data => {
       totalAbsent += (data.absent_count || 0);
-      if ((data.absent_count || 0) > 3) {
-        ewsAlerts += 1;
-      }
     });
 
     const totalPossibleDays = students.length * totalSchoolDays;
@@ -265,7 +328,92 @@ export default function MonthlyAttendanceForm() {
 
   return (
     <div className="space-y-6 animate-fadeIn select-none">
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+      
+      {/* View Toggle Pill */}
+      <div className="flex justify-center mb-6 print:hidden">
+        <div className="bg-slate-100/80 p-1 rounded-full flex items-center gap-1 border border-slate-200/50 backdrop-blur-sm">
+          <button
+            onClick={() => setViewMode('monthly')}
+            className={`px-6 py-2.5 rounded-full text-sm font-black transition-all ${
+              viewMode === 'monthly'
+                ? 'bg-white text-slate-800 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            សរុបប្រចាំខែ
+          </button>
+          <button
+            onClick={() => setViewMode('daily')}
+            className={`px-6 py-2.5 rounded-full text-sm font-black transition-all ${
+              viewMode === 'daily'
+                ? 'bg-white text-slate-800 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            កំណត់ត្រាប្រចាំថ្ងៃ
+          </button>
+        </div>
+      </div>
+
+      {viewMode === 'monthly' ? (
+        <>
+          {/* ================= COMMAND CENTER DASHBOARD ================= */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 print:hidden">
+        
+        {/* Monitor Sync Status */}
+        <div className="bg-white/70 backdrop-blur-md border border-slate-200/60 p-5 rounded-2xl shadow-sm flex items-start gap-4">
+          <div className="bg-[#155EEF]/10 p-3 rounded-xl text-[#155EEF]">
+            <Smartphone className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500 mb-1">កំណត់ត្រាប្រធានថ្នាក់</p>
+            <div className="flex items-end gap-2">
+              <span className="text-2xl font-black text-slate-800">{monitorDaysSubmitted}</span>
+              <span className="text-sm font-bold text-slate-400 mb-1">/ {totalSchoolDays} ថ្ងៃ</span>
+            </div>
+            <p className="text-[10px] font-bold text-emerald-600 mt-1 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> ទិន្នន័យបញ្ជូនស្វ័យប្រវត្តិ
+            </p>
+          </div>
+        </div>
+
+        {/* Total Absences */}
+        <div className="bg-white/70 backdrop-blur-md border border-slate-200/60 p-5 rounded-2xl shadow-sm flex items-start gap-4">
+          <div className="bg-amber-500/10 p-3 rounded-xl text-amber-600">
+            <Activity className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500 mb-1">អវត្តមានសរុប (ខែនេះ)</p>
+            <div className="flex items-end gap-2">
+              <span className="text-2xl font-black text-slate-800">{totalMonthlyAbsences}</span>
+              <span className="text-sm font-bold text-slate-400 mb-1">ដង</span>
+            </div>
+            <p className="text-[10px] font-bold text-amber-600 mt-1">
+              ចំនួនអវត្តមានសរុបប្រចាំខែ
+            </p>
+          </div>
+        </div>
+
+        {/* Dropout Alerts */}
+        <div className="bg-gradient-to-br from-rose-50 to-white border border-rose-100 p-5 rounded-2xl shadow-sm flex items-start gap-4">
+          <div className="bg-rose-500 p-3 rounded-xl text-white shadow-md shadow-rose-200">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-rose-600/80 mb-1">ប្រឈមការបោះបង់ (អវត្តមាន &gt; ៣)</p>
+            <div className="flex items-end gap-2">
+              <span className="text-2xl font-black text-rose-600">{dropoutAlertsCount}</span>
+              <span className="text-sm font-bold text-rose-400 mb-1">នាក់</span>
+            </div>
+            <p className="text-[10px] font-bold text-rose-500 mt-1 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> ត្រូវការចុះសួរសុខទុក្ខបន្ទាន់
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Controls Card */}
+      <div className="bg-white p-5 rounded-[24px] border border-slate-200 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-4">
         <h2 className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
           <Calendar className="w-4 h-4" /> ជ្រើសរើសខែ
         </h2>
@@ -289,16 +437,8 @@ export default function MonthlyAttendanceForm() {
           />
         </div>
       </div>
-      
-      {/* Stats Summary Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-[20px] border border-slate-200 shadow-sm flex flex-col justify-center">
-          <div className="flex items-center gap-2 text-[11px] font-extrabold text-slate-500 uppercase">
-            <Users className="w-3.5 h-3.5" /> សិស្សសរុប
-          </div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{students.length} <span className="text-sm text-slate-500 font-bold">នាក់</span></div>
-        </div>
-        
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-[20px] border border-slate-200 shadow-sm flex flex-col justify-center">
           <div className="flex items-center gap-2 text-[11px] font-extrabold text-rose-600 uppercase">
             <AlertCircle className="w-3.5 h-3.5" /> ឥតច្បាប់សរុប
@@ -372,23 +512,22 @@ export default function MonthlyAttendanceForm() {
       </div>
       
       {/* Table wrapped in new card style */}
-      <div className="bg-white rounded-[24px] border border-slate-200 shadow-2xs overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[900px]">
+      <div className="bg-transparent overflow-hidden">
+      <div className="overflow-x-auto pb-8">
+        <table className="w-full text-left border-separate border-spacing-y-2 min-w-[900px]">
           <thead>
-            <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">
-              <th className="pb-3 pl-4 w-12 text-center">ល.រ</th>
-              <th className="pb-3 px-4">អត្តលេខ</th>
-              <th className="pb-3 px-5">គោត្តនាម & នាម</th>
-              <th className="pb-3 px-3 text-center">ភេទ</th>
-              <th className="pb-3 px-3 text-center text-rose-600">ឥតច្បាប់ (A)</th>
-              <th className="pb-3 px-3 text-center text-[#155EEF]">ច្បាប់ (E)</th>
-              <th className="pb-3 px-3 text-center text-purple-600">សរុប (Total)</th>
-              <th className="pb-3 px-4 text-center">មូលហេតុ (Root Cause)</th>
-              <th className="pb-3 px-4 text-center">ចុះសួរសុខទុក្ខ</th>
+            <tr className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 pl-4 w-12 text-center rounded-l-xl">ល.រ</th>
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-4">អត្តលេខ</th>
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-5">គោត្តនាម & នាម</th>
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center">ភេទ</th>
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-rose-600">ឥតច្បាប់ (A)</th>
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-[#155EEF]">ច្បាប់ (E)</th>
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-purple-600">សរុប (Total)</th>
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-4 text-center rounded-r-xl">ចុះសួរសុខទុក្ខ</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100 text-sm font-semibold text-slate-700">
+          <tbody className="text-sm font-semibold text-slate-700">
             {filteredStudents.length === 0 ? (
               <tr>
                 <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
@@ -401,8 +540,8 @@ export default function MonthlyAttendanceForm() {
                 const isHighAbsent = stdData.absent_count > 3;
                 
                 return (
-                  <tr key={std.id} className={`hover:bg-slate-50/80 transition-colors ${isHighAbsent ? 'bg-rose-50/30' : ''}`}>
-                    <td className="py-4 pl-4 text-center text-slate-400 font-bold">{index + 1}</td>
+                  <tr key={std.id} className={`group bg-white hover:bg-slate-50 transition-all duration-200 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_20px_-8px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 ${isHighAbsent ? 'ring-1 ring-rose-200 bg-rose-50/20 hover:bg-rose-50/40' : ''}`}>
+                    <td className="py-4 pl-4 text-center text-slate-400 font-bold rounded-l-[16px]">{index + 1}</td>
                     <td className="py-4 px-4 font-mono text-xs text-slate-500">{std.student_id_number || `ID-${index + 101}`}</td>
                     <td className="py-4 px-5 font-black text-slate-800">
                       <div className="flex items-center gap-2">
@@ -459,25 +598,7 @@ export default function MonthlyAttendanceForm() {
                         </div>
                       </div>
                     </td>
-                    
-                    <td className="py-3 px-4">
-                      {stdData.permission_count > 0 ? (
-                        <select
-                          value={stdData.root_cause || ''}
-                          onChange={(e) => handleRootCauseChange(std.id, e.target.value as RootCauseAbsence | '')}
-                          className="w-full max-w-[160px] p-2 rounded-xl bg-amber-50/80 border border-amber-200 text-[10px] font-bold text-amber-950 focus:outline-none focus:border-[#155EEF] mx-auto block"
-                        >
-                          <option value="">--ជ្រើសរើស--</option>
-                          {ROOT_CAUSE_OPTIONS.map((rc) => (
-                            <option key={rc.value} value={rc.value}>{rc.label}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="text-[10px] text-slate-300 text-center font-medium">-</div>
-                      )}
-                    </td>
-
-                    <td className="py-3 px-4 text-center">
+                    <td className="py-3 px-4 text-center rounded-r-[16px]">
                        {isHighAbsent ? (
                          <button
                            onClick={() => handleHomeVisitToggle(std.id)}
@@ -510,8 +631,78 @@ export default function MonthlyAttendanceForm() {
             )}
           </tbody>
         </table>
-      </div>
-      </div>
+        </div>
+        </div>
+        </>
+      ) : (
+        /* ================= DAILY LOGS VIEW ================= */
+        <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-200/60 print:hidden overflow-hidden flex flex-col min-h-[600px]">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+            <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-[#155EEF]" /> កំណត់ត្រាប្រចាំថ្ងៃ
+            </h2>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 text-[10px] font-bold"><div className="w-3 h-3 rounded-full bg-emerald-100 border border-emerald-200"></div> វត្តមាន</div>
+              <div className="flex items-center gap-1 text-[10px] font-bold"><div className="w-3 h-3 rounded-full bg-rose-100 border border-rose-200"></div> អវត្តមាន</div>
+              <div className="flex items-center gap-1 text-[10px] font-bold"><div className="w-3 h-3 rounded-full bg-purple-100 border border-purple-200"></div> ច្បាប់</div>
+              <div className="flex items-center gap-1 text-[10px] font-bold"><div className="w-3 h-3 rounded-full bg-amber-100 border border-amber-200"></div> យឺត</div>
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-separate border-spacing-0 min-w-[1200px]">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 z-20 bg-white border-b-2 border-slate-200 pb-3 pl-4 w-12 text-center text-[10px] font-black text-slate-400 uppercase">ល.រ</th>
+                  <th className="sticky left-12 z-20 bg-white border-b-2 border-slate-200 pb-3 px-4 min-w-[200px] text-[10px] font-black text-slate-400 uppercase">គោត្តនាម & នាម</th>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                    <th key={day} className="border-b-2 border-slate-200 border-l border-slate-100 pb-3 px-1 text-center w-8 text-[10px] font-black text-slate-400 hover:bg-slate-50 transition-colors cursor-default" title={`ថ្ងៃទី ${day}`}>
+                      {day}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredStudents.length === 0 ? (
+                  <tr><td colSpan={33} className="py-12 text-center text-slate-400 font-medium">មិនមានទិន្នន័យសិស្សទេ។</td></tr>
+                ) : (
+                  filteredStudents.map((std, index) => (
+                    <tr key={std.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="sticky left-0 z-10 bg-white py-3 pl-4 text-center text-slate-400 font-bold text-xs">{index + 1}</td>
+                      <td className="sticky left-12 z-10 bg-white py-3 px-4 font-black text-slate-800 text-xs truncate max-w-[200px]">
+                        {std.full_name}
+                      </td>
+                      {Array.from({ length: 31 }, (_, i) => {
+                        const dayStr = `${selectedMonth}-${String(i + 1).padStart(2, '0')}`;
+                        const record = rawDailyRecords.find(r => r.student_id === std.id && r.date === dayStr);
+                        
+                        let bgColor = '';
+                        let letter = '';
+                        let textColor = '';
+                        
+                        if (record) {
+                          if (record.status === 'present') { bgColor = 'bg-emerald-100/50'; letter = 'P'; textColor = 'text-emerald-600'; }
+                          else if (record.status === 'absent') { bgColor = 'bg-rose-100'; letter = 'A'; textColor = 'text-rose-600'; }
+                          else if (record.status === 'permission') { bgColor = 'bg-purple-100'; letter = 'E'; textColor = 'text-purple-600'; }
+                          else if (record.status === 'late') { bgColor = 'bg-amber-100'; letter = 'L'; textColor = 'text-amber-600'; }
+                        }
+                        
+                        return (
+                          <td key={dayStr} className="py-2 px-1 text-center border-l border-slate-100/50 hover:bg-slate-50 transition-colors cursor-default" title={`ថ្ងៃទី ${String(i + 1).padStart(2, '0')}`}>
+                            <div className={`w-7 h-7 mx-auto rounded-md flex items-center justify-center text-[10px] font-black ${bgColor} ${textColor}`}>
+                              {letter}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

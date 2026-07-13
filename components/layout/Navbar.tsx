@@ -11,7 +11,7 @@ export default function Navbar() {
 
   const handleRoleChange = (newRole: 'teacher' | 'principal' | 'admin') => {
     setRole(newRole);
-    if (newRole === 'teacher') router.push('/dashboard');
+    if (newRole === 'teacher') router.push('/homeroom');
     else if (newRole === 'principal') router.push('/principal');
     else if (newRole === 'admin') router.push('/admin');
   };

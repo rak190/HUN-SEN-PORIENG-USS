@@ -6,18 +6,21 @@ import { useAuth } from '@/lib/auth-context';
 import { Loader2 } from 'lucide-react';
 
 export default function RootPage() {
-  const { user, loading, isDemoMode } = useAuth();
+  const { user, profile, loading, isDemoMode } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!loading) {
       if (user || isDemoMode) {
-        router.replace('/dashboard');
+        if (profile?.role === 'admin') router.replace('/admin');
+        else if (profile?.role === 'principal') router.replace('/principal');
+        else if (profile?.role === 'monitor') router.replace('/monitor/attendance');
+        else router.replace('/homeroom');
       } else {
         router.replace('/login');
       }
     }
-  }, [user, loading, isDemoMode, router]);
+  }, [user, profile, loading, isDemoMode, router]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-700 dark:text-slate-200">

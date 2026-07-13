@@ -25,9 +25,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="bg-white h-screen w-full flex flex-col lg:flex-row overflow-hidden font-sans text-slate-800 select-none relative">
+    <div className="bg-white h-screen w-full flex flex-col lg:flex-row overflow-hidden font-sans text-slate-800 select-none relative print:h-auto print:overflow-visible print:block">
       {/* ================= MOBILE & TABLET TOP HEADER ================= */}
-      <header className="lg:hidden flex items-center justify-between px-5 py-3.5 bg-white border-b border-slate-100 z-30 shrink-0 relative shadow-2xs">
+      <header className="lg:hidden flex items-center justify-between px-5 py-3.5 bg-white border-b border-slate-100 z-30 shrink-0 relative shadow-2xs print:hidden">
         <div className="flex items-center gap-2.5">
           <button 
             onClick={() => { setLeftMenuOpen(true); }}
@@ -58,11 +58,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
 
       {/* ================= LEFT SIDEBAR (Desktop) ================= */}
-      <Sidebar />
+      <div className="print:hidden">
+        <Sidebar />
+      </div>
 
       {/* ================= CENTER MAIN CONTENT (Rounded Gray Frame) ================= */}
-      <div className="flex-1 flex flex-col py-3 px-2 md:py-4 md:px-3 overflow-hidden min-w-0">
-        <main className="flex-1 bg-[#F4F7FE] rounded-2xl md:rounded-[32px] lg:rounded-[36px] flex flex-col overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-10 shadow-xs border border-slate-100/80 relative">
+      <div className="flex-1 flex flex-col py-3 px-2 md:py-4 md:px-3 overflow-hidden min-w-0 print:h-auto print:overflow-visible print:p-0 print:block">
+        <main className="flex-1 bg-[#F4F7FE] rounded-2xl md:rounded-[32px] lg:rounded-[36px] flex flex-col overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-10 shadow-xs border border-slate-100/80 relative print:h-auto print:overflow-visible print:bg-white print:p-0 print:shadow-none print:border-none print:rounded-none print:block">
           <div className="w-full max-w-7xl mx-auto flex-1 flex flex-col">
             {children}
           </div>

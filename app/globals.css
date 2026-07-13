@@ -2,6 +2,8 @@
 
 @theme {
   --font-sans: var(--font-kantumruy), 'Kantumruy Pro', var(--font-plus-jakarta), sans-serif;
+  --font-moul: var(--font-moul), 'Khmer OS Moul Light', 'Khmer OS Moul', cursive;
+  --font-siemreap: var(--font-siemreap), 'Khmer OS Siemreap', sans-serif;
   --color-brand-blue: #155EEF;
   --color-brand-yellow: #FFCF59;
   --color-brand-bg: #F4F7FE;
@@ -84,4 +86,38 @@
 
 .animate-fadeIn {
   animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Print Styles */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+
+  body, html {
+    height: auto !important;
+    overflow: visible !important;
+    background-color: white !important;
+    color: black !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Prevent awkward page breaks */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+
+  table, img, svg, .glass-panel {
+    page-break-inside: avoid;
+  }
+
+  /* Ensure standard background elements don't get stripped unless we want them to */
+  .bg-white {
+    background-color: white !important;
+  }
 }

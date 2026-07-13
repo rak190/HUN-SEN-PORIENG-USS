@@ -1,0 +1,16 @@
+export const ACADEMIC_PERIODS = [
+  { id: 'nov', label: 'វិច្ឆិកា (November)' },
+  { id: 'dec', label: 'ធ្នូ (December)' },
+  { id: 'jan', label: 'មករា (January)' },
+  { id: 'feb', label: 'កុម្ភៈ (February)' },
+  { id: 'mar', label: 'មីនា (March)' },
+  { id: 'sem-1', label: 'ប្រឡងឆមាសទី១ (Semester 1)' },
+  { id: 'apr', label: 'មេសា (April)' },
+  { id: 'may', label: 'ឧសភា (May)' },
+  { id: 'jun', label: 'មិថុនា (June)' },
+  { id: 'jul', label: 'កក្កដា (July)' },
+  { id: 'aug', label: 'សីហា (August)' },
+  { id: 'sep', label: 'កញ្ញា (September)' },
+  { id: 'oct', label: 'តុលា (October)' },
+  { id: 'sem-2', label: 'ប្រឡងឆមាសទី២ (Semester 2)' },
+];

@@ -40,7 +40,10 @@ export default function LoginPage() {
       if (res.error) {
         setErrorMsg(res.error);
       } else {
-        router.push('/dashboard');
+        if (res.role === 'admin') router.push('/admin');
+        else if (res.role === 'principal') router.push('/principal');
+        else if (res.role === 'monitor') router.push('/monitor/attendance');
+        else router.push('/homeroom');
       }
     } catch (err: any) {
       setErrorMsg(err?.message || 'មានកំហុសបច្ចេកទេស។');
@@ -57,7 +60,10 @@ export default function LoginPage() {
     if (demoRole === 'monitor') demoUser = 'monitor';
     
     await login(demoUser, 'password123');
-    router.push('/dashboard');
+    if (demoRole === 'admin') router.push('/admin');
+    else if (demoRole === 'principal') router.push('/principal');
+    else if (demoRole === 'monitor') router.push('/monitor/attendance');
+    else router.push('/homeroom');
   }
 
   return (

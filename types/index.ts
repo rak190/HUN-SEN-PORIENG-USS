@@ -138,7 +138,18 @@ export interface AtRiskStudent {
   id: string;
   name: string;
   reasons: string[];
-  severity: 'high' | 'medium';
+  severity: 'low' | 'medium' | 'high';
+}
+
+export interface DocumentRecord {
+  id: string;
+  file_name: string;
+  r2_object_key: string;
+  file_type: string;
+  file_size_bytes: number;
+  uploaded_by: string; // user ID
+  class_id?: string;
+  created_at: string;
 }
 
 export interface MonthlyReportCard {
@@ -161,10 +172,14 @@ export interface StudentHealthRecord {
   recorded_date: string;
   weight_kg: number;
   height_cm: number;
+  bmi?: number;
   vision_left?: string;
   vision_right?: string;
   hearing?: string;
   dental?: string;
   notes?: string;
 }
+
+export type SupportCaseStatus = 'open' | 'monitoring' | 'resolved';
+export type RiskLevel = 'low' | 'medium' | 'high';
 

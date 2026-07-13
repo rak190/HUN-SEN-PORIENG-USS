@@ -13,7 +13,8 @@ export default async function HealthPage({ searchParams }: PageProps) {
   const { data: userData } = await supabase.auth.getUser();
   
   if (!userData?.user) {
-    redirect('/');
+    // Demo Mode: Allow access without redirecting
+    // redirect('/');
   }
 
   const { classId = 'all' } = await searchParams;

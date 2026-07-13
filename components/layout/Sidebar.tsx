@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import {
   LayoutDashboard,
@@ -31,7 +31,8 @@ import {
   ChevronDown,
   ChevronRight,
   BookOpen,
-  Briefcase
+  Briefcase,
+  FolderOpen
 } from 'lucide-react';
 
 interface MenuItem {
@@ -47,11 +48,12 @@ interface MenuItem {
 
 const MENU_ITEMS: MenuItem[] = [
   // --- TEACHER TABS (Homeroom Teacher - GEIP Framework) ---
-  { id: 'dashboard', label: 'Dashboard', khmerLabel: 'ផ្ទាំងកិច្ចការ GEIP', href: '/dashboard', icon: LayoutDashboard, roles: ['teacher'], badge: 'GEIP' },
+  { id: 'dashboard', label: 'Dashboard', khmerLabel: 'ផ្ទាំងកិច្ចការ GEIP', href: '/homeroom', icon: LayoutDashboard, roles: ['teacher'], badge: 'GEIP' },
   { 
     id: 'students-group', label: 'Students', khmerLabel: 'ការគ្រប់គ្រងសិស្ស', icon: Users, roles: ['teacher'],
     children: [
       { id: 'students', label: 'Students Profile', khmerLabel: 'បញ្ជីឈ្មោះសិស្ស', href: '/students', icon: Users, roles: ['teacher'] },
+      { id: 'class-info', label: 'Class Info', khmerLabel: 'ព័ត៌មានថ្នាក់រៀន', href: '/classes/info', icon: BookOpen, roles: ['teacher'] },
       { id: 'attendance', label: 'Attendance', khmerLabel: 'វត្តមាន & EWS', href: '/attendance', icon: Calendar, roles: ['teacher'], badge: 'EWS' },
       { id: 'health', label: 'Student Health', khmerLabel: 'សុខភាពសិក្សា', href: '/health', icon: Activity, roles: ['teacher'], badge: 'សុខភាព' },
       { id: 'support', label: 'Student Support', khmerLabel: 'គាំទ្រសិស្ស', href: '/support', icon: HeartHandshake, roles: ['teacher'] },
@@ -69,6 +71,7 @@ const MENU_ITEMS: MenuItem[] = [
     children: [
       { id: 'parents', label: 'Parents', khmerLabel: 'មាតាបិតា', href: '/parents', icon: Phone, roles: ['teacher'] },
       { id: 'reports', label: 'Monthly Reports', khmerLabel: 'របាយការណ៍ GEIP', href: '/reports', icon: BarChart3, roles: ['teacher'], badge: 'បញ្ជូន' },
+      { id: 'documents', label: 'Documents', khmerLabel: 'ឯកសារ', href: '/documents', icon: FolderOpen, roles: ['teacher'] },
       { id: 'giep', label: 'GIEP Evidence', khmerLabel: 'ឯកសារគម្រោង', href: '/giep', icon: Camera, roles: ['teacher'] },
     ]
   },
@@ -99,6 +102,7 @@ interface SidebarProps {
 
 export default function Sidebar({ onClose, className }: SidebarProps = {}) {
   const pathname = usePathname();
+  const router = useRouter();
   const { profile, logout } = useAuth();
   const userRole = profile?.role || 'teacher';
 
@@ -129,17 +133,17 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
 
   return (
     <aside className={containerClassName}>
-      <div>
-        {/* Logo */}
-        <Link href="/dashboard" onClick={onClose} className="flex items-center gap-3 mb-10 pl-1 group">
-          <img src="/school_logo.png" alt="School Logo" className="w-10 h-10 object-contain shrink-0 group-hover:scale-105 transition-transform" />
-          <div className="flex flex-col min-w-0 py-1">
-            <span className="text-sm font-extrabold text-slate-900 tracking-tight whitespace-nowrap truncate">វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</span>
-            <span className="text-[10px] font-bold text-[#155EEF] tracking-wide mt-0.5 truncate">គុណធម៌ ចំណេះដឹង បំណិនវិជ្ជាជីវៈ</span>
-          </div>
-        </Link>
+      {/* Logo */}
+      <Link href="/" onClick={onClose} className="flex items-center gap-3 mb-6 pl-1 group shrink-0">
+        <img src="/school_logo.png" alt="School Logo" className="w-10 h-10 object-contain shrink-0 group-hover:scale-105 transition-transform" />
+        <div className="flex flex-col min-w-0 py-1">
+          <span className="text-sm font-extrabold text-slate-900 tracking-tight whitespace-nowrap truncate">វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</span>
+          <span className="text-[10px] font-bold text-[#155EEF] tracking-wide mt-0.5 truncate">គុណធម៌ ចំណេះដឹង បំណិនវិជ្ជាជីវៈ</span>
+        </div>
+      </Link>
 
-        {/* Main Nav */}
+      {/* Main Nav */}
+      <div className="flex-1 lg:overflow-y-auto pr-2 -mr-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
         <nav className="space-y-1.5">
           {filteredItems.map((item) => {
             const Icon = item.icon;
@@ -233,7 +237,7 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
       </div>
 
       {/* Bottom Actions */}
-      <div className="space-y-1.5 pt-6 border-t border-slate-100 mt-4">
+      <div className="space-y-1.5 pt-4 border-t border-slate-100 mt-4 shrink-0">
         {userRole === 'admin' && (
           <Link
             href="/admin"
@@ -257,9 +261,10 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
           <span className="text-sm font-bold">ជំនួយ & គាំទ្រ</span>
         </a>
         <button
-          onClick={() => {
+          onClick={async () => {
             if (confirm('តើអ្នកពិតជាចង់ចាកចេញពីប្រព័ន្ធមែនទេ?')) {
-              logout();
+              await logout();
+              router.push('/login');
             }
           }}
           className="w-full flex items-center gap-3 text-slate-600 hover:text-rose-600 hover:bg-rose-50 px-4 py-3 rounded-xl font-medium transition-colors mt-2 cursor-pointer"

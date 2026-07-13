@@ -12,6 +12,7 @@ import {
   Send,
   Users
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 type AttendanceStatus = 'present' | 'absent' | 'late' | 'permission';
 
@@ -23,14 +24,12 @@ interface StudentRow {
 }
 
 const MOCK_STUDENTS: StudentRow[] = [
-  { id: '1', name: 'កែវ ច័ន្ទធីតា', gender: 'F', status: 'present' },
-  { id: '2', name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', status: 'present' },
-  { id: '3', name: 'ចាន់ សុភាព', gender: 'M', status: 'present' },
-  { id: '4', name: 'ជួន ស្រីរ័ត្ន', gender: 'F', status: 'present' },
-  { id: '5', name: 'ដួង វិចិត្រ', gender: 'M', status: 'present' },
-  { id: '6', name: 'សៅ សុភាព', gender: 'F', status: 'present' },
-  { id: '7', name: 'សុខ មករា', gender: 'M', status: 'present' },
-  { id: '8', name: 'ម៉ៅ រស្មី', gender: 'F', status: 'present' },
+  { id: 'std-1', name: 'កែវ ច័ន្ទធីតា', gender: 'F', status: 'present' },
+  { id: 'std-2', name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', status: 'present' },
+  { id: 'std-3', name: 'ចាន់ សុភាព', gender: 'F', status: 'present' },
+  { id: 'std-4', name: 'ដួង រដ្ឋា', gender: 'M', status: 'present' },
+  { id: 'std-5', name: 'ទិត្យ វិសាល', gender: 'M', status: 'present' },
+  { id: 'std-6', name: 'ប៊ុន រស្មី', gender: 'F', status: 'present' },
 ];
 
 export default function MonitorAttendancePage() {
@@ -60,11 +59,33 @@ export default function MonitorAttendancePage() {
     
     if (type === 'submit') {
       try {
+        const supabase = createClient();
+        const dateStr = new Date().toISOString().split('T')[0];
+        
+        // 1. Save to Supabase (so the Teacher's Dashboard can read it)
+        const upsertPayload = students.map(s => ({
+          class_id: activeClass?.id || 'demo-class-1',
+          student_id: s.id,
+          date: dateStr,
+          status: s.status,
+          recorded_by: profile?.id || null,
+          updated_at: new Date().toISOString()
+        }));
+
+        const { error: dbError } = await supabase
+          .from('attendance_records')
+          .upsert(upsertPayload, { onConflict: 'class_id,student_id,date' });
+
+        if (dbError) {
+          console.error('Supabase error:', dbError);
+        }
+
+        // 2. Fallback / Backup to Google Sheets via API
         const response = await fetch('/api/attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            date: new Date().toISOString().split('T')[0],
+            date: dateStr,
             className: activeClass?.name || '12 ក',
             students
           })
@@ -73,9 +94,9 @@ export default function MonitorAttendancePage() {
         if (!response.ok) {
           throw new Error('Network response was not ok');
         }
-        alert('បញ្ជូនវត្តមានប្រចាំថ្ងៃទៅកាន់គ្រូ (និង Google Sheets) ដោយជោគជ័យ!');
+        alert('បញ្ជូនវត្តមានប្រចាំថ្ងៃទៅកាន់គ្រូដោយជោគជ័យ!');
       } catch (error) {
-        console.error('Failed to submit to Google Sheets:', error);
+        console.error('Failed to submit:', error);
         alert('មានកំហុសក្នុងការបញ្ជូនទិន្នន័យ។ សូមសាកល្បងម្តងទៀត។');
       }
     } else {
@@ -95,42 +116,46 @@ export default function MonitorAttendancePage() {
   };
 
   return (
-    <div className="max-w-md mx-auto bg-white min-h-[85vh] rounded-[32px] shadow-sm border border-slate-100 overflow-hidden flex flex-col relative">
+    <div className="max-w-md mx-auto bg-white/40 min-h-[85vh] rounded-[32px] shadow-xl border border-white/50 backdrop-blur-xl overflow-hidden flex flex-col relative ring-1 ring-slate-200/50">
       
-      {/* Mobile-Friendly Header */}
-      <div className="bg-[#155EEF] text-white p-6 rounded-t-[32px]">
-        <div className="flex items-center justify-between mb-4">
+      {/* Mobile-Friendly Premium Header */}
+      <div className="bg-gradient-to-br from-[#155EEF] to-[#2970FF] text-white p-6 rounded-t-[32px] relative overflow-hidden">
+        {/* Glass decoration */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-400/20 rounded-full blur-xl -ml-10 -mb-10 pointer-events-none"></div>
+
+        <div className="flex items-center justify-between mb-4 relative z-10">
           <div className="flex items-center gap-2">
-            <CalendarIcon className="w-5 h-5 text-blue-200" />
-            <span className="font-bold text-sm text-blue-100">{todayDate}</span>
+            <CalendarIcon className="w-5 h-5 text-blue-100" />
+            <span className="font-bold text-sm text-blue-50">{todayDate}</span>
           </div>
-          <div className="bg-white/20 px-3 py-1 rounded-full text-xs font-black backdrop-blur-sm">
+          <div className="bg-white/20 px-3 py-1 rounded-full text-xs font-black backdrop-blur-md border border-white/20 shadow-sm">
             ថ្នាក់ {activeClass?.name || '12 ក'}
           </div>
         </div>
         
-        <h1 className="text-2xl font-black mb-1">ស្រង់វត្តមាន</h1>
-        <p className="text-blue-100 text-sm font-bold flex items-center gap-2">
+        <h1 className="text-2xl font-black mb-1 relative z-10 drop-shadow-sm">ស្រង់វត្តមាន</h1>
+        <p className="text-blue-100 text-sm font-bold flex items-center gap-2 relative z-10">
           <Users className="w-4 h-4" /> សិស្សសរុប {students.length} នាក់
         </p>
 
-        {/* Quick Stats Grid */}
-        <div className="grid grid-cols-4 gap-2 mt-6">
-          <div className="bg-emerald-500/20 rounded-xl p-2 text-center border border-emerald-400/30">
+        {/* Quick Stats Grid - Glass style */}
+        <div className="grid grid-cols-4 gap-2 mt-6 relative z-10">
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-2 text-center border border-white/20 shadow-sm">
             <div className="text-xl font-black">{stats.present}</div>
-            <div className="text-[10px] font-bold text-emerald-100">វត្តមាន</div>
+            <div className="text-[10px] font-bold text-white/80">វត្តមាន</div>
           </div>
-          <div className="bg-rose-500/20 rounded-xl p-2 text-center border border-rose-400/30">
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-2 text-center border border-white/20 shadow-sm">
             <div className="text-xl font-black">{stats.absent}</div>
-            <div className="text-[10px] font-bold text-rose-100">អវត្តមាន</div>
+            <div className="text-[10px] font-bold text-white/80">អវត្តមាន</div>
           </div>
-          <div className="bg-amber-500/20 rounded-xl p-2 text-center border border-amber-400/30">
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-2 text-center border border-white/20 shadow-sm">
             <div className="text-xl font-black">{stats.late}</div>
-            <div className="text-[10px] font-bold text-amber-100">យឺត</div>
+            <div className="text-[10px] font-bold text-white/80">យឺត</div>
           </div>
-          <div className="bg-purple-500/20 rounded-xl p-2 text-center border border-purple-400/30">
+          <div className="bg-white/10 backdrop-blur-md rounded-xl p-2 text-center border border-white/20 shadow-sm">
             <div className="text-xl font-black">{stats.permission}</div>
-            <div className="text-[10px] font-bold text-purple-100">ច្បាប់</div>
+            <div className="text-[10px] font-bold text-white/80">ច្បាប់</div>
           </div>
         </div>
       </div>
@@ -211,19 +236,19 @@ export default function MonitorAttendancePage() {
         ))}
       </div>
 
-      {/* Sticky Bottom Footer */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-100 flex gap-3 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)] rounded-b-[32px]">
+      {/* Sticky Bottom Footer - Glassmorphism */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-xl border-t border-slate-200/50 flex gap-3 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.1)] rounded-b-[32px] z-50">
         <button 
           onClick={() => handleSave('draft')}
           disabled={isSaving}
-          className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+          className="flex-1 py-3.5 bg-white hover:bg-slate-50 text-slate-700 font-black rounded-xl text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 border border-slate-200 shadow-sm"
         >
           <Save className="w-4 h-4" /> ព្រាង
         </button>
         <button 
           onClick={() => handleSave('submit')}
           disabled={isSaving}
-          className="flex-[2] py-3.5 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-all disabled:opacity-50"
+          className="flex-[2] py-3.5 bg-gradient-to-r from-[#155EEF] to-[#2970FF] hover:from-[#175cd3] hover:to-[#155EEF] text-white font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30 transition-all disabled:opacity-50"
         >
           {isSaving ? 'កំពុងបញ្ជូន...' : <><Send className="w-4 h-4" /> បញ្ជូនទៅគ្រូ</>}
         </button>

@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import * as XLSX from 'xlsx';
 import {
-  Users, Search, UserPlus, Download, Edit, MapPin, Heart,
-  Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp, AlertTriangle, LogOut
+  Users, Search, UserPlus, Download, Edit, MapPin, Heart, FileSpreadsheet, Table,
+  Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp, AlertTriangle, LogOut, ChevronDown
 } from 'lucide-react';
+import StudentImportModal from '@/components/students/StudentImportModal';
+import StudentGridEntryModal from '@/components/students/StudentGridEntryModal';
 
 interface MassiveProfilingStudent {
   id: string;
@@ -52,7 +54,7 @@ interface MassiveProfilingStudent {
   attendance_rate: number;
 }
 
-const INITIAL_STUDENTS: MassiveProfilingStudent[] = [
+export const INITIAL_STUDENTS: MassiveProfilingStudent[] = [
   { 
     id: 'std-1', student_id_number: '04931', full_name: 'កែវ ច័ន្ទធីតា', gender: 'F', date_of_birth: '2010-05-14', age: 15, birth_cert_no: 'B-001', student_phone: '012345678',
     status: 'new', prev_school: 'ប. ជា ស៊ីម', scholarship: 'no', id_poor: 'none', orphan: 'no', indigenous: 'no', distance_km: 2.5,
@@ -93,11 +95,60 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<MassiveProfilingStudent[]>(INITIAL_STUDENTS);
   const [searchQuery, setSearchQuery] = useState('');
   
-  const [mainTab, setMainTab] = useState<'list' | 'info' | 'stats' | 'at-risk' | 'transfer'>('list');
+  const [mainTab, setMainTab] = useState<'list' | 'at-risk' | 'transfer'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isGridModalOpen, setIsGridModalOpen] = useState(false);
   const [activeTableView, setActiveTableView] = useState(1);
   const [activeModalTab, setActiveModalTab] = useState(1);
   const [formData, setFormData] = useState<Partial<MassiveProfilingStudent>>({});
+
+  // Contact Modal State
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [contactStudent, setContactStudent] = useState<MassiveProfilingStudent | null>(null);
+
+  // Status Change Modal State
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [statusForm, setStatusForm] = useState({
+    studentId: '',
+    actionType: 'ផ្ទេរចេញ',
+    actionDate: new Date().toISOString().split('T')[0],
+    reason: ''
+  });
+  const [transferRecords, setTransferRecords] = useState<any[]>([]);
+
+  const handleStatusSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!statusForm.studentId) return;
+    
+    const student = students.find(s => s.id === statusForm.studentId);
+    if (student) {
+       // update student status
+       let newStatus = 'dropout';
+       if (statusForm.actionType === 'ផ្ទេរចេញ') newStatus = 'transfer';
+       else if (statusForm.actionType === 'មរណភាព') newStatus = 'deceased';
+       
+       setStudents(students.map(s => s.id === student.id ? { ...s, current_status: newStatus as any } : s));
+       
+       // add to records
+       setTransferRecords([{
+          id: Date.now().toString(),
+          student_id_number: student.student_id_number,
+          full_name: student.full_name,
+          status: statusForm.actionType,
+          date: statusForm.actionDate,
+          reason: statusForm.reason
+       }, ...transferRecords]);
+    }
+    
+    setIsStatusModalOpen(false);
+    setStatusForm({
+      studentId: '',
+      actionType: 'ផ្ទេរចេញ',
+      actionDate: new Date().toISOString().split('T')[0],
+      reason: ''
+    });
+  };
 
   const filteredStudents = students.filter(s => s.full_name.includes(searchQuery) || s.student_id_number.includes(searchQuery));
 
@@ -178,6 +229,11 @@ export default function StudentsPage() {
     setIsModalOpen(false);
   };
 
+  const handleBulkSuccess = (newStudents: any[]) => {
+    // Add new students to the list.
+    setStudents(prev => [...prev, ...newStudents]);
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* Header */}
@@ -204,23 +260,12 @@ export default function StudentsPage() {
         >
           <Users className="w-4 h-4" /> បញ្ជីរាយនាមសិស្ស (Student List)
         </button>
-        <button
-          onClick={() => setMainTab('info')}
-          className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'info' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-        >
-          <Info className="w-4 h-4" /> ព័ត៌មានថ្នាក់រៀន (Class Info)
-        </button>
-        <button
-          onClick={() => setMainTab('stats')}
-          className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'stats' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-        >
-          <BarChart3 className="w-4 h-4" /> ស្ថិតិថ្នាក់រៀន (Class Statistics)
-        </button>
+
         <button
           onClick={() => setMainTab('at-risk')}
           className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'at-risk' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
-          <AlertTriangle className="w-4 h-4" /> សិស្សប្រឈម (At-Risk)
+          <AlertTriangle className="w-4 h-4" /> សិស្សប្រឈម
         </button>
         <button
           onClick={() => setMainTab('transfer')}
@@ -243,9 +288,17 @@ export default function StudentsPage() {
             <input type="text" placeholder="ស្វែងរកអត្តលេខ ឬឈ្មោះ..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:border-[#155EEF]" />
           </div>
         </div>
-        <button onClick={openAddModal} className="px-6 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-xs shadow-md shadow-blue-500/20 flex items-center gap-2">
-          <UserPlus className="w-4 h-4" /> បន្ថែមសិស្ស
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors">
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> នាំចូលឯកសារ (Import)
+          </button>
+          <button onClick={() => setIsGridModalOpen(true)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors">
+            <Table className="w-4 h-4 text-indigo-600" /> បញ្ចូលតាមតារាង (Grid)
+          </button>
+          <button onClick={openAddModal} className="px-6 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-xs shadow-md shadow-blue-500/20 flex items-center gap-2">
+            <UserPlus className="w-4 h-4" /> បន្ថែមសិស្ស (Quick Add)
+          </button>
+        </div>
       </div>
 
       {/* Table View Filters */}
@@ -368,6 +421,15 @@ export default function StudentsPage() {
                       <button onClick={() => openEditModal(std)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors flex items-center gap-1.5">
                         <Edit className="w-3.5 h-3.5" /> កែប្រែ
                       </button>
+                      <button 
+                        onClick={() => {
+                          setStatusForm({ ...statusForm, studentId: std.id });
+                          setIsStatusModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors flex items-center gap-1.5 font-bold whitespace-nowrap"
+                      >
+                        <LogOut className="w-3.5 h-3.5" /> ផ្ទេរ/បោះបង់
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -380,185 +442,7 @@ export default function StudentsPage() {
       </div>
       )}
 
-      {/* Tab 2: Class Info */}
-      {mainTab === 'info' && (
-        <div className="space-y-6 animate-fadeIn">
-          <div className="bg-white p-6 sm:p-8 rounded-[24px] border border-slate-200 shadow-2xs">
-            <h2 className="text-xl font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-4 mb-6">
-              <BookOpen className="w-6 h-6 text-[#155EEF]" /> ព័ត៌មានទូទៅនៃថ្នាក់រៀន
-            </h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-4">
-                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-sm font-bold text-slate-500">ឈ្មោះថ្នាក់រៀន (Class Name)</span>
-                  <span className="text-sm font-black text-slate-900">{activeClass?.name || '១២ ក'}</span>
-                </div>
-                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-sm font-bold text-slate-500">កម្រិតថ្នាក់ (Grade)</span>
-                  <span className="text-sm font-black text-slate-900">ទី ១២</span>
-                </div>
-                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-sm font-bold text-slate-500">ឆ្នាំសិក្សា (Academic Year)</span>
-                  <span className="text-sm font-black text-slate-900">2026-2027</span>
-                </div>
-                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-sm font-bold text-slate-500">គ្រូបន្ទុកថ្នាក់ (Homeroom Teacher)</span>
-                  <span className="text-sm font-black text-slate-900">លោកគ្រូ/អ្នកគ្រូ សុខា</span>
-                </div>
-              </div>
 
-              <div className="space-y-4">
-                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-sm font-bold text-slate-500">សិស្សសរុប (Total Students)</span>
-                  <span className="text-sm font-black text-slate-900">{students.length} នាក់</span>
-                </div>
-                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-sm font-bold text-slate-500">សិស្សស្រី (Total Girls)</span>
-                  <span className="text-sm font-black text-slate-900">{students.filter(s => s.gender === 'F').length} នាក់</span>
-                </div>
-                <div className="flex justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="text-sm font-bold text-slate-500">ប្រធានថ្នាក់ (Class Monitor)</span>
-                  <span className="text-sm font-black text-slate-900 text-[#155EEF]">កែវ ច័ន្ទធីតា</span>
-                </div>
-              </div>
-            </div>
-
-            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 mt-10 mb-4">
-              <Clock className="w-5 h-5 text-amber-500" /> កាលវិភាគសិក្សា (Class Schedule)
-            </h3>
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-sm text-left whitespace-nowrap">
-                <thead className="bg-slate-50 text-slate-600 font-black">
-                  <tr>
-                    <th className="px-6 py-3 border-b border-slate-200">ម៉ោង/ថ្ងៃ</th>
-                    <th className="px-6 py-3 border-b border-slate-200">ចន្ទ</th>
-                    <th className="px-6 py-3 border-b border-slate-200">អង្គារ</th>
-                    <th className="px-6 py-3 border-b border-slate-200">ពុធ</th>
-                    <th className="px-6 py-3 border-b border-slate-200">ព្រហស្បតិ៍</th>
-                    <th className="px-6 py-3 border-b border-slate-200">សុក្រ</th>
-                    <th className="px-6 py-3 border-b border-slate-200">សៅរ៍</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white font-bold text-slate-700">
-                  <tr>
-                    <td className="px-6 py-4 bg-slate-50">៧:០០ - ៨:០០</td>
-                    <td className="px-6 py-4 text-rose-600 bg-rose-50/30">គណិតវិទ្យា</td>
-                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">រូបវិទ្យា</td>
-                    <td className="px-6 py-4 text-rose-600 bg-rose-50/30">គណិតវិទ្យា</td>
-                    <td className="px-6 py-4 text-blue-600 bg-blue-50/30">គីមីវិទ្យា</td>
-                    <td className="px-6 py-4 text-amber-600 bg-amber-50/30">អក្សរសាស្ត្រខ្មែរ</td>
-                    <td className="px-6 py-4 text-purple-600 bg-purple-50/30">ភាសាអង់គ្លេស</td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 bg-slate-50">៨:០០ - ៩:០០</td>
-                    <td className="px-6 py-4 text-rose-600 bg-rose-50/30">គណិតវិទ្យា</td>
-                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">រូបវិទ្យា</td>
-                    <td className="px-6 py-4 text-rose-600 bg-rose-50/30">គណិតវិទ្យា</td>
-                    <td className="px-6 py-4 text-blue-600 bg-blue-50/30">គីមីវិទ្យា</td>
-                    <td className="px-6 py-4 text-amber-600 bg-amber-50/30">អក្សរសាស្ត្រខ្មែរ</td>
-                    <td className="px-6 py-4 text-purple-600 bg-purple-50/30">ភាសាអង់គ្លេស</td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 bg-slate-50">៩:០០ - ៩:១៥</td>
-                    <td colSpan={6} className="px-6 py-2 text-center text-slate-400 font-bold bg-slate-100">ម៉ោងចេញលេង</td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 bg-slate-50">៩:១៥ - ១០:១៥</td>
-                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">ជីវវិទ្យា</td>
-                    <td className="px-6 py-4 text-purple-600 bg-purple-50/30">ប្រវត្តិវិទ្យា</td>
-                    <td className="px-6 py-4 text-amber-600 bg-amber-50/30">ផែនដីវិទ្យា</td>
-                    <td className="px-6 py-4 text-rose-600 bg-rose-50/30">សីលធម៌</td>
-                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">ជីវវិទ្យា</td>
-                    <td className="px-6 py-4">-</td>
-                  </tr>
-                  <tr>
-                    <td className="px-6 py-4 bg-slate-50">១០:១៥ - ១១:១៥</td>
-                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">ជីវវិទ្យា</td>
-                    <td className="px-6 py-4 text-purple-600 bg-purple-50/30">ប្រវត្តិវិទ្យា</td>
-                    <td className="px-6 py-4 text-amber-600 bg-amber-50/30">ផែនដីវិទ្យា</td>
-                    <td className="px-6 py-4 text-blue-600 bg-blue-50/30">កីឡា</td>
-                    <td className="px-6 py-4 text-emerald-600 bg-emerald-50/30">ជីវវិទ្យា</td>
-                    <td className="px-6 py-4">-</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 3: Class Statistics */}
-      {mainTab === 'stats' && (
-        <div className="space-y-6 animate-fadeIn">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Gender Breakdown */}
-            <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs">
-              <h3 className="text-sm font-black text-slate-800 mb-6 flex items-center gap-2">
-                <Users className="w-5 h-5 text-indigo-500" /> សមាមាត្រសិស្ស (Gender)
-              </h3>
-              <div className="flex items-end justify-center h-32 gap-8">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 bg-blue-500 rounded-t-xl" style={{ height: '70px' }}></div>
-                  <span className="text-xs font-black text-slate-600">ប្រុស ({students.length - students.filter(s => s.gender === 'F').length})</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 bg-pink-500 rounded-t-xl" style={{ height: '90px' }}></div>
-                  <span className="text-xs font-black text-slate-600">ស្រី ({students.filter(s => s.gender === 'F').length})</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Attendance Rate */}
-            <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs flex flex-col items-center justify-center relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/3" />
-              <h3 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2 w-full">
-                <Activity className="w-5 h-5 text-emerald-500" /> អត្រាវត្តមាន (Attendance)
-              </h3>
-              <div className="relative w-32 h-32 flex items-center justify-center">
-                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                  <path className="text-slate-100" strokeWidth="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                  <path className="text-emerald-500" strokeDasharray="94, 100" strokeWidth="3" strokeLinecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                </svg>
-                <div className="absolute text-3xl font-black text-slate-900">94<span className="text-base text-slate-500">%</span></div>
-              </div>
-              <p className="text-xs font-bold text-slate-500 mt-4 text-center">អត្រាវត្តមានមធ្យមប្រចាំខែនេះ</p>
-            </div>
-
-            {/* Academic Performance */}
-            <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs">
-              <h3 className="text-sm font-black text-slate-800 mb-6 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-amber-500" /> លទ្ធផលសិក្សា (Academics)
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-xs font-black text-slate-700 mb-1">
-                    <span>សិស្សជាប់ (Pass)</span>
-                    <span className="text-emerald-600">85%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2.5">
-                    <div className="bg-emerald-500 h-2.5 rounded-full" style={{ width: '85%' }}></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-xs font-black text-slate-700 mb-1">
-                    <span>សិស្សធ្លាក់ (Fail)</span>
-                    <span className="text-rose-600">15%</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2.5">
-                    <div className="bg-rose-500 h-2.5 rounded-full" style={{ width: '15%' }}></div>
-                  </div>
-                </div>
-                <div className="pt-4 mt-4 border-t border-slate-100">
-                  <p className="text-xs font-bold text-slate-500">មុខវិជ្ជាដែលសិស្សធ្លាក់ច្រើនជាងគេ៖ <span className="text-rose-600 font-black">គណិតវិទ្យា (១២នាក់)</span></p>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
 
       {/* Tab 4: At-Risk Students */}
       {mainTab === 'at-risk' && (
@@ -566,15 +450,15 @@ export default function StudentsPage() {
           {/* Summary Dashboard */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-rose-50 p-6 rounded-[24px] border border-rose-200">
-              <h3 className="text-rose-800 font-black flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> ហានិភ័យកម្រិតខ្ពស់ (High Risk)</h3>
+              <h3 className="text-rose-800 font-black flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> ហានិភ័យកម្រិតខ្ពស់</h3>
               <div className="text-3xl font-black text-rose-600 mt-2">{students.filter(s => s.risk_level === 'high').length} នាក់</div>
             </div>
             <div className="bg-amber-50 p-6 rounded-[24px] border border-amber-200">
-              <h3 className="text-amber-800 font-black flex items-center gap-2"><AlertCircle className="w-5 h-5" /> ហានិភ័យមធ្យម (Medium Risk)</h3>
+              <h3 className="text-amber-800 font-black flex items-center gap-2"><AlertCircle className="w-5 h-5" /> ហានិភ័យមធ្យម</h3>
               <div className="text-3xl font-black text-amber-600 mt-2">{students.filter(s => s.risk_level === 'medium').length} នាក់</div>
             </div>
             <div className="bg-emerald-50 p-6 rounded-[24px] border border-emerald-200">
-              <h3 className="text-emerald-800 font-black flex items-center gap-2"><Heart className="w-5 h-5" /> ហានិភ័យទាប (Low Risk)</h3>
+              <h3 className="text-emerald-800 font-black flex items-center gap-2"><Heart className="w-5 h-5" /> ហានិភ័យទាប</h3>
               <div className="text-3xl font-black text-emerald-600 mt-2">{students.filter(s => s.risk_level === 'low').length} នាក់</div>
             </div>
           </div>
@@ -606,7 +490,9 @@ export default function StudentsPage() {
                             <span className={s.attendance_rate < 90 ? 'text-rose-600' : 'text-slate-700'}>{s.attendance_rate}%</span>
                          </td>
                          <td className="px-6 py-4 flex gap-2">
-                           <button className="px-3 py-1.5 bg-blue-50 text-[#155EEF] rounded-lg hover:bg-blue-100 flex items-center gap-1.5 transition-colors">
+                           <button 
+                             onClick={() => { setContactStudent(s); setIsContactModalOpen(true); }}
+                             className="px-3 py-1.5 bg-blue-50 text-[#155EEF] rounded-lg hover:bg-blue-100 flex items-center gap-1.5 transition-colors">
                              <Phone className="w-3.5 h-3.5" /> ទាក់ទងអាណាព្យាបាល
                            </button>
                          </td>
@@ -623,7 +509,9 @@ export default function StudentsPage() {
       {mainTab === 'transfer' && (
          <div className="space-y-6 animate-fadeIn">
             <div className="flex justify-end">
-              <button className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs shadow-md shadow-rose-500/20 flex items-center gap-2 transition-colors">
+              <button 
+                onClick={() => setIsStatusModalOpen(true)}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs shadow-md shadow-rose-500/20 flex items-center gap-2 transition-colors">
                 <LogOut className="w-4 h-4" /> ធ្វើការស្នើសុំផ្ទេរ/បោះបង់
               </button>
             </div>
@@ -642,7 +530,27 @@ export default function StudentsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-bold text-slate-700 text-center">
-                       <tr><td colSpan={5} className="py-12 text-slate-400">មិនមានទិន្នន័យ</td></tr>
+                       {transferRecords.length === 0 ? (
+                         <tr><td colSpan={5} className="py-12 text-slate-400">មិនមានទិន្នន័យ</td></tr>
+                       ) : (
+                         transferRecords.map(record => (
+                           <tr key={record.id} className="hover:bg-slate-50 text-left">
+                             <td className="px-6 py-4">{record.student_id_number}</td>
+                             <td className="px-6 py-4">{record.full_name}</td>
+                             <td className="px-6 py-4">
+                               <span className={`px-2 py-1 rounded-md text-[10px] ${
+                                  record.status === 'ផ្ទេរចេញ' ? 'bg-blue-100 text-blue-700' :
+                                  record.status === 'បោះបង់ការសិក្សា' ? 'bg-amber-100 text-amber-700' :
+                                  'bg-rose-100 text-rose-700'
+                               }`}>
+                                 {record.status}
+                               </span>
+                             </td>
+                             <td className="px-6 py-4">{record.date}</td>
+                             <td className="px-6 py-4 max-w-xs truncate text-slate-500">{record.reason || '-'}</td>
+                           </tr>
+                         ))
+                       )}
                     </tbody>
                   </table>
                </div>
@@ -731,6 +639,154 @@ export default function StudentsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Import Modal */}
+      <StudentImportModal 
+        isOpen={isImportModalOpen} 
+        onClose={() => setIsImportModalOpen(false)} 
+        onSuccess={handleBulkSuccess} 
+      />
+
+      {/* Contact Modal */}
+      {isContactModalOpen && contactStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="px-6 pt-6 pb-4 flex justify-between items-start border-b border-slate-100">
+              <div>
+                <h2 className="text-lg font-black text-slate-800">ព័ត៌មានទំនាក់ទំនង</h2>
+                <p className="text-xs font-bold text-slate-500 mt-1">អាណាព្យាបាលសិស្ស៖ {contactStudent.full_name}</p>
+              </div>
+              <button onClick={() => setIsContactModalOpen(false)} className="text-slate-400 text-2xl font-bold hover:text-slate-700">&times;</button>
+            </div>
+            
+            <div className="p-6 space-y-4 bg-slate-50">
+              {contactStudent.father_phone && (
+                <div className="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500">ឪពុក ({contactStudent.father_name})</p>
+                    <p className="text-sm font-black text-slate-800 mt-0.5">{contactStudent.father_phone}</p>
+                  </div>
+                  <a href={`tel:${contactStudent.father_phone}`} className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+                    <Phone className="w-4 h-4" />
+                  </a>
+                </div>
+              )}
+
+              {contactStudent.mother_phone && contactStudent.mother_phone !== contactStudent.father_phone && (
+                <div className="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500">ម្តាយ ({contactStudent.mother_name})</p>
+                    <p className="text-sm font-black text-slate-800 mt-0.5">{contactStudent.mother_phone}</p>
+                  </div>
+                  <a href={`tel:${contactStudent.mother_phone}`} className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+                    <Phone className="w-4 h-4" />
+                  </a>
+                </div>
+              )}
+
+              {contactStudent.guardian_phone && (
+                <div className="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+                  <div>
+                    <p className="text-xs font-bold text-slate-500">អាណាព្យាបាលផ្សេងទៀត</p>
+                    <p className="text-sm font-black text-slate-800 mt-0.5">{contactStudent.guardian_phone}</p>
+                  </div>
+                  <a href={`tel:${contactStudent.guardian_phone}`} className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-100 transition-colors">
+                    <Phone className="w-4 h-4" />
+                  </a>
+                </div>
+              )}
+              
+              {!contactStudent.father_phone && !contactStudent.mother_phone && !contactStudent.guardian_phone && (
+                 <div className="text-center py-6 text-slate-500 font-bold text-sm">មិនមានលេខទូរស័ព្ទអាណាព្យាបាលទេ</div>
+              )}
+            </div>
+            
+            <div className="p-4 bg-white border-t border-slate-100">
+               <button onClick={() => setIsContactModalOpen(false)} className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition-colors">
+                 បិទ
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Change Modal */}
+      {isStatusModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="px-6 pt-6 pb-4 flex justify-between items-start">
+              <div>
+                <h2 className="text-lg font-black text-slate-800">កត់ត្រាការផ្លាស់ប្តូរស្ថានភាព</h2>
+                <p className="text-xs font-bold text-slate-500 mt-1">រក្សាទុកក្នុងប្រវត្តិបញ្ជីឈ្មោះសិក្សា</p>
+              </div>
+              <button onClick={() => setIsStatusModalOpen(false)} className="text-slate-400 text-2xl font-bold hover:text-slate-700">&times;</button>
+            </div>
+            
+            <form onSubmit={handleStatusSubmit} className="p-6 pt-2 space-y-4">
+              <div className="relative">
+                <select 
+                  required
+                  value={statusForm.studentId}
+                  onChange={e => setStatusForm({...statusForm, studentId: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] appearance-none"
+                >
+                  <option value="" disabled>ជ្រើសរើសសិស្ស...</option>
+                  {students.filter(s => s.current_status === 'active').map(s => (
+                    <option key={s.id} value={s.id}>{s.student_id_number} · {s.full_name}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="relative">
+                  <select 
+                    value={statusForm.actionType}
+                    onChange={e => setStatusForm({...statusForm, actionType: e.target.value})}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] appearance-none"
+                  >
+                    <option value="ផ្ទេរចេញ">ផ្ទេរចេញ</option>
+                    <option value="បោះបង់ការសិក្សា">បោះបង់ការសិក្សា</option>
+                    <option value="ដកបេក្ខភាព">ដកបេក្ខភាព</option>
+                    <option value="មរណភាព">មរណភាព</option>
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
+
+                <input 
+                  type="date"
+                  value={statusForm.actionDate}
+                  onChange={e => setStatusForm({...statusForm, actionDate: e.target.value})}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF]"
+                />
+              </div>
+
+              <textarea 
+                placeholder="មូលហេតុ..."
+                value={statusForm.reason}
+                onChange={e => setStatusForm({...statusForm, reason: e.target.value})}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] min-h-[100px] resize-none"
+              ></textarea>
+
+              <button 
+                type="submit"
+                className="w-full py-4 mt-2 bg-[#E3163A] hover:bg-rose-700 text-white font-black rounded-[14px] text-sm transition-colors"
+              >
+                រក្សាទុកការផ្លាស់ប្តូរ
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Grid Entry Modal */}
+      {isGridModalOpen && (
+        <StudentGridEntryModal 
+          isOpen={isGridModalOpen} 
+          onClose={() => setIsGridModalOpen(false)} 
+          onSuccess={handleBulkSuccess} 
+        />
       )}
     </div>
   );

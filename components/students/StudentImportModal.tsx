@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
-import { Upload, FileSpreadsheet, Check, AlertTriangle, X, Loader2, ArrowRight } from 'lucide-react';
+import { Upload, FileSpreadsheet, Check, AlertTriangle, X, Loader2, ArrowRight, Download } from 'lucide-react';
 
 interface StudentImportModalProps {
   isOpen: boolean;
@@ -68,6 +68,25 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
     };
     reader.readAsArrayBuffer(file);
   }
+
+  const handleDownloadTemplate = () => {
+    const wsData = [
+      { 'អត្តលេខ': 'ID-001', 'គោត្តនាម និងនាម': 'សុខ សាន្ត', 'ភេទ': 'M', 'លេខទូរសព្ទ': '012345678' },
+      { 'អត្តលេខ': 'ID-002', 'គោត្តនាម និងនាម': 'កែវ ធីតា', 'ភេទ': 'F', 'លេខទូរសព្ទ': '098765432' }
+    ];
+    const ws = XLSX.utils.json_to_sheet(wsData);
+    
+    ws['!cols'] = [
+      { wch: 15 },
+      { wch: 30 },
+      { wch: 10 },
+      { wch: 20 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Student_Template");
+    XLSX.writeFile(wb, "KruSmart_Student_Import_Template.xlsx");
+  };
 
   async function handleSave() {
     if (parsedData.length === 0) return;
@@ -138,7 +157,13 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
           )}
 
           {parsedData.length === 0 ? (
-            <div
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <button onClick={handleDownloadTemplate} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl flex items-center gap-2 transition-colors">
+                  <Download className="w-4 h-4" /> ទាញយកទម្រង់ Excel (Download Template)
+                </button>
+              </div>
+              <div
               onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
               onDragLeave={() => setDragActive(false)}
               onDrop={(e) => {
@@ -170,6 +195,7 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
                   className="hidden"
                 />
               </label>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">

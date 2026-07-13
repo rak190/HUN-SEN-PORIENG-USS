@@ -11,7 +11,7 @@ interface AuthContextType {
   classes: Classroom[];
   loading: boolean;
   isDemoMode: boolean;
-  login: (username: string, password: string) => Promise<{ error?: string }>;
+  login: (username: string, password: string) => Promise<{ error?: string; role?: string }>;
   register: (username: string, password: string, fullName: string, role?: 'teacher' | 'principal' | 'admin', schoolCode?: string) => Promise<{ error?: string }>;
   logout: () => Promise<void>;
   setActiveClass: (cls: Classroom | null) => void;
@@ -81,10 +81,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           // Keep demo mode active if no user session
           setIsDemoMode(true);
+          const savedDemoProfile = localStorage.getItem('demo_profile');
+          if (savedDemoProfile) {
+            try {
+              const parsedProfile = JSON.parse(savedDemoProfile);
+              setProfile(parsedProfile);
+              setUser({ id: 'demo-teacher-id', email: `${parsedProfile.username}@kruai.app` });
+            } catch (e) {}
+          }
         }
       } catch (err) {
         console.warn('Supabase offline or not configured, using Demo Mode:', err);
         setIsDemoMode(true);
+        const savedDemoProfile = localStorage.getItem('demo_profile');
+        if (savedDemoProfile) {
+          try {
+            const parsedProfile = JSON.parse(savedDemoProfile);
+            setProfile(parsedProfile);
+            setUser({ id: 'demo-teacher-id', email: `${parsedProfile.username}@kruai.app` });
+          } catch (e) {}
+        }
       } finally {
         setLoading(false);
       }
@@ -99,11 +115,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await fetchProfile(session.user.id);
         await refreshClassesForUser(session.user.id);
       } else {
-        setUser(null);
-        setProfile(DEFAULT_PROFILE);
-        setClasses(DEMO_CLASSES);
-        setActiveClass(DEMO_CLASSES[0]);
         setIsDemoMode(true);
+        const savedDemoProfile = localStorage.getItem('demo_profile');
+        if (savedDemoProfile) {
+          try {
+            const parsedProfile = JSON.parse(savedDemoProfile);
+            setProfile(parsedProfile);
+            setUser({ id: 'demo-teacher-id', email: `${parsedProfile.username}@kruai.app` });
+          } catch (e) {}
+        } else {
+          setUser(null);
+          setProfile(DEFAULT_PROFILE);
+          setClasses(DEMO_CLASSES);
+          setActiveClass(DEMO_CLASSES[0]);
+        }
       }
       setLoading(false);
     });
@@ -156,7 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function login(username: string, password: string): Promise<{ error?: string }> {
+  async function login(username: string, password: string): Promise<{ error?: string; role?: string }> {
     const cleanUsername = username.trim().toLowerCase();
     const email = `${cleanUsername}@kruai.app`;
 
@@ -178,15 +203,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ? 'សិស្ស ខៀវ សុវណ្ណារាជ (ប្រធានថ្នាក់)'
         : 'លោកគ្រូ/អ្នកគ្រូ សម្បត្តិ (គ្រូបន្ទុកថ្នាក់)';
 
-      setProfile({
+      const newProfile = {
         ...DEFAULT_PROFILE,
         username: cleanUsername,
         full_name: assignedName,
-        role: assignedRole,
-      });
+        role: assignedRole as any,
+      };
+      setProfile(newProfile);
       setClasses(DEMO_CLASSES);
       setActiveClass(DEMO_CLASSES[0]);
-      return {};
+      localStorage.setItem('demo_profile', JSON.stringify(newProfile));
+      return { role: assignedRole };
     }
 
     try {
@@ -200,7 +227,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setIsDemoMode(false);
-      return {};
+      const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
+      return { role: userProfile?.role || 'teacher' };
     } catch (e: any) {
       // If network fails (Failed to fetch / offline), allow seamless offline fallback
       if (e?.message?.includes('fetch') || e?.name === 'TypeError') {
@@ -215,15 +243,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ? 'សិស្ស ខៀវ សុវណ្ណារាជ (ប្រធានថ្នាក់)'
           : 'លោកគ្រូ/អ្នកគ្រូ សម្បត្តិ (គ្រូបន្ទុកថ្នាក់)';
 
-        setProfile({
+        const newProfile = {
           ...DEFAULT_PROFILE,
           username: cleanUsername,
           full_name: assignedName,
-          role: assignedRole,
-        });
+          role: assignedRole as any,
+        };
+        setProfile(newProfile);
         setClasses(DEMO_CLASSES);
         setActiveClass(DEMO_CLASSES[0]);
-        return {};
+        localStorage.setItem('demo_profile', JSON.stringify(newProfile));
+        return { role: assignedRole };
       }
       return { error: e?.message || 'កំហុសក្នុងការចូលប្រព័ន្ធ។' };
     }
@@ -277,6 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await supabase.auth.signOut();
     } catch (_) {}
+    localStorage.removeItem('demo_profile');
     setUser(null);
     setProfile(DEFAULT_PROFILE);
     setClasses(DEMO_CLASSES);
