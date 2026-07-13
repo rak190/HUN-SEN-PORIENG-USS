@@ -5,11 +5,10 @@ import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
 import { CURRICULUM_SCHEMAS, SubjectSchema } from '@/lib/curriculum';
+import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
 import {
   ClipboardList,
   Search,
-  CheckCircle2,
-  RefreshCw,
   Award
 } from 'lucide-react';
 import Link from 'next/link';
@@ -28,7 +27,22 @@ export default function GradesPage() {
   const { activeClass, isDemoMode } = useAuth();
   const [students, setStudents] = useState<Student[]>(DEMO_STUDENTS_GR);
   
-  const [curriculumType, setCurriculumType] = useState<keyof typeof CURRICULUM_SCHEMAS>('upper-sec-sci');
+  const curriculumType = useMemo(() => {
+    if (!activeClass?.name) return 'upper-sec-sci';
+    const gradeMatch = activeClass.name.match(/\d+/);
+    if (gradeMatch) {
+      const grade = parseInt(gradeMatch[0], 10);
+      if (grade >= 7 && grade <= 9) return 'lower-sec';
+      if (grade >= 10 && grade <= 12) {
+        if (activeClass.name.toLowerCase().includes('ss') || activeClass.name.toLowerCase().includes('art')) {
+          return 'upper-sec-art';
+        }
+        return 'upper-sec-sci';
+      }
+    }
+    return 'upper-sec-sci';
+  }, [activeClass]);
+  
   const activeSchema = CURRICULUM_SCHEMAS[curriculumType];
   const maxTotalScore = activeSchema.subjects.reduce((sum, sub) => sum + sub.maxScore, 0);
 
@@ -38,8 +52,6 @@ export default function GradesPage() {
   // Matrix data: Record<studentId, Record<columnId, number>>
   const [matrixData, setMatrixData] = useState<Record<string, Record<string, number>>>({});
   
-  const [syncStatus, setSyncStatus] = useState<'synced' | 'saving'>('synced');
-
   const supabase = createClient();
 
   // Flatten columns to easily render headers and map keyboard inputs
@@ -85,8 +97,19 @@ export default function GradesPage() {
 
       if (stdData && stdData.length > 0) {
         setStudents(stdData as Student[]);
+        
+        // Load grades
+        const { data: gradesData } = await supabase
+          .from('grades')
+          .select('*')
+          .eq('class_id', activeClass?.id || '')
+          .eq('period', selectedPeriod);
+
         const newMap: Record<string, Record<string, number>> = {};
-        stdData.forEach(s => { newMap[s.id] = {}; });
+        stdData.forEach(s => {
+          const sGrades = gradesData?.find(g => g.student_id === s.id);
+          newMap[s.id] = sGrades?.scores || {};
+        });
         setMatrixData(newMap);
       }
     }
@@ -95,16 +118,7 @@ export default function GradesPage() {
   }, [activeClass, curriculumType, selectedPeriod, isDemoMode, flatColumns]);
 
   function handleScoreChange(studentId: string, colId: string, value: string, maxScore: number) {
-    const num = Math.max(0, Math.min(maxScore, Number(value) || 0));
-    setMatrixData((prev) => ({
-      ...prev,
-      [studentId]: {
-        ...(prev[studentId] || {}),
-        [colId]: num,
-      },
-    }));
-    setSyncStatus('saving');
-    setTimeout(() => setSyncStatus('synced'), 800);
+    // Read-only, no longer allow manual changes here.
   }
 
   // Keyboard navigation
@@ -169,19 +183,6 @@ export default function GradesPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 shadow-2xs text-xs font-extrabold text-slate-700">
-            {syncStatus === 'saving' ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#155EEF]" />
-                <span>កំពុងរក្សាទុក...</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                <span>✨ បានរក្សាទុកស្វ័យប្រវត្តិ</span>
-              </>
-            )}
-          </div>
 
           <Link
             href="/report-cards"
@@ -198,15 +199,9 @@ export default function GradesPage() {
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="text-xs font-extrabold text-[#64748B]">កម្មវិធីសិក្សា៖</span>
-            <select
-              value={curriculumType}
-              onChange={(e) => setCurriculumType(e.target.value as any)}
-              className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-[#155EEF] focus:outline-none focus:border-[#155EEF]"
-            >
-              {Object.values(CURRICULUM_SCHEMAS).map(schema => (
-                <option key={schema.id} value={schema.id}>{schema.label}</option>
-              ))}
-            </select>
+            <div className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-[#155EEF]">
+              {activeSchema?.label}
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -216,11 +211,9 @@ export default function GradesPage() {
               onChange={(e) => setSelectedPeriod(e.target.value)}
               className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:border-[#155EEF]"
             >
-              <option value="oct-2025">ប្រចាំខែតុលា 2025</option>
-              <option value="nov-2025">ប្រចាំខែវិច្ឆិកា 2025</option>
-              <option value="sem-1">ប្រឡងឆមាសលើកទី១</option>
-              <option value="july-2026">ប្រចាំខែកក្កដា 2026</option>
-              <option value="sem-2">ប្រឡងឆមាសលើកទី២</option>
+              {ACADEMIC_PERIODS.map(period => (
+                <option key={period.id} value={period.id}>{period.label}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -327,8 +320,8 @@ export default function GradesPage() {
                             placeholder="-"
                             onChange={(e) => handleScoreChange(std.id, col.id, e.target.value, col.maxScore)}
                             onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)}
-                            onFocus={(e) => e.target.select()}
-                            className={`w-12 sm:w-14 p-1.5 text-center rounded-lg bg-transparent border border-transparent font-black text-slate-700 hover:bg-slate-100 focus:bg-white focus:outline-none focus:border-[#155EEF] focus:ring-2 focus:ring-blue-100 transition-all ${
+                            readOnly
+                            className={`w-12 sm:w-14 p-1.5 text-center rounded-lg bg-transparent border border-transparent font-black text-slate-700 transition-all ${
                               !col.isMain ? 'text-amber-800' : ''
                             }`}
                           />

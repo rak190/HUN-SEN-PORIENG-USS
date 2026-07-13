@@ -296,9 +296,17 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
               <h3 className="font-extrabold text-slate-800 text-base">កម្រិតវត្តមាន និងពិន្ទុមធ្យម</h3>
               <p className="text-[11px] text-[#64748B] font-medium">ស្ថិតិប្រៀបធៀបប្រចាំខែក្នុងឆ្នាំសិក្សាសម្រាប់ {stats.classNameKh}</p>
             </div>
-            <span className="text-xs font-bold text-[#64748B] bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/60 cursor-pointer">
-              8 ខែចុងក្រោយ ⌄
-            </span>
+            <div className="relative inline-flex items-center">
+              <select className="appearance-none bg-slate-50 text-xs font-bold text-[#64748B] px-3 py-1.5 pr-7 rounded-lg border border-slate-200/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer transition-colors hover:bg-slate-100">
+                <option value="8">8 ខែចុងក្រោយ</option>
+                <option value="6">6 ខែចុងក្រោយ</option>
+                <option value="3">3 ខែចុងក្រោយ</option>
+                <option value="all">ពេញមួយឆ្នាំ</option>
+              </select>
+              <div className="pointer-events-none absolute right-2 text-slate-400">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-6 mb-4">
@@ -343,9 +351,16 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
               <h3 className="font-extrabold text-slate-800 text-base">វត្តមានប្រចាំសប្តាហ៍</h3>
               <p className="text-[11px] text-[#64748B] font-medium">ស្ថិតិវត្តមាន និងអវត្តមានប្រចាំថ្ងៃក្នុង {stats.classNameKh}</p>
             </div>
-            <span className="text-xs font-bold text-[#64748B] bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/60 cursor-pointer">
-              ប្រចាំសប្តាហ៍ ⌄
-            </span>
+            <div className="relative inline-flex items-center">
+              <select className="appearance-none bg-slate-50 text-xs font-bold text-[#64748B] px-3 py-1.5 pr-7 rounded-lg border border-slate-200/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer transition-colors hover:bg-slate-100">
+                <option value="weekly">ប្រចាំសប្តាហ៍</option>
+                <option value="monthly">ប្រចាំខែ</option>
+                <option value="semester">ប្រចាំឆមាស</option>
+              </select>
+              <div className="pointer-events-none absolute right-2 text-slate-400">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-6 mb-6">

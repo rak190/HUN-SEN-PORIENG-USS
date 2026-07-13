@@ -9,6 +9,7 @@ type ParsedRow = {
   studentName: string;
   className: string;
   matchedStudentId?: string;
+  matchedClassId?: string;
   scores: Record<string, number>;
   totalScore: number;
   status: 'valid' | 'invalid' | 'warning';
@@ -40,9 +41,7 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
     try {
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData: any[] = XLSX.utils.sheet_to_json(firstSheet);
-
+      
       // Fetch all students to match
       const { data: studentsData, error } = await supabase
         .from('students')
@@ -53,40 +52,98 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
 
       const results: ParsedRow[] = [];
 
-      jsonData.forEach((row, index) => {
-        const studentName = row['នាមត្រកូល និងនាមខ្លួន'] || row['Name'] || '';
-        const className = row['ថ្នាក់ទី'] || row['Class'] || '';
+      const mapHeaderToId = (raw: string) => {
+        if (!raw) return null;
+        const s = raw.toString().trim();
+        if (s.includes('សរសេរ')) return 'khmer_dictation';
+        if (s.includes('តែង')) return 'khmer_composition';
+        if (s.includes('អានល្បឿន')) return 'khmer_reading_speed';
+        if (s.includes('គណិត')) return 'math';
+        if (s.includes('រូប')) return 'physics';
+        if (s.includes('គីមី')) return 'chemistry';
+        if (s.includes('ជីវ')) return 'biology';
+        if (s.includes('ប្រវត្តិ')) return 'history';
+        if (s.includes('សីល')) return 'morals';
+        if (s.includes('ផែន')) return 'earth_science';
+        if (s.includes('ភូមិ')) return 'geography';
+        if (s.includes('អង់')) return 'foreign_lang';
+        if (s.includes('កីឡា')) return 'pe';
+        if (s.includes('ICT')) return 'ict';
+        if (s.includes('គេហ')) return 'home_econ';
+        return null;
+      };
 
-        // Match logic
-        const match = studentsData.find(s => 
-          s.full_name.trim().toLowerCase() === studentName.trim().toLowerCase() && 
-          (s.classes as any)?.name === className.trim()
-        );
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        
+        if (rows.length < 6) return;
 
-        // Extract scores (ignore known non-score columns)
-        const ignoredColumns = ['អត្តលេខ', 'នាមត្រកូល និងនាមខ្លួន', 'ភេទ', 'ថ្នាក់ទី', 'ពិន្ទុសរុប', 'និទ្ទេសប្រចាំខែ', 'ចំណាត់ថ្នាក់', 'Name', 'Class', 'ID', 'Gender'];
-        const scores: Record<string, number> = {};
-        let totalScore = 0;
+        const headers4 = rows[4] || [];
+        const headers5 = rows[5] || [];
 
-        Object.keys(row).forEach(key => {
-          if (!ignoredColumns.includes(key) && typeof row[key] === 'number') {
-            // Map header names to subject IDs based on active schema (Simplified logic here, assumes headers are subject IDs or mapped properly)
-            // In a real app, we need a precise mapping dictionary. For now, use the column name directly.
-            scores[key] = row[key];
-            totalScore += row[key];
+        // Data rows start at index 6
+        for (let i = 6; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.length === 0) continue;
+          
+          // Must have a valid Number of Table (ល.រ) in column 0 to be a student row
+          if (typeof row[0] !== 'number') continue;
+
+          const lastName = (row[2] || '').toString().trim();
+          const firstName = (row[3] || '').toString().trim();
+          const studentName = `${lastName}${firstName}`.trim();
+          
+          const gradeLevel = (row[8] || '').toString().trim();
+          const classMod = (row[9] || '').toString().trim();
+          const className = `${gradeLevel}${classMod}`;
+
+          // Match logic
+          const match = studentsData.find(s => 
+            s.full_name.replace(/\s+/g, '') === studentName.replace(/\s+/g, '') && 
+            (s.classes as any)?.name === className
+          );
+
+          const scores: Record<string, number> = {};
+          let totalScore = 0;
+          let currentSubjectID: string | null = null;
+
+          for (let c = 10; c < row.length; c++) {
+            const h4 = headers4[c];
+            if (h4) {
+              const mapped = mapHeaderToId(h4);
+              if (mapped) currentSubjectID = mapped;
+            }
+            
+            const h5 = headers5[c];
+            if (h5) {
+              const mapped5 = mapHeaderToId(h5);
+              if (mapped5) currentSubjectID = mapped5;
+            }
+
+            if (currentSubjectID) {
+               const val = parseFloat(row[c]);
+               if (!isNaN(val)) {
+                  scores[currentSubjectID] = (scores[currentSubjectID] || 0) + val;
+               }
+            }
           }
-        });
 
-        results.push({
-          originalRow: index + 2, // Excel rows are 1-indexed, +1 for header
-          studentName,
-          className,
-          matchedStudentId: match?.id,
-          scores,
-          totalScore,
-          status: match ? 'valid' : 'invalid',
-          message: match ? 'Matched successfully' : 'Student not found in database for this class',
-        });
+          // Compute total score over all mapped subjects
+          totalScore = Object.values(scores).reduce((sum, s) => sum + s, 0);
+
+          results.push({
+            originalRow: i + 1, // 1-indexed
+            studentName,
+            className,
+            matchedStudentId: match?.id,
+            matchedClassId: match?.class_id,
+            scores,
+            totalScore,
+            status: match ? 'valid' : 'invalid',
+            message: match ? 'Matched successfully' : `Student '${studentName}' in '${className}' not found`,
+          });
+        }
       });
 
       setParsedData(results);
@@ -109,6 +166,7 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
     try {
       const inserts = validRows.map(row => ({
         student_id: row.matchedStudentId,
+        class_id: row.matchedClassId,
         period: selectedPeriod,
         scores: row.scores,
         total_score: row.totalScore,

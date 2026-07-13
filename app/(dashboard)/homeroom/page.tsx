@@ -45,7 +45,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       totalNum: '45',
       girls: '23',
       boys: '22',
-      classNameKh: classId === 'all' ? 'គ្រប់ថ្នាក់ទាំងអស់' : `ថ្នាក់ ${classId}`,
+      classNameKh: profile?.role === 'teacher' ? 'ថ្នាក់ ១២ក' : (classId === 'all' ? 'គ្រប់ថ្នាក់ទាំងអស់' : `ថ្នាក់ ${classId}`),
       weeklyData: [
         { day: 'ច', present: 98, absent: 2 },
         { day: 'អ', present: 95, absent: 5 },
@@ -69,6 +69,19 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       { id: '102', name: 'ដួង វិចិត្រ', reasons: ['ធ្លាក់ពិន្ទុរូបវិទ្យា និងគីមីវិទ្យា'], severity: 'medium' },
       { id: '103', name: 'ម៉ៅ រស្មី', reasons: ['បញ្ហាវិន័យ៖ ឈ្លោះប្រកែកគ្នា'], severity: 'high' }
     ]} />;
+  }
+
+  // 1.5 Fetch homeroom teacher's class name
+  let teacherClassName = null;
+  if (profile?.role === 'teacher') {
+    const { data: classroom } = await supabase
+      .from('classrooms')
+      .select('name')
+      .eq('teacher_id', profile.id)
+      .single();
+    if (classroom) {
+      teacherClassName = classroom.name;
+    }
   }
 
   // 2. Fetch basic stats
@@ -142,16 +155,19 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   // 5. Fetch 8-Month Trend Data
   const trendMonths = [];
   const monthLabels = ['មករា', 'កុម្ភៈ', 'មីនា', 'មេសា', 'ឧសភា', 'មិថុនា', 'កក្កដា', 'សីហា', 'កញ្ញា', 'តុលា', 'វិច្ឆិកា', 'ធ្នូ'];
+  const monthIds = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
   
   const currentDate = new Date();
   for (let i = 7; i >= 0; i--) {
     const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
     trendMonths.push({
       monthStr: d.toISOString().slice(0, 7), // YYYY-MM
+      periodId: monthIds[d.getMonth()], // map to ACADEMIC_PERIODS
       label: monthLabels[d.getMonth()]
     });
   }
   const trendMonthStrs = trendMonths.map(m => m.monthStr);
+  const trendPeriodIds = trendMonths.map(m => m.periodId);
 
   let monthlyAttQuery = supabase
     .from('monthly_attendance_summaries')
@@ -163,9 +179,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   const { data: monthlyAttRaw } = await monthlyAttQuery;
 
   let gradesQuery = supabase
-    .from('grade_records')
-    .select('period_id, total_score')
-    .in('period_id', trendMonthStrs);
+    .from('grades')
+    .select('period, total_score')
+    .in('period', trendPeriodIds);
   if (classId !== 'all') {
     gradesQuery = gradesQuery.eq('class_id', classId);
   }
@@ -189,7 +205,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       attPct = Math.max(0, Math.round(((totalPossibleAtt - totalAbsences) / totalPossibleAtt) * 100));
     }
 
-    const monthGrades = gradesRaw?.filter(r => r.period_id === tm.monthStr) || [];
+    const monthGrades = gradesRaw?.filter(r => r.period === tm.periodId) || [];
     let avgGrade = 0;
     if (monthGrades.length > 0) {
       const sum = monthGrades.reduce((acc, curr) => acc + (curr.total_score || 0), 0);
@@ -233,7 +249,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     totalNum: (studentsCount || 0).toString(),
     girls: girlsCount.toString(),
     boys: boysCount.toString(),
-    classNameKh: classId === 'all' ? 'គ្រប់ថ្នាក់ទាំងអស់' : `ថ្នាក់ ${classId}`,
+    classNameKh: teacherClassName || (classId === 'all' ? 'គ្រប់ថ្នាក់ទាំងអស់' : `ថ្នាក់ ${classId}`),
     weeklyData,
     trendData
   };
