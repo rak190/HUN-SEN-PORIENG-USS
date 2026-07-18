@@ -26,7 +26,7 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
   const [isUploading, setIsUploading] = useState(false);
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState('sem-1');
+  const [selectedPeriod, setSelectedPeriod] = useState('dec');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const supabase = createClient();

@@ -23,6 +23,7 @@ import {
   Megaphone,
   UserCog,
   Building2,
+  Book,
   FileSpreadsheet,
   Activity,
   HeartHandshake,
@@ -64,6 +65,7 @@ const MENU_ITEMS: MenuItem[] = [
     children: [
       { id: 'grades', label: 'Grades & Ranking', khmerLabel: 'ពិន្ទុ & ថ្នាក់បំប៉ន', href: '/grades', icon: FileEdit, roles: ['teacher'] },
       { id: 'report-cards', label: 'Report Cards', khmerLabel: 'ព្រឹត្តិបត្រពិន្ទុ', href: '/report-cards', icon: FileSpreadsheet, roles: ['teacher'], badge: 'បោះពុម្ព' },
+      { id: 'student-records', label: 'Student Records', khmerLabel: 'សៀវភៅសិក្ខាគារិក', href: '/student-records', icon: Book, roles: ['teacher'] },
     ]
   },
   {

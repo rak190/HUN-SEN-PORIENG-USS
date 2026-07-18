@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
 import { CURRICULUM_SCHEMAS, SubjectSchema } from '@/lib/curriculum';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
+import { computeSummaryGrades } from '@/lib/grade-calculations';
 import {
   ClipboardList,
   Search,
@@ -46,11 +47,14 @@ export default function GradesPage() {
   const activeSchema = CURRICULUM_SCHEMAS[curriculumType];
   const maxTotalScore = activeSchema.subjects.reduce((sum, sub) => sum + sub.maxScore, 0);
 
-  const [selectedPeriod, setSelectedPeriod] = useState('sem-1');
+  const [selectedPeriod, setSelectedPeriod] = useState('dec');
   const [searchQuery, setSearchQuery] = useState('');
   
   // Matrix data: Record<studentId, Record<columnId, number>>
   const [matrixData, setMatrixData] = useState<Record<string, Record<string, number>>>({});
+  const [rawGradesData, setRawGradesData] = useState<any[]>([]);
+  
+  const isSummaryPeriod = selectedPeriod.includes('summary');
   
   const supabase = createClient();
 
@@ -99,17 +103,29 @@ export default function GradesPage() {
         setStudents(stdData as Student[]);
         
         // Load grades
+        let targetPeriods = [selectedPeriod];
+        if (selectedPeriod === 'sem1-summary') {
+          targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary'];
+        } else if (selectedPeriod === 'sem2-summary') {
+          targetPeriods = ['may', 'jun', 'jul', 'sem2-exam', 'sem2-summary'];
+        } else if (selectedPeriod === 'annual') {
+          targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary', 'may', 'jun', 'jul', 'sem2-exam', 'sem2-summary', 'annual'];
+        }
+
         const { data: gradesData } = await supabase
           .from('grades')
-          .select('*')
+          .select('student_id, period, scores')
           .eq('class_id', activeClass?.id || '')
-          .eq('period', selectedPeriod);
+          .in('period', targetPeriods);
 
         const newMap: Record<string, Record<string, number>> = {};
-        stdData.forEach(s => {
-          const sGrades = gradesData?.find(g => g.student_id === s.id);
-          newMap[s.id] = sGrades?.scores || {};
-        });
+        if (gradesData) {
+          setRawGradesData(gradesData);
+          const subjectIds = flatColumns.map(c => c.id);
+          stdData.forEach(s => {
+            newMap[s.id] = computeSummaryGrades(gradesData, s.id, selectedPeriod, subjectIds);
+          });
+        }
         setMatrixData(newMap);
       }
     }
@@ -148,21 +164,63 @@ export default function GradesPage() {
 
   // Calculate totals and ranks (Only using main subjects, skipping sub-metrics)
   const rankedStudents = useMemo(() => {
+    const isSem1 = selectedPeriod === 'sem1-summary';
+    const isSem2 = selectedPeriod === 'sem2-summary';
+    const totalCoefficient = maxTotalScore / 50;
+
     return [...filteredStudents].map((std) => {
       const studentScores = matrixData[std.id] || {};
       const totalScore = activeSchema.subjects.reduce((sum, sub) => sum + (studentScores[sub.id] || 0), 0);
       
-      const percentage = (totalScore / maxTotalScore) * 100;
-      let grade = 'F';
-      if (percentage >= 90) grade = 'A';
-      else if (percentage >= 80) grade = 'B';
-      else if (percentage >= 70) grade = 'C';
-      else if (percentage >= 60) grade = 'D';
-      else if (percentage >= 50) grade = 'E';
+      let breakdown = {};
+      
+      if (isSem1 || isSem2) {
+        let m1Total = 0, m2Total = 0, m3Total = 0, examTotal = 0;
+        if (isSem1) {
+          const dec = rawGradesData.find(g => g.student_id === std.id && g.period === 'dec')?.scores || {};
+          const jan = rawGradesData.find(g => g.student_id === std.id && g.period === 'jan')?.scores || {};
+          const feb = rawGradesData.find(g => g.student_id === std.id && g.period === 'feb')?.scores || {};
+          const exam = rawGradesData.find(g => g.student_id === std.id && g.period === 'sem1-exam')?.scores || {};
+          activeSchema.subjects.forEach(sub => {
+            m1Total += dec[sub.id] || 0;
+            m2Total += jan[sub.id] || 0;
+            m3Total += feb[sub.id] || 0;
+            examTotal += exam[sub.id] || 0;
+          });
+        } else if (isSem2) {
+          const may = rawGradesData.find(g => g.student_id === std.id && g.period === 'may')?.scores || {};
+          const jun = rawGradesData.find(g => g.student_id === std.id && g.period === 'jun')?.scores || {};
+          const jul = rawGradesData.find(g => g.student_id === std.id && g.period === 'jul')?.scores || {};
+          const exam = rawGradesData.find(g => g.student_id === std.id && g.period === 'sem2-exam')?.scores || {};
+          activeSchema.subjects.forEach(sub => {
+            m1Total += may[sub.id] || 0;
+            m2Total += jun[sub.id] || 0;
+            m3Total += jul[sub.id] || 0;
+            examTotal += exam[sub.id] || 0;
+          });
+        }
+        
+        const monthlyTotal = (m1Total + m2Total + m3Total) / 3;
+        
+        breakdown = {
+          examScore: examTotal,
+          examAvg: examTotal / totalCoefficient,
+          monthlyAvg: monthlyTotal / totalCoefficient,
+          semesterAvg: totalScore / totalCoefficient
+        };
+      }
 
-      return { ...std, totalScore, grade, percentage };
+      const average = totalScore / totalCoefficient;
+      let grade = 'F';
+      if (average >= 42.5) grade = 'A';
+      else if (average >= 40.0) grade = 'B';
+      else if (average >= 35.0) grade = 'C';
+      else if (average >= 30.0) grade = 'D';
+      else if (average >= 25.0) grade = 'E';
+
+      return { ...std, totalScore, grade, percentage: average, breakdown };
     }).sort((a, b) => b.totalScore - a.totalScore);
-  }, [filteredStudents, matrixData, activeSchema, maxTotalScore]);
+  }, [filteredStudents, matrixData, rawGradesData, activeSchema, maxTotalScore, selectedPeriod]);
 
   return (
     <div className="space-y-6 animate-fadeIn select-none">
@@ -243,10 +301,26 @@ export default function GradesPage() {
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-100 border-b border-slate-200 text-[10px] font-black text-slate-700 uppercase tracking-wider">
                 <th className="py-4 px-3 w-10 text-center sticky left-0 bg-slate-100 z-20 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">ល.រ</th>
-                <th className="py-4 px-4 sticky left-[40px] bg-slate-100 z-20 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[160px]">គោត្តនាម & នាម</th>
-                <th className="py-4 px-3 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200 min-w-[90px]">ពិន្ទុសរុប<br/>({maxTotalScore})</th>
-                <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ចំណាត់<br/>ថ្នាក់</th>
-                <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">និទ្ទេស</th>
+                <th className="py-4 px-3 text-center sticky left-[40px] bg-slate-100 z-20 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">អត្តលេខ</th>
+                <th className="py-4 px-4 sticky left-[100px] bg-slate-100 z-20 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[160px]">គោត្តនាម & នាម</th>
+                
+                {!isSummaryPeriod ? (
+                  <>
+                    <th className="py-4 px-3 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200 min-w-[90px]">ពិន្ទុសរុប<br/>({maxTotalScore})</th>
+                    <th className="py-4 px-3 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200 min-w-[90px]">មធ្យមភាគ<br/>(50)</th>
+                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ចំណាត់<br/>ថ្នាក់</th>
+                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">និទ្ទេស</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ពិន្ទុប្រលង<br/>ឆមាស</th>
+                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ម.ប្រលង<br/>ឆមាស</th>
+                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ម.ខែ<br/>ឆមាស</th>
+                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ម.ប្រចាំ<br/>ឆមាស</th>
+                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">និទ្ទេស<br/>ប្រចាំឆ.</th>
+                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ចំ.<br/>ថ្នាក់</th>
+                  </>
+                )}
                 
                 {flatColumns.map(col => (
                   <th key={col.id} className={`py-2 px-1 text-center border-r border-slate-200 min-w-[70px] ${!col.isMain ? 'bg-amber-50/80' : ''}`}>
@@ -270,7 +344,10 @@ export default function GradesPage() {
                   <td className="py-3 px-3 text-center text-slate-400 font-bold sticky left-0 bg-white group-hover:bg-blue-50/50 z-10 border-r border-slate-100">
                     {rowIndex + 1}
                   </td>
-                  <td className="py-3 px-4 font-black text-slate-800 sticky left-[40px] bg-white group-hover:bg-blue-50/50 z-10 border-r border-slate-100">
+                  <td className="py-3 px-3 text-center text-slate-500 sticky left-[40px] bg-white group-hover:bg-blue-50/50 z-10 border-r border-slate-100">
+                    {std.student_id_number || '-'}
+                  </td>
+                  <td className="py-3 px-4 font-black text-slate-800 sticky left-[100px] bg-white group-hover:bg-blue-50/50 z-10 border-r border-slate-100">
                     <div className="flex items-center gap-2">
                       {std.full_name}
                       <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
@@ -282,28 +359,69 @@ export default function GradesPage() {
                   </td>
                   
                   {/* Results */}
-                  <td className="py-3 px-3 text-center bg-blue-50/40 font-black text-base text-[#155EEF] border-r border-slate-100">
-                    {std.totalScore}
-                  </td>
-                  <td className="py-3 px-2 text-center bg-blue-50/40 border-r border-slate-100">
-                    <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center font-black text-xs ${
-                      rowIndex === 0 ? 'bg-amber-400 text-amber-950 shadow-sm' :
-                      rowIndex === 1 ? 'bg-slate-300 text-slate-800' :
-                      rowIndex === 2 ? 'bg-amber-600 text-white' : 'text-slate-600'
-                    }`}>
-                      {rowIndex + 1}
-                    </span>
-                  </td>
-                  <td className="py-3 px-2 text-center bg-blue-50/40 border-r border-slate-100">
-                    <span className={`px-2.5 py-1 rounded-md text-xs font-black ${
-                      std.grade === 'A' ? 'bg-emerald-100 text-emerald-800' :
-                      std.grade === 'B' ? 'bg-blue-100 text-blue-800' :
-                      std.grade === 'C' ? 'bg-sky-100 text-sky-800' :
-                      std.grade === 'D' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
-                    }`}>
-                      {std.grade}
-                    </span>
-                  </td>
+                  {!isSummaryPeriod ? (
+                    <>
+                      <td className="py-3 px-3 text-center bg-blue-50/40 font-black text-base text-[#155EEF] border-r border-slate-100">
+                        {std.totalScore}
+                      </td>
+                      <td className="py-3 px-3 text-center bg-blue-50/40 font-black text-sm text-slate-700 border-r border-slate-100">
+                        {std.percentage?.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-2 text-center bg-blue-50/40 border-r border-slate-100">
+                        <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center font-black text-xs ${
+                          rowIndex === 0 ? 'bg-amber-400 text-amber-950 shadow-sm' :
+                          rowIndex === 1 ? 'bg-slate-300 text-slate-800' :
+                          rowIndex === 2 ? 'bg-amber-600 text-white' : 'text-slate-600'
+                        }`}>
+                          {rowIndex + 1}
+                        </span>
+                      </td>
+                      <td className="py-3 px-2 text-center bg-blue-50/40 border-r border-slate-100">
+                        <span className={`px-2.5 py-1 rounded-md text-xs font-black ${
+                          std.grade === 'A' ? 'bg-emerald-100 text-emerald-800' :
+                          std.grade === 'B' ? 'bg-blue-100 text-blue-800' :
+                          std.grade === 'C' ? 'bg-sky-100 text-sky-800' :
+                          std.grade === 'D' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {std.grade}
+                        </span>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="py-3 px-2 text-center bg-blue-50/40 font-black text-sm text-[#155EEF] border-r border-slate-100">
+                        {(std as any).breakdown?.examScore || 0}
+                      </td>
+                      <td className="py-3 px-2 text-center bg-blue-50/40 font-bold text-sm text-slate-700 border-r border-slate-100">
+                        {(std as any).breakdown?.examAvg?.toFixed(2) || '0.00'}
+                      </td>
+                      <td className="py-3 px-2 text-center bg-blue-50/40 font-bold text-sm text-slate-700 border-r border-slate-100">
+                        {(std as any).breakdown?.monthlyAvg?.toFixed(2) || '0.00'}
+                      </td>
+                      <td className="py-3 px-2 text-center bg-blue-50/40 font-black text-sm text-emerald-700 border-r border-slate-100">
+                        {(std as any).breakdown?.semesterAvg?.toFixed(2) || '0.00'}
+                      </td>
+                      <td className="py-3 px-2 text-center bg-blue-50/40 border-r border-slate-100">
+                        <span className={`px-2.5 py-1 rounded-md text-xs font-black ${
+                          std.grade === 'A' ? 'bg-emerald-100 text-emerald-800' :
+                          std.grade === 'B' ? 'bg-blue-100 text-blue-800' :
+                          std.grade === 'C' ? 'bg-sky-100 text-sky-800' :
+                          std.grade === 'D' ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {std.grade}
+                        </span>
+                      </td>
+                      <td className="py-3 px-2 text-center bg-blue-50/40 border-r border-slate-100">
+                        <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center font-black text-xs ${
+                          rowIndex === 0 ? 'bg-amber-400 text-amber-950 shadow-sm' :
+                          rowIndex === 1 ? 'bg-slate-300 text-slate-800' :
+                          rowIndex === 2 ? 'bg-amber-600 text-white' : 'text-slate-600'
+                        }`}>
+                          {rowIndex + 1}
+                        </span>
+                      </td>
+                    </>
+                  )}
 
                   {/* Matrix Inputs */}
                   {flatColumns.map((col, colIndex) => {

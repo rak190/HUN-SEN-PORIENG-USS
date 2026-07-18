@@ -8,6 +8,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
+import { computeSummaryGrades } from '@/lib/grade-calculations';
 import {
   Printer,
   ChevronLeft,
@@ -30,7 +31,7 @@ export default function ReportCardsPage() {
   const { activeClass } = useAuth();
   const [students, setStudents] = useState<Student[]>(DEMO_STUDENTS);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedPeriod, setSelectedPeriod] = useState('sem-1');
+  const [selectedPeriod, setSelectedPeriod] = useState('dec');
   const [dbScores, setDbScores] = useState<Record<string, Record<string, number>>>({});
   const [isLoadingData, setIsLoadingData] = useState(false);
   const supabase = createClient();
@@ -51,16 +52,36 @@ export default function ReportCardsPage() {
         setStudents(stdData);
       }
       
-      // Fetch grades for this period
+      // Define which periods we need to fetch based on selected period
+      let targetPeriods = [selectedPeriod];
+      if (selectedPeriod === 'sem1-summary') {
+        targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary'];
+      } else if (selectedPeriod === 'sem2-summary') {
+        targetPeriods = ['may', 'jun', 'jul', 'sem2-exam', 'sem2-summary'];
+      } else if (selectedPeriod === 'annual') {
+        targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary', 'may', 'jun', 'jul', 'sem2-exam', 'sem2-summary', 'annual'];
+      }
+
       const { data: gradeData } = await supabase
         .from('grades')
-        .select('student_id, scores')
-        .eq('period', selectedPeriod);
+        .select('student_id, period, scores')
+        .eq('class_id', activeClass.id)
+        .in('period', targetPeriods);
         
-      if (gradeData) {
+      if (gradeData && stdData) {
+        // Collect all subject IDs from the schema
+        const schema = CURRICULUM_SCHEMAS['upper-sec-sci']; // Or dynamically get it based on activeClass
+        const subjectIds: string[] = [];
+        schema.subjects.forEach(sub => {
+          subjectIds.push(sub.id);
+          if (sub.subMetrics) {
+            sub.subMetrics.forEach(m => subjectIds.push(`${sub.id}_${m.id}`));
+          }
+        });
+
         const scoreMap: Record<string, Record<string, number>> = {};
-        gradeData.forEach(row => {
-          scoreMap[row.student_id] = row.scores;
+        stdData.forEach(std => {
+          scoreMap[std.id] = computeSummaryGrades(gradeData, std.id, selectedPeriod, subjectIds);
         });
         setDbScores(scoreMap);
       }
@@ -101,15 +122,16 @@ export default function ReportCardsPage() {
     const sorted = [...students].map(std => {
       const scores = matrixData[std.id] || {};
       const totalScore = activeSchema.subjects.reduce((sum, sub) => sum + (scores[sub.id] || 0), 0);
-      const percentage = (totalScore / maxTotalScore) * 100;
+      const totalCoefficient = maxTotalScore / 50;
+      const average = totalScore / totalCoefficient;
       let grade = 'F';
-      if (percentage >= 90) grade = 'A';
-      else if (percentage >= 80) grade = 'B';
-      else if (percentage >= 70) grade = 'C';
-      else if (percentage >= 60) grade = 'D';
-      else if (percentage >= 50) grade = 'E';
+      if (average >= 42.5) grade = 'A';
+      else if (average >= 40.0) grade = 'B';
+      else if (average >= 35.0) grade = 'C';
+      else if (average >= 30.0) grade = 'D';
+      else if (average >= 25.0) grade = 'E';
 
-      return { ...std, totalScore, percentage, grade };
+      return { ...std, totalScore, percentage: average, grade };
     }).sort((a, b) => b.totalScore - a.totalScore);
     
     // Assign 1, 1, 3 ranks
@@ -279,7 +301,7 @@ export default function ReportCardsPage() {
           <div className="text-right space-y-1">
             <h1 className="text-2xl font-black text-[#155EEF] uppercase tracking-wide">ព្រឹត្តិបត្រពិន្ទុ</h1>
             <p className="text-base font-bold text-slate-800">
-              ប្រចាំខែ៖ <span className="font-black uppercase">{selectedPeriod === 'sem-1' ? 'ឆមាសទី១' : selectedPeriod === 'oct-2025' ? 'តុលា' : 'វិច្ឆិកា'}</span>
+              ប្រចាំខែ/ឆមាស៖ <span className="font-black uppercase">{ACADEMIC_PERIODS.find(p => p.id === selectedPeriod)?.label.split('(')[0].trim() || ''}</span>
             </p>
           </div>
         </div>
@@ -374,7 +396,7 @@ export default function ReportCardsPage() {
         <div className="grid grid-cols-3 gap-4 mb-3 print:mb-2">
           <div className="border border-slate-300 print:border-slate-900 p-2 rounded-lg text-center">
             <span className="block text-xs font-bold text-slate-500 uppercase mb-1">មធ្យមភាគ (Average)</span>
-            <span className="block text-lg font-black text-slate-900">{studentInfo.percentage.toFixed(2)}%</span>
+            <span className="block text-lg font-black text-slate-900">{studentInfo.percentage.toFixed(2)}</span>
           </div>
           <div className="border border-slate-300 print:border-slate-900 p-2 rounded-lg text-center">
             <span className="block text-xs font-bold text-slate-500 uppercase mb-1">ចំណាត់ថ្នាក់ (Rank)</span>
