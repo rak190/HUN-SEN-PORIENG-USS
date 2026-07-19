@@ -8,11 +8,11 @@ import {
 } from 'lucide-react';
 
 const OFFICIAL_TEMPLATES = [
-  { id: 'tpl-1', title: 'ទម្រង់បញ្ជីរាយនាមសិស្ស (Student List)', type: 'excel', format: '.xlsx', size: '24 KB', date: '01 តុលា 2026', author: 'MoEYS / GEIP' },
-  { id: 'tpl-2', title: 'ទម្រង់ស្រង់វត្តមានប្រចាំខែ (Monthly Attendance)', type: 'pdf', format: '.pdf', size: '1.2 MB', date: '01 តុលា 2026', author: 'សាលារៀន' },
-  { id: 'tpl-3', title: 'កិច្ចសន្យាអប់រំសិស្ស (Student Discipline Contract)', type: 'word', format: '.docx', size: '45 KB', date: '15 កញ្ញា 2026', author: 'នាយកសាលា' },
-  { id: 'tpl-4', title: 'ពាក្យស្នើសុំច្បាប់ឈប់សម្រាក (Leave Request Form)', type: 'pdf', format: '.pdf', size: '500 KB', date: '01 តុលា 2026', author: 'រដ្ឋបាល' },
-  { id: 'tpl-5', title: 'សៀវភៅតាមដានសុខភាព (Health Tracker Book)', type: 'excel', format: '.xlsx', size: '88 KB', date: '10 កញ្ញា 2026', author: 'GEIP' },
+  { id: 'tpl-1', title: 'ទម្រង់បញ្ជីរាយនាមសិស្ស', type: 'excel', format: '.xlsx', size: '24 KB', date: '01 តុលា 2026', author: 'MoEYS / GEIP' },
+  { id: 'tpl-2', title: 'ទម្រង់ស្រង់វត្តមានប្រចាំខែ', type: 'pdf', format: '.pdf', size: '1.2 MB', date: '01 តុលា 2026', author: 'សាលារៀន' },
+  { id: 'tpl-3', title: 'កិច្ចសន្យាអប់រំសិស្ស', type: 'word', format: '.docx', size: '45 KB', date: '15 កញ្ញា 2026', author: 'នាយកសាលា' },
+  { id: 'tpl-4', title: 'ពាក្យស្នើសុំច្បាប់ឈប់សម្រាក', type: 'pdf', format: '.pdf', size: '500 KB', date: '01 តុលា 2026', author: 'រដ្ឋបាល' },
+  { id: 'tpl-5', title: 'សៀវភៅតាមដានសុខភាព', type: 'excel', format: '.xlsx', size: '88 KB', date: '10 កញ្ញា 2026', author: 'GEIP' },
 ];
 
 const UPLOADED_FILES = [
@@ -58,7 +58,7 @@ export default function DocumentsPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 flex items-center gap-2.5">
             <FolderOpen className="w-8 h-8 text-[#155EEF]" />
-            <span>មជ្ឈមណ្ឌលឯកសារ (Documents)</span>
+            <span>មជ្ឈមណ្ឌលឯកសារ</span>
           </h1>
           <p className="text-xs font-bold text-[#64748B] mt-1 flex items-center gap-1.5">
             <span>• ទីតាំងផ្ទុកទម្រង់ឯកសារផ្លូវការ ឯកសារបញ្ជូន និងរបាយការណ៍</span>
@@ -72,21 +72,21 @@ export default function DocumentsPage() {
           onClick={() => setActiveTab('templates')}
           className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${activeTab === 'templates' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
-          <FileCheck className="w-4 h-4" /> ទម្រង់ឯកសារផ្លូវការ (Templates)
+          <FileCheck className="w-4 h-4" /> ទម្រង់ឯកសារផ្លូវការ
         </button>
 
         <button
           onClick={() => setActiveTab('uploads')}
           className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${activeTab === 'uploads' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
-          <Upload className="w-4 h-4" /> ឯកសារបានបញ្ជូន (Uploaded)
+          <Upload className="w-4 h-4" /> ឯកសារបានបញ្ជូន
         </button>
         
         <button
           onClick={() => setActiveTab('exports')}
           className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${activeTab === 'exports' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
-          <Download className="w-4 h-4" /> របាយការណ៍បានទាញយក (Exports)
+          <Download className="w-4 h-4" /> របាយការណ៍បានទាញយក
         </button>
       </div>
 
@@ -153,7 +153,7 @@ export default function DocumentsPage() {
               <h3 className="font-black text-slate-800 text-lg mb-1">ទាញទម្លាក់ឯកសារនៅទីនេះ</h3>
               <p className="text-sm font-bold text-slate-500 mb-6">ឬចុចប៊ូតុងខាងក្រោមដើម្បីជ្រើសរើសឯកសារពីកុំព្យូទ័ររបស់អ្នក (PDF, JPG, PNG, DOCX)</p>
               <label className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-md cursor-pointer transition-colors">
-                ជ្រើសរើសឯកសារ (Browse Files)
+                ជ្រើសរើសឯកសារ
                 <input type="file" className="hidden" />
               </label>
             </div>
@@ -217,7 +217,7 @@ export default function DocumentsPage() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-black text-slate-800">របាយការណ៍ដែលបានទាញយករួច</h2>
               <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-bold text-xs transition-colors">
-                <RefreshCw className="w-4 h-4" /> ធ្វើបច្ចុប្បន្នភាព (Refresh)
+                <RefreshCw className="w-4 h-4" /> ធ្វើបច្ចុប្បន្នភាព
               </button>
             </div>
 

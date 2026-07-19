@@ -167,7 +167,7 @@ export default function MonitorAttendancePage() {
           onClick={markAllPresent}
           className="text-xs font-black text-[#155EEF] bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors"
         >
-          វត្តមានទាំងអស់ (Mark All P)
+          វត្តមានទាំងអស់
         </button>
       </div>
 

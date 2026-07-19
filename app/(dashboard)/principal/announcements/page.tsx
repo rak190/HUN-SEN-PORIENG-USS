@@ -82,7 +82,7 @@ export default function PrincipalAnnouncementsPage() {
               onClick={() => setShowNewModal(false)}
               className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
             >
-              បិទ (Close)
+              បិទ
             </button>
           </div>
 

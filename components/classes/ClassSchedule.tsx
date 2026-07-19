@@ -112,7 +112,7 @@ export default function ClassSchedule() {
       <div className="print:hidden">
         <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-          <Clock className="w-5 h-5 text-amber-500" /> កាលវិភាគសិក្សា (Class Schedule)
+          <Clock className="w-5 h-5 text-amber-500" /> កាលវិភាគសិក្សា
         </h3>
         <div className="print:hidden">
           {isEditing ? (
@@ -121,7 +121,7 @@ export default function ClassSchedule() {
                 onClick={() => setIsEditing(false)}
                 className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5"
               >
-                <X className="w-3.5 h-3.5" /> បោះបង់ (Cancel)
+                <X className="w-3.5 h-3.5" /> បោះបង់
               </button>
               <button 
                 onClick={handleSave}
@@ -129,7 +129,7 @@ export default function ClassSchedule() {
                 className="px-4 py-1.5 text-xs font-bold bg-[#155EEF] hover:bg-blue-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-70"
               >
                 <Save className={`w-3.5 h-3.5 ${isSaving ? 'animate-bounce' : ''}`} /> 
-                {isSaving ? 'កំពុងរក្សាទុក...' : 'រក្សាទុក (Save)'}
+                {isSaving ? 'កំពុងរក្សាទុក...' : 'រក្សាទុក'}
               </button>
             </div>
           ) : (
@@ -137,7 +137,7 @@ export default function ClassSchedule() {
               onClick={() => setIsEditing(true)}
               className="px-4 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors flex items-center gap-1.5 border border-slate-200"
             >
-              <Edit2 className="w-3.5 h-3.5" /> កែប្រែ (Edit)
+              <Edit2 className="w-3.5 h-3.5" /> កែប្រែ
             </button>
           )}
         </div>
@@ -157,7 +157,7 @@ export default function ClassSchedule() {
             {/* Morning Section Header */}
             <tr>
               <td colSpan={7} className="px-4 py-1.5 bg-blue-50/50 text-blue-700 font-black text-xs text-center border-y border-blue-100">
-                វេនព្រឹក (Morning Shift)
+                វេនព្រឹក
               </td>
             </tr>
             {MORNING_TIMES.map((time, idx) => renderRow(time, idx, morningSchedule, handleMorningChange))}
@@ -165,14 +165,14 @@ export default function ClassSchedule() {
             {/* Break */}
             <tr>
               <td colSpan={7} className="px-4 py-2 bg-slate-100/50 text-slate-400 font-black text-[10px] text-center border-y border-slate-200 uppercase tracking-widest">
-                សម្រាកថ្ងៃត្រង់ (Lunch Break)
+                សម្រាកថ្ងៃត្រង់
               </td>
             </tr>
 
             {/* Afternoon Section Header */}
             <tr>
               <td colSpan={7} className="px-4 py-1.5 bg-amber-50/50 text-amber-700 font-black text-xs text-center border-y border-amber-100">
-                វេនរសៀល (Afternoon Shift)
+                វេនរសៀល
               </td>
             </tr>
             {AFTERNOON_TIMES.map((time, idx) => renderRow(time, idx, afternoonSchedule, handleAfternoonChange))}
@@ -183,7 +183,7 @@ export default function ClassSchedule() {
       {isEditing && (
         <p className="text-[10px] font-bold text-slate-400 mt-3 flex items-center gap-1.5 justify-end print:hidden">
           <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span> 
-          អ្នកកំពុងស្ថិតក្នុងទម្រង់កែប្រែ (Edit Mode Active)
+          អ្នកកំពុងស្ថិតក្នុងទម្រង់កែប្រែ
         </p>
       )}
       </div>

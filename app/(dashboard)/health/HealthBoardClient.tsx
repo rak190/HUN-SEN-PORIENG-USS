@@ -158,7 +158,7 @@ export default function HealthBoardClient({ students: initialStudents, healthRec
       const bmi = weight > 0 && heightM > 0 ? Number((weight / (heightM * heightM)).toFixed(1)) : '';
       return { 'ល.រ': index + 1, 'អត្តលេខ': student.student_id_number || '', 'គោត្តនាម និងនាម': student.full_name,
         'ភេទ': student.gender === 'F' || student.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស', 'កាលបរិច្ឆេទ': recordDate,
-        'ទម្ងន់ (kg)': record.weight_kg || '', 'កម្ពស់ (cm)': record.height_cm || '', BMI: bmi,
+        'ទម្ងន់': record.weight_kg || '', 'កម្ពស់': record.height_cm || '', BMI: bmi,
         'ភ្នែកឆ្វេង': record.vision_left || '', 'ភ្នែកស្តាំ': record.vision_right || '', 'ការស្តាប់': record.hearing || '', 'ធ្មេញ': record.dental || '', 'កំណត់សម្គាល់': record.notes || '' };
     });
     const sheet = XLSX.utils.json_to_sheet(rows); const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, sheet, 'Student Health');

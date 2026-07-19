@@ -77,9 +77,9 @@ export default function Navbar() {
               onChange={(e) => handleRoleChange(e.target.value as any)}
               className="bg-transparent text-xs font-extrabold text-[#155EEF] focus:outline-none cursor-pointer"
             >
-              <option value="teacher">គ្រូបន្ទុកថ្នាក់ (Teacher)</option>
-              <option value="principal">នាយកសាលា (Principal)</option>
-              <option value="admin">អ្នកគ្រប់គ្រងប្រព័ន្ធ (Admin)</option>
+              <option value="teacher">គ្រូបន្ទុកថ្នាក់</option>
+              <option value="principal">នាយកសាលា</option>
+              <option value="admin">អ្នកគ្រប់គ្រងប្រព័ន្ធ</option>
             </select>
           </div>
 
@@ -109,7 +109,7 @@ export default function Navbar() {
               await logout();
               router.push('/login');
             }}
-            title="ចាកចេញ (Logout)"
+            title="ចាកចេញ"
             className="p-2.5 rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all duration-200"
           >
             <LogOut className="w-5 h-5" />

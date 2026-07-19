@@ -22,7 +22,7 @@ interface AuthContextType {
 const DEFAULT_PROFILE: Profile = {
   id: 'demo-teacher-id',
   username: 'kruadmin041030',
-  full_name: 'លោកគ្រូ/អ្នកគ្រូ សុខា (Demo)',
+  full_name: 'លោកគ្រូ/អ្នកគ្រូ សុខា',
   role: 'teacher',
   school_id: 'main-school',
   school_code: 'Porieng-2026',
@@ -223,7 +223,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
-        return { error: 'គណនី ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវទេ។ (Invalid credentials)' };
+        return { error: 'គណនី ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវទេ។' };
       }
 
       setIsDemoMode(false);
@@ -319,10 +319,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile((prev) => {
       if (!prev) return DEFAULT_PROFILE;
       let name = prev.full_name;
-      if (newRole === 'principal') name = 'នាយកសាលា សុខា (Demo)';
-      else if (newRole === 'admin') name = 'អ្នកគ្រប់គ្រង សុខា (Demo)';
+      if (newRole === 'principal') name = 'នាយកសាលា សុខា';
+      else if (newRole === 'admin') name = 'អ្នកគ្រប់គ្រង សុខា';
       else if (newRole === 'monitor') name = 'សិស្ស ខៀវ សុវណ្ណារាជ (ប្រធានថ្នាក់)';
-      else if (newRole === 'teacher') name = 'លោកគ្រូ/អ្នកគ្រូ សុខា (Demo)';
+      else if (newRole === 'teacher') name = 'លោកគ្រូ/អ្នកគ្រូ សុខា';
       return { ...prev, role: newRole, full_name: name };
     });
   }

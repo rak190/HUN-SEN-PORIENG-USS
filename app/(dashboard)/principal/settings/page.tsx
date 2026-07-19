@@ -76,7 +76,7 @@ export default function PrincipalSettingsPage() {
             />
           </div>
           <div>
-            <label className="text-xs font-extrabold text-slate-700 block mb-1.5">កូដសម្គាល់សាលា (School Code)៖</label>
+            <label className="text-xs font-extrabold text-slate-700 block mb-1.5">កូដសម្គាល់សាលា៖</label>
             <input
               type="text"
               value={schoolCode}
@@ -121,7 +121,7 @@ export default function PrincipalSettingsPage() {
             </div>
             <div>
               <h3 className="text-lg font-extrabold text-slate-800">ព័ត៌មានបុគ្គលិកអប់រំ និងស្ថាប័ន</h3>
-              <p className="text-xs text-slate-500 font-medium">ព័ត៌មានផ្នែករដ្ឋបាល និងគណៈកម្មការសាលា (SEIP)</p>
+              <p className="text-xs text-slate-500 font-medium">ព័ត៌មានផ្នែករដ្ឋបាល និងគណៈកម្មការសាលា</p>
             </div>
           </div>
           
@@ -163,7 +163,7 @@ export default function PrincipalSettingsPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-extrabold text-slate-700 block mb-1.5">ចម្ងាយទីទីរួមខេត្ត (Km)៖</label>
+              <label className="text-xs font-extrabold text-slate-700 block mb-1.5">ចម្ងាយទីទីរួមខេត្ត៖</label>
               <input
                 type="text"
                 value={distanceKm}
@@ -188,7 +188,7 @@ export default function PrincipalSettingsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
-              <label className="text-xs font-extrabold text-slate-700 block mb-1.5">ចាប់ពីថ្ងៃ (Start DOB)៖</label>
+              <label className="text-xs font-extrabold text-slate-700 block mb-1.5">ចាប់ពីថ្ងៃ៖</label>
               <input
                 type="date"
                 value={pisaDobStart}
@@ -197,7 +197,7 @@ export default function PrincipalSettingsPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-extrabold text-slate-700 block mb-1.5">ដល់ថ្ងៃ (End DOB)៖</label>
+              <label className="text-xs font-extrabold text-slate-700 block mb-1.5">ដល់ថ្ងៃ៖</label>
               <input
                 type="date"
                 value={pisaDobEnd}

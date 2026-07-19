@@ -132,7 +132,7 @@ export default function ReportsPage() {
               <FileSpreadsheet className="w-8 h-8 text-[#155EEF]" />
               <span>របាយការណ៍ស្វ័យប្រវត្តិ</span>
             </h1>
-            <p className="text-xs font-bold text-[#64748B] mt-1">ប្រព័ន្ធទាញយកទិន្នន័យវត្តមាន និងពិន្ទុមកចងក្រងជារបាយការណ៍ប្រចាំខែដោយស្វ័យប្រវត្តិ (SBM)</p>
+            <p className="text-xs font-bold text-[#64748B] mt-1">ប្រព័ន្ធទាញយកទិន្នន័យវត្តមាន និងពិន្ទុមកចងក្រងជារបាយការណ៍ប្រចាំខែដោយស្វ័យប្រវត្តិ</p>
           </div>
           <button onClick={handleGenerate} className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-sm shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer">
             <RefreshCw className="w-5 h-5" /> ទាញទិន្នន័យបង្កើតរបាយការណ៍ថ្មី
@@ -204,7 +204,7 @@ export default function ReportsPage() {
           {/* Auto-Calculated Column */}
           <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs space-y-6">
             <h2 className="text-sm font-black text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-[#155EEF]" /> ទិន្នន័យគណនាស្វ័យប្រវត្តិ (Read-only)
+              <BarChart3 className="w-4 h-4 text-[#155EEF]" /> ទិន្នន័យគណនាស្វ័យប្រវត្តិ
             </h2>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
@@ -245,7 +245,7 @@ export default function ReportsPage() {
             </h2>
             
             <label className="block">
-              <span className="text-xs font-bold text-slate-600 mb-1.5 block">១. មតិយោបល់ និងការវាយតម្លៃសរុបប្រចាំខែ (Teacher Comments)</span>
+              <span className="text-xs font-bold text-slate-600 mb-1.5 block">១. មតិយោបល់ និងការវាយតម្លៃសរុបប្រចាំខែ</span>
               <textarea 
                 value={report.teacherComments} 
                 onChange={(e) => setReport({...report, teacherComments: e.target.value})}
@@ -265,7 +265,7 @@ export default function ReportsPage() {
             </label>
 
             <label className="block">
-              <span className="text-xs font-bold text-slate-600 mb-1.5 block">៣. សំណូមពរដល់នាយកសាលា (Requests)</span>
+              <span className="text-xs font-bold text-slate-600 mb-1.5 block">៣. សំណូមពរដល់នាយកសាលា</span>
               <textarea 
                 value={report.requestToPrincipal} 
                 onChange={(e) => setReport({...report, requestToPrincipal: e.target.value})}
@@ -311,7 +311,7 @@ export default function ReportsPage() {
       <div className="hidden print:block text-center space-y-1 pb-6 border-b-2 border-slate-900">
         <div className="text-sm font-extrabold text-slate-800">ព្រះរាជាណាចក្រកម្ពុជា</div>
         <div className="text-sm font-black text-slate-900">ជាតិ សាសនា ព្រះមហាក្សត្រ</div>
-        <div className="pt-2 text-xs font-bold text-slate-700">ក្រសួងអប់រំ យុវជន និងកីឡា • គម្រោងកែលម្អការអប់រំចំណេះទូទៅ (GEIP)</div>
+        <div className="pt-2 text-xs font-bold text-slate-700">ក្រសួងអប់រំ យុវជន និងកីឡា • គម្រោងកែលម្អការអប់រំចំណេះទូទៅ</div>
         <div className="text-base font-black text-slate-900">វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង • របាយការណ៍សរុបគ្រូបន្ទុកថ្នាក់</div>
         <div className="text-xs font-bold text-slate-600">ថ្នាក់រៀន៖ {activeClass?.name || '12 ក'} • ប្រចាំ{report.month}</div>
       </div>

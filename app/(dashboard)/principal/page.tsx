@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { fetchPrincipalDashboardData } from './actions';
 import {
   GraduationCap,
   Users,
@@ -24,18 +25,27 @@ export default function PrincipalDashboardPage() {
   const { profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [showEwsModal, setShowEwsModal] = useState(false);
+  
+  const [trendData, setTrendData] = useState<any[]>([
+    { monthLabel: 'មករា', attendancePct: 0, gradePct: 0 },
+    { monthLabel: 'កុម្ភៈ', attendancePct: 0, gradePct: 0 },
+    { monthLabel: 'មីនា', attendancePct: 0, gradePct: 0 },
+    { monthLabel: 'មេសា', attendancePct: 0, gradePct: 0 },
+    { monthLabel: 'ឧសភា', attendancePct: 0, gradePct: 0 },
+    { monthLabel: 'មិថុនា', attendancePct: 0, gradePct: 0 },
+    { monthLabel: 'កក្កដា', attendancePct: 0, gradePct: 0 },
+    { monthLabel: 'សីហា', attendancePct: 0, gradePct: 0 }
+  ]);
 
-  // Mock data for Line Chart
-  const trendData = [
-    { monthLabel: 'មករា', attendancePct: 92, gradePct: 75 },
-    { monthLabel: 'កុម្ភៈ', attendancePct: 94, gradePct: 78 },
-    { monthLabel: 'មីនា', attendancePct: 93, gradePct: 80 },
-    { monthLabel: 'មេសា', attendancePct: 95, gradePct: 82 },
-    { monthLabel: 'ឧសភា', attendancePct: 97, gradePct: 85 },
-    { monthLabel: 'មិថុនា', attendancePct: 96, gradePct: 88 },
-    { monthLabel: 'កក្កដា', attendancePct: 98, gradePct: 90 },
-    { monthLabel: 'សីហា', attendancePct: 99, gradePct: 92 }
-  ];
+  useEffect(() => {
+    async function loadLiveData() {
+      const data = await fetchPrincipalDashboardData();
+      if (data && data.trendData) {
+        setTrendData(data.trendData);
+      }
+    }
+    loadLiveData();
+  }, []);
 
   const generateSvgPath = (data: { monthLabel: string; attendancePct: number; gradePct: number }[], key: 'attendancePct' | 'gradePct') => {
     if (!data || data.length === 0) return '';
@@ -81,7 +91,7 @@ export default function PrincipalDashboardPage() {
             <button 
               onClick={() => setShowEwsModal(true)} 
               className="relative p-3 bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-full shadow-sm text-rose-600 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-              title={`${atRiskStudents.length} សិស្សកំពុងប្រឈមហានិភ័យ (EWS)`}
+              title={`${atRiskStudents.length} សិស្សកំពុងប្រឈមហានិភ័យ`}
             >
               <AlertTriangle className="w-5 h-5 animate-pulse" />
               <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-rose-600 text-white flex items-center justify-center text-[8px] font-black rounded-full border border-white">

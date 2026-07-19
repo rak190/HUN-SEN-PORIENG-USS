@@ -109,7 +109,7 @@ export default function PrincipalStudentsPage() {
               }}
               className="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer w-full max-w-[200px] truncate"
             >
-              <option value="all">គ្រប់កម្រិតថ្នាក់ (All Grades)</option>
+              <option value="all">គ្រប់កម្រិតថ្នាក់</option>
               {filterOptions.map(({ grade, classes }) => (
                 <optgroup key={grade} label={`ថ្នាក់ទី ${grade}`}>
                   <option value={`grade:${grade}`}>ថ្នាក់ទី {grade} ទាំងអស់</option>
@@ -213,7 +213,7 @@ export default function PrincipalStudentsPage() {
                 <th className="py-4 px-6 min-w-[180px]">គោត្តនាម & នាម</th>
                 <th className="py-4 px-4 text-center">ភេទ</th>
                 <th className="py-4 px-6 text-center">ថ្នាក់រៀន</th>
-                <th className="py-4 px-6 text-center">មធ្យមភាគ (GPA)</th>
+                <th className="py-4 px-6 text-center">មធ្យមភាគ</th>
                 <th className="py-4 px-6 text-center">ចំណាត់ថ្នាក់</th>
                 <th className="py-4 px-6 text-right">ស្ថានភាព</th>
               </tr>

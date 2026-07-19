@@ -184,7 +184,7 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
                 ជ្រើសរើស ឬទាញទម្លាក់ឯកសារ Excel នៅទីនេះ (.xlsx, .csv)
               </h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto mb-6">
-                ជួរឈរ (Columns) គួរតែមាន៖ <span className="font-bold text-indigo-500">អត្តលេខ</span>, <span className="font-bold text-indigo-500">គោត្តនាម និងនាម</span>, <span className="font-bold text-indigo-500">ភេទ</span> (ប្រុស/ស្រី ឬ M/F), និង <span className="font-bold text-indigo-500">លេខទូរសព្ទ</span>។
+                ជួរឈរ គួរតែមាន៖ <span className="font-bold text-indigo-500">អត្តលេខ</span>, <span className="font-bold text-indigo-500">គោត្តនាម និងនាម</span>, <span className="font-bold text-indigo-500">ភេទ</span> (ប្រុស/ស្រី ឬ M/F), និង <span className="font-bold text-indigo-500">លេខទូរសព្ទ</span>។
               </p>
               <label className="inline-flex items-center justify-center px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 cursor-pointer transition-all">
                 <span>ជ្រើសរើសឯកសារ Excel</span>

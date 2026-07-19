@@ -185,8 +185,8 @@ export default function StudentsPage() {
       'បណ្ណក្រីក្រ': std.id_poor === 'none' ? 'គ្មាន' : std.id_poor === 'level_1' ? 'កម្រិត ១' : 'កម្រិត ២',
       'អាហារូបករណ៍': std.scholarship === 'yes' ? 'បាទ/ចាស' : 'ទេ',
       'ចម្ងាយ (គ.ម)': std.distance_km,
-      'ទម្ងន់ (kg)': std.weight_kg,
-      'កម្ពស់ (m)': std.height_m,
+      'ទម្ងន់': std.weight_kg,
+      'កម្ពស់': std.height_m,
       'BMI': std.bmi,
       'លទ្ធផលវាយតម្លៃសុខភាព': std.nutrition_status,
       'បញ្ហាសុខភាព': std.health_issues,
@@ -258,7 +258,7 @@ export default function StudentsPage() {
           onClick={() => setMainTab('list')}
           className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'list' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
-          <Users className="w-4 h-4" /> បញ្ជីរាយនាមសិស្ស (Student List)
+          <Users className="w-4 h-4" /> បញ្ជីរាយនាមសិស្ស
         </button>
 
         <button
@@ -290,13 +290,13 @@ export default function StudentsPage() {
         </div>
         <div className="flex gap-2">
           <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors">
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> នាំចូលឯកសារ (Import)
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> នាំចូលឯកសារ
           </button>
           <button onClick={() => setIsGridModalOpen(true)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors">
-            <Table className="w-4 h-4 text-indigo-600" /> បញ្ចូលតាមតារាង (Grid)
+            <Table className="w-4 h-4 text-indigo-600" /> បញ្ចូលតាមតារាង
           </button>
           <button onClick={openAddModal} className="px-6 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-xs shadow-md shadow-blue-500/20 flex items-center gap-2">
-            <UserPlus className="w-4 h-4" /> បន្ថែមសិស្ស (Quick Add)
+            <UserPlus className="w-4 h-4" /> បន្ថែមសិស្ស
           </button>
         </div>
       </div>
@@ -602,8 +602,8 @@ export default function StudentsPage() {
                 )}
                 {activeModalTab === 3 && (
                   <>
-                    <label className="block text-xs font-bold text-slate-700">ទម្ងន់ (Kg) <input type="number" value={formData.weight_kg||0} onChange={e=>setFormData({...formData, weight_kg:Number(e.target.value)})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">កម្ពស់ (M) <input type="number" step="0.01" value={formData.height_m||0} onChange={e=>setFormData({...formData, height_m:Number(e.target.value)})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
+                    <label className="block text-xs font-bold text-slate-700">ទម្ងន់ <input type="number" value={formData.weight_kg||0} onChange={e=>setFormData({...formData, weight_kg:Number(e.target.value)})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
+                    <label className="block text-xs font-bold text-slate-700">កម្ពស់ <input type="number" step="0.01" value={formData.height_m||0} onChange={e=>setFormData({...formData, height_m:Number(e.target.value)})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
                     <div className="sm:col-span-2 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex justify-between items-center shadow-inner">
                       <span className="text-sm font-black text-emerald-900">BMI លទ្ធផល៖ {formData.bmi}</span>
                       <span className={`px-4 py-1.5 rounded-full text-xs font-black ${formData.nutrition_status==='ធម្មតា'?'bg-emerald-600 text-white':'bg-rose-500 text-white'}`}>{formData.nutrition_status}</span>

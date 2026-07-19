@@ -219,19 +219,19 @@ export default function AttendanceBoard() {
           <div className="text-2xl font-black text-slate-900 mt-0.5">{total} នាក់</div>
         </div>
         <div className="bg-white p-4 rounded-[20px] border border-slate-200 text-center shadow-2xs">
-          <span className="text-[11px] font-extrabold text-emerald-600 uppercase">វត្តមាន (P)</span>
+          <span className="text-[11px] font-extrabold text-emerald-600 uppercase">វត្តមាន</span>
           <div className="text-2xl font-black text-emerald-600 mt-0.5">{presentCount} នាក់</div>
         </div>
         <div className="bg-white p-4 rounded-[20px] border border-slate-200 text-center shadow-2xs">
-          <span className="text-[11px] font-extrabold text-rose-600 uppercase">អវត្តមាន (A)</span>
+          <span className="text-[11px] font-extrabold text-rose-600 uppercase">អវត្តមាន</span>
           <div className="text-2xl font-black text-rose-600 mt-0.5">{absentCount} នាក់</div>
         </div>
         <div className="bg-white p-4 rounded-[20px] border border-slate-200 text-center shadow-2xs">
-          <span className="text-[11px] font-extrabold text-amber-600 uppercase">យឺត (L)</span>
+          <span className="text-[11px] font-extrabold text-amber-600 uppercase">យឺត</span>
           <div className="text-2xl font-black text-amber-600 mt-0.5">{lateCount} នាក់</div>
         </div>
         <div className="bg-[#155EEF] p-4 rounded-[20px] border border-blue-400/30 text-center text-white shadow-2xs col-span-2 sm:col-span-1">
-          <span className="text-[11px] font-extrabold text-blue-100 uppercase">ច្បាប់ (E)</span>
+          <span className="text-[11px] font-extrabold text-blue-100 uppercase">ច្បាប់</span>
           <div className="text-2xl font-black text-white mt-0.5">{permCount} នាក់</div>
         </div>
       </div>
@@ -267,7 +267,7 @@ export default function AttendanceBoard() {
               <th className="pb-3 px-4">នាមត្រកូល និងនាមខ្លួន</th>
               <th className="pb-3 px-2 text-center">ភេទ</th>
               <th className="pb-3 px-4 text-center">ស្ថានភាពអវត្តមាន</th>
-              <th className="pb-3 px-4">មូលហេតុ (GEIP)</th>
+              <th className="pb-3 px-4">មូលហេតុ</th>
             </tr>
           </thead>
           <tbody className="text-sm font-medium text-slate-700">

@@ -14,7 +14,7 @@ export interface CurriculumSchema {
 export const CURRICULUM_SCHEMAS: Record<string, CurriculumSchema> = {
   'lower-sec': {
     id: 'lower-sec',
-    label: 'អនុវិទ្យាល័យ (Grade 7-9)',
+    label: 'អនុវិទ្យាល័យ',
     subjects: [
       { 
         id: 'khmer', 
@@ -40,7 +40,7 @@ export const CURRICULUM_SCHEMAS: Record<string, CurriculumSchema> = {
   },
   'upper-sec-sci': {
     id: 'upper-sec-sci',
-    label: 'វិទ្យាសាស្ត្រពិត (Grade 10-12 Science)',
+    label: 'វិទ្យាសាស្ត្រពិត',
     subjects: [
       { 
         id: 'khmer', 
@@ -67,7 +67,7 @@ export const CURRICULUM_SCHEMAS: Record<string, CurriculumSchema> = {
   },
   'upper-sec-art': {
     id: 'upper-sec-art',
-    label: 'វិទ្យាសាស្ត្រសង្គម (Grade 10-12 Arts)',
+    label: 'វិទ្យាសាស្ត្រសង្គម',
     subjects: [
       { 
         id: 'khmer', 

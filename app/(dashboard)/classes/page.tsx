@@ -23,16 +23,16 @@ import {
 } from 'lucide-react';
 
 const AVAILABLE_SUBJECTS: Subject[] = [
-  { id: 'math', label: 'គណិតវិទ្យា (Mathematics)' },
-  { id: 'khmer', label: 'ភាសាខ្មែរ (Khmer Literature)' },
-  { id: 'physics', label: 'រូបវិទ្យា (Physics)' },
-  { id: 'chemistry', label: 'គីមីវិទ្យា (Chemistry)' },
-  { id: 'biology', label: 'ជីវវិទ្យា (Biology)' },
-  { id: 'ict', label: 'ព័ត៌មានវិទ្យា (ICT)' },
-  { id: 'english', label: 'ភាសាអង់គ្លេស (English)' },
-  { id: 'history', label: 'ប្រវត្តិវិទ្យា (History)' },
-  { id: 'geography', label: 'ភូមិវិទ្យា (Geography)' },
-  { id: 'civics', label: 'សីលធម៌ ពលរដ្ឋវិជ្ជា (Civics)' },
+  { id: 'math', label: 'គណិតវិទ្យា' },
+  { id: 'khmer', label: 'ភាសាខ្មែរ' },
+  { id: 'physics', label: 'រូបវិទ្យា' },
+  { id: 'chemistry', label: 'គីមីវិទ្យា' },
+  { id: 'biology', label: 'ជីវវិទ្យា' },
+  { id: 'ict', label: 'ព័ត៌មានវិទ្យា' },
+  { id: 'english', label: 'ភាសាអង់គ្លេស' },
+  { id: 'history', label: 'ប្រវត្តិវិទ្យា' },
+  { id: 'geography', label: 'ភូមិវិទ្យា' },
+  { id: 'civics', label: 'សីលធម៌ ពលរដ្ឋវិជ្ជា' },
 ];
 
 export default function ClassesPage() {
@@ -172,7 +172,7 @@ export default function ClassesPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">ឈ្មោះថ្នាក់រៀន (Class Name)</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">ឈ្មោះថ្នាក់រៀន</label>
               <input
                 type="text"
                 value={name}
@@ -184,7 +184,7 @@ export default function ClassesPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">កម្រិតថ្នាក់ (Grade Level)</label>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">កម្រិតថ្នាក់</label>
               <select
                 value={grade}
                 onChange={(e) => setGrade(e.target.value)}

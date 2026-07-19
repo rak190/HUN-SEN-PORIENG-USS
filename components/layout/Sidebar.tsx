@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import QRCode from 'react-qr-code';
 import { useAuth } from '@/lib/auth-context';
 import {
   LayoutDashboard,
@@ -33,7 +34,9 @@ import {
   ChevronRight,
   BookOpen,
   Briefcase,
-  FolderOpen
+  FolderOpen,
+  X,
+  MessageCircle
 } from 'lucide-react';
 
 interface MenuItem {
@@ -49,13 +52,13 @@ interface MenuItem {
 
 const MENU_ITEMS: MenuItem[] = [
   // --- TEACHER TABS (Homeroom Teacher - GEIP Framework) ---
-  { id: 'dashboard', label: 'Dashboard', khmerLabel: 'ផ្ទាំងកិច្ចការ GEIP', href: '/homeroom', icon: LayoutDashboard, roles: ['teacher'], badge: 'GEIP' },
+  { id: 'dashboard', label: 'Dashboard', khmerLabel: 'ផ្ទាំងកិច្ចការ', href: '/homeroom', icon: LayoutDashboard, roles: ['teacher'], badge: 'គម្រោង' },
   { 
     id: 'students-group', label: 'Students', khmerLabel: 'ការគ្រប់គ្រងសិស្ស', icon: Users, roles: ['teacher'],
     children: [
       { id: 'students', label: 'Students Profile', khmerLabel: 'បញ្ជីឈ្មោះសិស្ស', href: '/students', icon: Users, roles: ['teacher'] },
       { id: 'class-info', label: 'Class Info', khmerLabel: 'ព័ត៌មានថ្នាក់រៀន', href: '/classes/info', icon: BookOpen, roles: ['teacher'] },
-      { id: 'attendance', label: 'Attendance', khmerLabel: 'វត្តមាន & EWS', href: '/attendance', icon: Calendar, roles: ['teacher'], badge: 'EWS' },
+      { id: 'attendance', label: 'Attendance', khmerLabel: 'វត្តមាន', href: '/attendance', icon: Calendar, roles: ['teacher'], badge: 'ព្រមាន' },
       { id: 'health', label: 'Student Health', khmerLabel: 'សុខភាពសិក្សា', href: '/health', icon: Activity, roles: ['teacher'], badge: 'សុខភាព' },
       { id: 'support', label: 'Student Support', khmerLabel: 'គាំទ្រសិស្ស', href: '/support', icon: HeartHandshake, roles: ['teacher'] },
     ]
@@ -72,7 +75,7 @@ const MENU_ITEMS: MenuItem[] = [
     id: 'management-group', label: 'Management', khmerLabel: 'ការងាររដ្ឋបាល', icon: Briefcase, roles: ['teacher'],
     children: [
       { id: 'parents', label: 'Parents', khmerLabel: 'មាតាបិតា', href: '/parents', icon: Phone, roles: ['teacher'] },
-      { id: 'reports', label: 'Monthly Reports', khmerLabel: 'របាយការណ៍ GEIP', href: '/reports', icon: BarChart3, roles: ['teacher'], badge: 'បញ្ជូន' },
+      { id: 'reports', label: 'Monthly Reports', khmerLabel: 'របាយការណ៍', href: '/reports', icon: BarChart3, roles: ['teacher'], badge: 'បញ្ជូន' },
       { id: 'documents', label: 'Documents', khmerLabel: 'ឯកសារ', href: '/documents', icon: FolderOpen, roles: ['teacher'] },
       { id: 'giep', label: 'GIEP Evidence', khmerLabel: 'ឯកសារគម្រោង', href: '/giep', icon: Camera, roles: ['teacher'] },
     ]
@@ -107,6 +110,7 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
   const router = useRouter();
   const { profile, logout } = useAuth();
   const userRole = profile?.role || 'teacher';
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   const filteredItems = MENU_ITEMS.filter((item) => item.roles.includes(userRole));
 
@@ -256,7 +260,7 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
         )}
         <a
           href="#"
-          onClick={(e) => { e.preventDefault(); onClose?.(); alert('ទំនាក់ទំនងជំនួយការ វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង តាមរយៈ Telegram: @HSPR_Support'); }}
+          onClick={(e) => { e.preventDefault(); onClose?.(); setShowSupportModal(true); }}
           className="flex items-center gap-3 text-slate-600 hover:text-slate-900 hover:bg-slate-50 px-4 py-3 rounded-xl font-medium transition-colors cursor-pointer"
         >
           <MessageSquare className="w-5 h-5" />
@@ -275,6 +279,49 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
           <span className="text-sm font-bold">ចាកចេញពីប្រព័ន្ធ</span>
         </button>
       </div>
+
+      {/* Support Telegram Modal */}
+      {showSupportModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowSupportModal(false)}>
+          <div className="bg-white rounded-[32px] w-full max-w-sm p-8 text-center shadow-2xl relative animate-slideUp" onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={() => setShowSupportModal(false)}
+              className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            
+            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100/50">
+              <MessageCircle className="w-8 h-8 text-[#155EEF]" />
+            </div>
+            
+            <h2 className="text-xl font-black text-slate-900 mb-2">មជ្ឈមណ្ឌលជំនួយគាំទ្រ</h2>
+            <p className="text-sm font-bold text-slate-500 mb-6">
+              ស្កេនកូដ QR ឬចុចប៊ូតុងខាងក្រោម ដើម្បីភ្ជាប់ទៅកាន់ Telegram Bot ជំនួយការរបស់សាលា។
+            </p>
+
+            <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-sm inline-block mx-auto mb-6">
+              <QRCode 
+                value="https://t.me/HSPR_Support_Bot" 
+                size={180}
+                className="w-full h-auto"
+                fgColor="#0f172a" 
+              />
+            </div>
+
+            <a 
+              href="https://t.me/HSPR_Support_Bot" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              onClick={() => setShowSupportModal(false)}
+              className="w-full py-3.5 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl shadow-md transition-all text-sm cursor-pointer flex items-center justify-center gap-2"
+            >
+              <MessageSquare className="w-4 h-4" />
+              បើកក្នុង Telegram
+            </a>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

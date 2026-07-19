@@ -10,7 +10,7 @@ export default function AdminLogsPage() {
   const [filterType, setFilterType] = useState('all');
 
   const logsList = [
-    { id: 'LOG-1092', time: '11:32 ព្រឹក', user: 'kruadmin041030', action: 'ចូលប្រើប្រព័ន្ធ (Login)', type: 'info', ip: '192.168.1.45', status: 'ជោគជ័យ' },
+    { id: 'LOG-1092', time: '11:32 ព្រឹក', user: 'kruadmin041030', action: 'ចូលប្រើប្រព័ន្ធ', type: 'info', ip: '192.168.1.45', status: 'ជោគជ័យ' },
     { id: 'LOG-1091', time: '11:28 ព្រឹក', user: 'sysadmin_porieng', action: 'កែប្រែការកំណត់ Role RBAC', type: 'warn', ip: '192.168.1.10', status: 'បានកត់ត្រា' },
     { id: 'LOG-1090', time: '10:15 ព្រឹក', user: 'principal_porieng', action: 'ផ្សព្វផ្សាយសេចក្តីជូនដំណឹងថ្មី', type: 'info', ip: '192.168.1.22', status: 'ជោគជ័យ' },
     { id: 'LOG-1089', time: '09:50 ព្រឹក', user: 'sambath_math', action: 'បញ្ចូលពិន្ទុឆមាសទី 1 ថ្នាក់ 11 ខ', type: 'info', ip: '192.168.1.50', status: 'ជោគជ័យ' },
@@ -49,9 +49,9 @@ export default function AdminLogsPage() {
               onChange={(e) => setFilterType(e.target.value)}
               className="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer"
             >
-              <option value="all">កំណត់ហេតុទាំងអស់ (All Logs)</option>
-              <option value="info">ព័ត៌មានទូទៅ (Info)</option>
-              <option value="warn">ការប្រុងប្រយ័ត្ន (Warning)</option>
+              <option value="all">កំណត់ហេតុទាំងអស់</option>
+              <option value="info">ព័ត៌មានទូទៅ</option>
+              <option value="warn">ការប្រុងប្រយ័ត្ន</option>
               <option value="error">ការព្រមានសន្តិសុខ (Error/Denied)</option>
             </select>
           </div>
@@ -72,7 +72,7 @@ export default function AdminLogsPage() {
           <button
             onClick={() => alert('ទិន្នន័យកំណត់ហេតុត្រូវបានអាប់ដេតថ្មីបំផុត!')}
             className="p-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer"
-            title="អាប់ដេតទិន្នន័យ (Refresh)"
+            title="អាប់ដេតទិន្នន័យ"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
@@ -98,7 +98,7 @@ export default function AdminLogsPage() {
               <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
                 <th className="py-4 px-6 w-24">លេខកូដ</th>
                 <th className="py-4 px-6">ពេលវេលា</th>
-                <th className="py-4 px-6 font-mono">គណនី (Username)</th>
+                <th className="py-4 px-6 font-mono">គណនី</th>
                 <th className="py-4 px-6 min-w-[220px]">សកម្មភាពដែលបានធ្វើ</th>
                 <th className="py-4 px-6 font-mono">អាសយដ្ឋាន IP</th>
                 <th className="py-4 px-6 text-center">កម្រិត</th>

@@ -12,7 +12,7 @@ export default function AdminBackupPage() {
     setIsBackingUp(true);
     setTimeout(() => {
       setIsBackingUp(false);
-      alert('ការបម្រុងទុកទិន្នន័យ (Database Backup) បានបញ្ចប់ដោយជោគជ័យ! ឯកសារ SQL Dump ត្រូវបានបង្កើត។');
+      alert('ការបម្រុងទុកទិន្នន័យ បានបញ្ចប់ដោយជោគជ័យ! ឯកសារ SQL Dump ត្រូវបានបង្កើត។');
     }, 2000);
   };
 
@@ -39,7 +39,7 @@ export default function AdminBackupPage() {
             className="px-6 py-2.5 rounded-full bg-[#155EEF] hover:bg-blue-700 text-white font-bold text-xs shadow-sm shadow-blue-500/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
             <Download className={`w-4 h-4 ${isBackingUp ? 'animate-bounce' : ''}`} />
-            <span>{isBackingUp ? 'កំពុងបម្រុងទុកទិន្នន័យ...' : 'បង្កើត Backup ឥឡូវនេះ (SQL Dump)'}</span>
+            <span>{isBackingUp ? 'កំពុងបម្រុងទុកទិន្នន័យ...' : 'បង្កើត Backup ឥឡូវនេះ'}</span>
           </button>
         </div>
       </header>
@@ -52,12 +52,12 @@ export default function AdminBackupPage() {
             <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600 font-bold text-xs flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> ជោគជ័យ</span>
           </div>
           <div className="text-2xl font-black text-slate-800">ថ្ងៃនេះ, 06:00 ព្រឹក</div>
-          <p className="text-xs font-semibold text-slate-500">ស្វ័យប្រវត្តិប្រចាំថ្ងៃ (Daily Snapshot)</p>
+          <p className="text-xs font-semibold text-slate-500">ស្វ័យប្រវត្តិប្រចាំថ្ងៃ</p>
         </div>
 
         <div className="bg-white p-6 rounded-[24px] border border-slate-100/80 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold text-[#64748B] uppercase">ទំហំឯកសារសរុប (Database Size)</span>
+            <span className="text-xs font-extrabold text-[#64748B] uppercase">ទំហំឯកសារសរុប</span>
             <span className="p-2 rounded-xl bg-blue-50 text-[#155EEF] font-bold text-xs">បង្រួម Gzip</span>
           </div>
           <div className="text-2xl font-black text-[#155EEF]">24.8 MB</div>
@@ -66,11 +66,11 @@ export default function AdminBackupPage() {
 
         <div className="bg-white p-6 rounded-[24px] border border-slate-100/80 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold text-[#64748B] uppercase">ទីតាំងផ្ទុកទិន្នន័យ (Storage Location)</span>
+            <span className="text-xs font-extrabold text-[#64748B] uppercase">ទីតាំងផ្ទុកទិន្នន័យ</span>
             <span className="p-2 rounded-xl bg-purple-50 text-purple-600 font-bold text-xs">Supabase Cloud</span>
           </div>
           <div className="text-2xl font-black text-slate-800">AP-Southeast-1</div>
-          <p className="text-xs font-semibold text-slate-500">ម៉ាស៊ីនមេដែលមានសុវត្ថិភាពខ្ពស់ (Singapore)</p>
+          <p className="text-xs font-semibold text-slate-500">ម៉ាស៊ីនមេដែលមានសុវត្ថិភាពខ្ពស់</p>
         </div>
       </div>
 
@@ -79,7 +79,7 @@ export default function AdminBackupPage() {
         <div className="p-5 bg-white border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
             <Database className="w-5 h-5 text-[#155EEF]" />
-            <span>ប្រវត្តិឯកសារបម្រុងទុកទិន្នន័យ (Recent Snapshots)</span>
+            <span>ប្រវត្តិឯកសារបម្រុងទុកទិន្នន័យ</span>
           </h3>
           <span className="text-xs font-extrabold text-[#155EEF] bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
             រក្សាទុក 30 ថ្ងៃចុងក្រោយ
@@ -100,10 +100,10 @@ export default function AdminBackupPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm font-semibold">
               {[
-                { name: 'db_porieng_backup_2026_07_02.sql.gz', date: '02 កក្កដា 2026, 06:00 ព្រឹក', type: 'ស្វ័យប្រវត្តិ (Auto)', size: '24.8 MB', status: 'ជោគជ័យ' },
-                { name: 'db_porieng_backup_2026_07_01.sql.gz', date: '01 កក្កដា 2026, 06:00 ព្រឹក', type: 'ស្វ័យប្រវត្តិ (Auto)', size: '24.5 MB', status: 'ជោគជ័យ' },
-                { name: 'db_porieng_backup_manual_pre_exam.sql.gz', date: '30 មិថុនា 2026, 05:15 ល្ងាច', type: 'ដោយដៃ (Manual)', size: '24.2 MB', status: 'ជោគជ័យ' },
-                { name: 'db_porieng_backup_2026_06_30.sql.gz', date: '30 មិថុនា 2026, 06:00 ព្រឹក', type: 'ស្វ័យប្រវត្តិ (Auto)', size: '24.1 MB', status: 'ជោគជ័យ' },
+                { name: 'db_porieng_backup_2026_07_02.sql.gz', date: '02 កក្កដា 2026, 06:00 ព្រឹក', type: 'ស្វ័យប្រវត្តិ', size: '24.8 MB', status: 'ជោគជ័យ' },
+                { name: 'db_porieng_backup_2026_07_01.sql.gz', date: '01 កក្កដា 2026, 06:00 ព្រឹក', type: 'ស្វ័យប្រវត្តិ', size: '24.5 MB', status: 'ជោគជ័យ' },
+                { name: 'db_porieng_backup_manual_pre_exam.sql.gz', date: '30 មិថុនា 2026, 05:15 ល្ងាច', type: 'ដោយដៃ', size: '24.2 MB', status: 'ជោគជ័យ' },
+                { name: 'db_porieng_backup_2026_06_30.sql.gz', date: '30 មិថុនា 2026, 06:00 ព្រឹក', type: 'ស្វ័យប្រវត្តិ', size: '24.1 MB', status: 'ជោគជ័យ' },
               ].map((b, idx) => (
                 <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
                   <td className="py-4 px-6 font-mono font-extrabold text-[#155EEF]">{b.name}</td>

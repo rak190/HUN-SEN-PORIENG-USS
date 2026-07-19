@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { 
   Calendar, Upload, Download, ArrowUpRight, 
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { MasterGradeImportModal } from '@/components/principal/MasterGradeImportModal';
+import { fetchPrincipalDashboardData } from '../actions';
 
 const MOCK_TERMS = {
   'sem1-2026': {
@@ -110,10 +111,29 @@ type TermKey = keyof typeof MOCK_TERMS;
 export default function PrincipalReportsPage() {
   const { profile } = useAuth();
   const [selectedTerm, setSelectedTerm] = useState<TermKey>('sem1-2026');
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [showEwsModal, setShowEwsModal] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  
+  const [liveTrendData, setLiveTrendData] = useState<any[] | null>(null);
 
-  // Mock EWS data for the modal
+  useEffect(() => {
+    async function loadData() {
+      const data = await fetchPrincipalDashboardData();
+      if (data && data.trendData) {
+        setLiveTrendData(data.trendData);
+      }
+    }
+    loadData();
+  }, []);
+
+  const currentData = useMemo(() => {
+    const base = MOCK_TERMS[selectedTerm];
+    if (liveTrendData) {
+      return { ...base, trendData: liveTrendData };
+    }
+    return base;
+  }, [selectedTerm, liveTrendData]);
+
   const atRiskStudents = [
     { id: '101', name: 'សៅ សុភាព', reasons: ['អវត្តមាន ៤ ដងក្នុងខែនេះ', 'ធ្លាក់ពិន្ទុគណិតវិទ្យា (៤៥)'], severity: 'high' as const },
     { id: '102', name: 'ដួង វិចិត្រ', reasons: ['ធ្លាក់ពិន្ទុរូបវិទ្យា និងគីមីវិទ្យា'], severity: 'medium' as const },
@@ -121,7 +141,6 @@ export default function PrincipalReportsPage() {
     { id: '104', name: 'កែវ មករា', reasons: ['អវត្តមាន ៧ ថ្ងៃជាប់គ្នា'], severity: 'high' as const }
   ];
 
-  const currentData = useMemo(() => MOCK_TERMS[selectedTerm], [selectedTerm]);
 
   const generateSvgPath = (data: typeof currentData.trendData, key: 'attendancePct' | 'gradePct') => {
     if (!data || data.length === 0) return '';
@@ -280,7 +299,7 @@ export default function PrincipalReportsPage() {
               <ArrowUpRight className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
             </div>
           </div>
-          <p className="text-sm font-bold text-blue-100 mt-4">មធ្យមភាគពិន្ទុ (GPA)</p>
+          <p className="text-sm font-bold text-blue-100 mt-4">មធ្យមភាគពិន្ទុ</p>
         </div>
 
         <button 
@@ -307,7 +326,7 @@ export default function PrincipalReportsPage() {
               <p className="text-[11px] text-[#64748B] font-medium">ស្ថិតិប្រៀបធៀបប្រចាំខែ</p>
             </div>
             <span className="text-xs font-bold text-[#64748B] bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/60">
-              និន្នាការ (Trend)
+              និន្នាការ
             </span>
           </div>
 

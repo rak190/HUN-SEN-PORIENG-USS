@@ -30,7 +30,7 @@ export default function ClassInfoPage() {
                   : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
               }`}
             >
-              ព័ត៌មានទូទៅ (General Info)
+              ព័ត៌មានទូទៅ
             </button>
             <button
               onClick={() => setActiveTab('stats')}
@@ -40,7 +40,7 @@ export default function ClassInfoPage() {
                   : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
               }`}
             >
-              <BarChart3 className="w-4 h-4" /> ស្ថិតិ (Statistics)
+              <BarChart3 className="w-4 h-4" /> ស្ថិតិ
             </button>
           </div>
         </div>
@@ -72,7 +72,7 @@ export default function ClassInfoPage() {
               <BookOpen className="w-5 h-5" />
             </div>
             <div className="relative z-10 mt-auto">
-              <p className="text-[11px] sm:text-xs font-bold text-slate-500 mb-1">ថ្នាក់រៀន (Class)</p>
+              <p className="text-[11px] sm:text-xs font-bold text-slate-500 mb-1">ថ្នាក់រៀន</p>
               <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
                 {activeClass?.name || '១២ ក'} <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Grade 12</span>
               </h3>
@@ -86,7 +86,7 @@ export default function ClassInfoPage() {
               <Calendar className="w-5 h-5" />
             </div>
             <div className="relative z-10 mt-auto">
-              <p className="text-[11px] sm:text-xs font-bold text-slate-500 mb-1">ឆ្នាំសិក្សា (Year)</p>
+              <p className="text-[11px] sm:text-xs font-bold text-slate-500 mb-1">ឆ្នាំសិក្សា</p>
               <h3 className="text-sm sm:text-base font-black text-slate-900">2026-2027</h3>
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function ClassInfoPage() {
               <User className="w-5 h-5" />
             </div>
             <div className="relative z-10 mt-auto">
-              <p className="text-[11px] sm:text-xs font-bold text-slate-500 mb-1">គ្រូបន្ទុកថ្នាក់ (Teacher)</p>
+              <p className="text-[11px] sm:text-xs font-bold text-slate-500 mb-1">គ្រូបន្ទុកថ្នាក់</p>
               <h3 className="text-sm sm:text-base font-black text-slate-900 line-clamp-1">លោកគ្រូ/អ្នកគ្រូ សុខា</h3>
             </div>
           </div>
@@ -116,7 +116,7 @@ export default function ClassInfoPage() {
               </div>
             </div>
             <div className="relative z-10 mt-auto">
-              <p className="text-[11px] sm:text-xs font-bold text-slate-500 mb-1">សិស្សសរុប (Total)</p>
+              <p className="text-[11px] sm:text-xs font-bold text-slate-500 mb-1">សិស្សសរុប</p>
               <h3 className="text-sm sm:text-base font-black text-slate-900 flex items-baseline gap-1">
                 {students.length} <span className="text-[10px] font-bold text-slate-500">នាក់</span>
               </h3>
@@ -131,7 +131,7 @@ export default function ClassInfoPage() {
           {/* Gender Breakdown */}
           <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs">
             <h3 className="text-sm font-black text-slate-800 mb-6 flex items-center gap-2">
-              <Users className="w-5 h-5 text-indigo-500" /> សមាមាត្រសិស្ស (Gender)
+              <Users className="w-5 h-5 text-indigo-500" /> សមាមាត្រសិស្ស
             </h3>
             <div className="flex items-end justify-center h-32 gap-8">
               <div className="flex flex-col items-center gap-2">
@@ -149,7 +149,7 @@ export default function ClassInfoPage() {
           <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs flex flex-col items-center justify-center relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-1/2 translate-x-1/3" />
             <h3 className="text-sm font-black text-slate-800 mb-4 flex items-center gap-2 w-full">
-              <Activity className="w-5 h-5 text-emerald-500" /> អត្រាវត្តមាន (Attendance)
+              <Activity className="w-5 h-5 text-emerald-500" /> អត្រាវត្តមាន
             </h3>
             <div className="relative w-32 h-32 flex items-center justify-center">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
@@ -164,12 +164,12 @@ export default function ClassInfoPage() {
           {/* Academic Performance */}
           <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs">
             <h3 className="text-sm font-black text-slate-800 mb-6 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-amber-500" /> លទ្ធផលសិក្សា (Academics)
+              <TrendingUp className="w-5 h-5 text-amber-500" /> លទ្ធផលសិក្សា
             </h3>
             <div className="space-y-4">
               <div>
                 <div className="flex justify-between text-xs font-black text-slate-700 mb-1">
-                  <span>សិស្សជាប់ (Pass)</span>
+                  <span>សិស្សជាប់</span>
                   <span className="text-emerald-600">85%</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2.5">
@@ -178,7 +178,7 @@ export default function ClassInfoPage() {
               </div>
               <div>
                 <div className="flex justify-between text-xs font-black text-slate-700 mb-1">
-                  <span>សិស្សធ្លាក់ (Fail)</span>
+                  <span>សិស្សធ្លាក់</span>
                   <span className="text-rose-600">15%</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2.5">

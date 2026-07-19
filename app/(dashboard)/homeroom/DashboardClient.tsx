@@ -44,6 +44,7 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
   const [isPending, startTransition] = useTransition();
   const [showEwsBanner, setShowEwsBanner] = useState(true);
   const [showEwsModal, setShowEwsModal] = useState(false);
+  const [footerModalData, setFooterModalData] = useState<{ title: string; content: React.ReactNode } | null>(null);
 
   const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -128,7 +129,7 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
             <button 
               onClick={() => setShowEwsModal(true)} 
               className="relative p-3 bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-full shadow-sm text-rose-600 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-              title={`${atRiskStudents.length} សិស្សកំពុងប្រឈមហានិភ័យ (EWS)`}
+              title={`${atRiskStudents.length} សិស្សកំពុងប្រឈមហានិភ័យ`}
             >
               <AlertTriangle className="w-5 h-5 animate-pulse" />
               <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-rose-600 text-white flex items-center justify-center text-[8px] font-black rounded-full border border-white">
@@ -548,17 +549,71 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
       <footer className="flex flex-col sm:flex-row gap-4 text-xs font-bold text-[#64748B] pt-6 justify-between items-center border-t border-slate-200/60">
         <div className="flex flex-wrap items-center gap-4 text-center sm:text-left">
           <span>រក្សាសិទ្ធិគ្រប់យ៉ាង © 2026 វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</span>
-          <span className="hover:text-slate-900 cursor-pointer transition-colors">គោលការណ៍ឯកជនភាព</span>
-          <span className="hover:text-slate-900 cursor-pointer transition-colors">លក្ខខណ្ឌប្រើប្រាស់</span>
-          <span className="hover:text-slate-900 cursor-pointer transition-colors">ទំនាក់ទំនងជំនួយ</span>
+          <button 
+            onClick={() => setFooterModalData({
+              title: 'គោលការណ៍ឯកជនភាព (Privacy Policy)',
+              content: (
+                <div className="space-y-4 text-sm font-medium text-slate-600">
+                  <p>វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង មានការប្តេជ្ញាចិត្តក្នុងការការពារទិន្នន័យផ្ទាល់ខ្លួនរបស់សិស្ស លោកគ្រូ អ្នកគ្រូ និងមាតាបិតា។</p>
+                  <p>រាល់ទិន្នន័យពិន្ទុ អវត្តមាន និងព័ត៌មានផ្ទាល់ខ្លួនត្រូវបានរក្សាការសម្ងាត់យ៉ាងតឹងរ៉ឹង និងប្រើប្រាស់សម្រាប់តែគោលបំណងអប់រំប៉ុណ្ណោះ។</p>
+                  <p>ប្រព័ន្ធនេះត្រូវបានគ្រប់គ្រងដោយស្របតាមគោលការណ៍ណែនាំរបស់ក្រសួងអប់រំ យុវជន និងកីឡា។</p>
+                </div>
+              )
+            })}
+            className="hover:text-slate-900 cursor-pointer transition-colors"
+          >
+            គោលការណ៍ឯកជនភាព
+          </button>
+          <button 
+            onClick={() => setFooterModalData({
+              title: 'លក្ខខណ្ឌប្រើប្រាស់ (Terms of Use)',
+              content: (
+                <div className="space-y-4 text-sm font-medium text-slate-600">
+                  <p>រាល់គណនីប្រើប្រាស់ប្រព័ន្ធត្រូវតែទទួលបានការអនុញ្ញាតពីនាយកសាលា។</p>
+                  <p>អ្នកប្រើប្រាស់មិនត្រូវចែករំលែកពាក្យសម្ងាត់គណនីទៅកាន់តតិយជនឡើយ។</p>
+                  <p>ការបញ្ចូលទិន្នន័យក្លែងបន្លំ ឬការលុបទិន្នន័យដោយគ្មានការអនុញ្ញាត នឹងត្រូវទទួលខុសត្រូវតាមបទបញ្ជាផ្ទៃក្នុងសាលា។</p>
+                </div>
+              )
+            })}
+            className="hover:text-slate-900 cursor-pointer transition-colors"
+          >
+            លក្ខខណ្ឌប្រើប្រាស់
+          </button>
+          <a href="mailto:support@porieng.edu.kh" className="hover:text-slate-900 cursor-pointer transition-colors">ទំនាក់ទំនងជំនួយ</a>
         </div>
         <div className="flex gap-3 text-slate-500">
-          <a href="#" className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:text-[#155EEF] hover:border-[#155EEF] transition-all shadow-2xs" title="Website"><Globe className="w-4 h-4" /></a>
-          <a href="#" className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:text-[#155EEF] hover:border-[#155EEF] transition-all shadow-2xs" title="Share"><Share2 className="w-4 h-4" /></a>
-          <a href="#" className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:text-[#155EEF] hover:border-[#155EEF] transition-all shadow-2xs" title="Community"><MessageCircle className="w-4 h-4" /></a>
-          <a href="#" className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:text-[#155EEF] hover:border-[#155EEF] transition-all shadow-2xs" title="Contact"><Mail className="w-4 h-4" /></a>
+          <a href="https://moeys.gov.kh" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:text-[#155EEF] hover:border-[#155EEF] transition-all shadow-2xs" title="Website"><Globe className="w-4 h-4" /></a>
+          <a href="https://web.facebook.com/HunSenPoriengHighSchool/?locale=km_KH&_rdc=1&_rdr#" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:text-[#155EEF] hover:border-[#155EEF] transition-all shadow-2xs" title="Facebook"><Share2 className="w-4 h-4" /></a>
+          <a href="https://t.me/norakrun" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:text-[#155EEF] hover:border-[#155EEF] transition-all shadow-2xs" title="Telegram Community"><MessageCircle className="w-4 h-4" /></a>
+          <a href="mailto:support@porieng.edu.kh" className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center hover:text-[#155EEF] hover:border-[#155EEF] transition-all shadow-2xs" title="Contact Support"><Mail className="w-4 h-4" /></a>
         </div>
       </footer>
+
+      {/* Footer Modal */}
+      {footerModalData && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={() => setFooterModalData(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-lg p-6 sm:p-8 space-y-6 shadow-2xl scale-100 animate-slideUp relative" onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={() => setFooterModalData(null)}
+              className="absolute top-6 right-6 text-slate-400 hover:text-slate-700 transition-colors bg-slate-100 hover:bg-slate-200 rounded-full p-2 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="text-xl font-black text-slate-900 pr-10">{footerModalData.title}</h3>
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+              {footerModalData.content}
+            </div>
+            <div className="pt-2">
+              <button 
+                onClick={() => setFooterModalData(null)}
+                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl shadow-sm transition-all text-sm cursor-pointer"
+              >
+                យល់ព្រម
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

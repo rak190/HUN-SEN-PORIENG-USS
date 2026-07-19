@@ -330,7 +330,7 @@ export default function ReportCardsPage() {
           </div>
         </div>
         
-        <p className="text-[13px] font-bold text-[#155EEF] mb-3 print:mb-2 print:text-slate-800">👉 សូមគោរពជូន មាតាបិតា ឬអ្នកអាណាព្យាបាលសិស្ស ជ្រាបជាព័ត៌មាន</p>
+        <p className="text-[13px] font-bold text-[#155EEF] mb-3 print:mb-2 print:text-slate-800">សូមគោរពជូន មាតាបិតា ឬអ្នកអាណាព្យាបាលសិស្ស ជ្រាបជាព័ត៌មាន</p>
 
         <h3 className="font-black text-slate-800 text-sm mb-2 uppercase">ក. លទ្ធផលសិក្សា</h3>
         {/* Grades Table */}
@@ -384,7 +384,7 @@ export default function ReportCardsPage() {
           </tbody>
           <tfoot className="bg-slate-50 print:bg-white text-sm">
             <tr className="border-b border-slate-300 print:border-slate-900 font-black text-center">
-              <td colSpan={2} className="py-3 border-r border-slate-300 print:border-slate-900 text-right pr-4 uppercase">ពិន្ទុសរុប (Total)</td>
+              <td colSpan={2} className="py-3 border-r border-slate-300 print:border-slate-900 text-right pr-4 uppercase">ពិន្ទុសរុប</td>
               <td className="py-3 border-r border-slate-300 print:border-slate-900">{maxTotalScore}</td>
               <td className="py-2 border-r border-slate-300 print:border-slate-900 text-[#155EEF] text-base print:text-black">{studentInfo.totalScore}</td>
               <td colSpan={5} className="border-r border-slate-300 print:border-slate-900"></td>
@@ -395,15 +395,15 @@ export default function ReportCardsPage() {
         {/* Footer Summary Grid */}
         <div className="grid grid-cols-3 gap-4 mb-3 print:mb-2">
           <div className="border border-slate-300 print:border-slate-900 p-2 rounded-lg text-center">
-            <span className="block text-xs font-bold text-slate-500 uppercase mb-1">មធ្យមភាគ (Average)</span>
+            <span className="block text-xs font-bold text-slate-500 uppercase mb-1">មធ្យមភាគ</span>
             <span className="block text-lg font-black text-slate-900">{studentInfo.percentage.toFixed(2)}</span>
           </div>
           <div className="border border-slate-300 print:border-slate-900 p-2 rounded-lg text-center">
-            <span className="block text-xs font-bold text-slate-500 uppercase mb-1">ចំណាត់ថ្នាក់ (Rank)</span>
+            <span className="block text-xs font-bold text-slate-500 uppercase mb-1">ចំណាត់ថ្នាក់</span>
             <span className="block text-lg font-black text-[#155EEF] print:text-black">{studentInfo.rank}</span>
           </div>
           <div className="border border-slate-300 print:border-slate-900 p-2 rounded-lg text-center">
-            <span className="block text-xs font-bold text-slate-500 uppercase mb-1">និទ្ទេស (Grade)</span>
+            <span className="block text-xs font-bold text-slate-500 uppercase mb-1">និទ្ទេស</span>
             <span className="block text-lg font-black text-slate-900">{studentInfo.grade}</span>
           </div>
         </div>
@@ -457,7 +457,6 @@ export default function ReportCardsPage() {
         {/* Parent Feedback Area */}
         <div className="mt-4 print:mt-2 pt-4 print:pt-2 border-t border-dashed border-slate-300 print:border-slate-400">
           <div className="flex items-end gap-2 mb-5 print:mb-3">
-            <span className="text-base leading-none">👉</span>
             <span className="text-[13px] font-bold text-slate-800 whitespace-nowrap">សូមផ្តល់មតិត្រឡប់ៈ</span>
             <div className="flex-1 border-b-[2px] border-dotted border-slate-300 print:border-slate-400"></div>
           </div>

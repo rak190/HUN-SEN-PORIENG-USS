@@ -38,7 +38,7 @@ export default function AdminDashboardPage() {
             <span>ផ្ទាំងគ្រប់គ្រងប្រព័ន្ធ</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">
-            ផ្ទាំងគ្រប់គ្រងប្រព័ន្ធទូទៅ (System Admin)
+            ផ្ទាំងគ្រប់គ្រងប្រព័ន្ធទូទៅ
           </h1>
           <p className="text-[#64748B] text-sm font-medium">
             ត្រួតពិនិត្យការតភ្ជាប់ Supabase Database, Realtime WebSockets, និង RLS Security Policies។
@@ -114,7 +114,7 @@ export default function AdminDashboardPage() {
       {/* Quick Navigation Cards Grid — Adopting Reference Project Concept */}
       <div className="space-y-3">
         <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2">
-          <span>មុខងារគ្រប់គ្រងសម្រាប់អ្នកគ្រប់គ្រងប្រព័ន្ធ (Standalone Navigation)</span>
+          <span>មុខងារគ្រប់គ្រងសម្រាប់អ្នកគ្រប់គ្រងប្រព័ន្ធ</span>
         </h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

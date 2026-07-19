@@ -50,7 +50,7 @@ export default function AdminSettingsPage() {
             <Settings className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-lg font-extrabold text-slate-800">ការកំណត់បច្ចេកទេស (System Parameters)</h3>
+            <h3 className="text-lg font-extrabold text-slate-800">ការកំណត់បច្ចេកទេស</h3>
             <p className="text-xs text-slate-500 font-medium">កែប្រែចំណុចភ្ជាប់ Supabase Database និងសុវត្ថិភាព RLS</p>
           </div>
         </div>
@@ -118,7 +118,7 @@ export default function AdminSettingsPage() {
               <div>
                 <div className="text-sm font-extrabold text-rose-900 flex items-center gap-1.5">
                   <Globe className="w-4 h-4 text-rose-600" />
-                  <span>ថែទាំប្រព័ន្ធ (Maintenance Mode)</span>
+                  <span>ថែទាំប្រព័ន្ធ</span>
                 </div>
                 <p className="text-xs text-rose-600/80 mt-0.5">បិទមិនឱ្យគ្រូបង្រៀនចូលប្រើប្រាស់បណ្តោះអាសន្ននៅពេលអាប់ដេតប្រព័ន្ធ</p>
               </div>

@@ -104,7 +104,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
               <TableIcon className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900">បញ្ចូលតាមតារាង (Grid Data Entry)</h2>
+              <h2 className="text-lg font-black text-slate-900">បញ្ចូលតាមតារាង</h2>
               <p className="text-xs font-bold text-slate-500">វាយបញ្ចូលទិន្នន័យបានលឿនដូច Excel។ ចុច <span className="bg-slate-200 px-1.5 py-0.5 rounded">Enter</span> ដើម្បីចុះបន្ទាត់។</p>
             </div>
           </div>
@@ -119,10 +119,10 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
             <thead className="bg-slate-100 sticky top-0 z-10 shadow-sm font-black text-slate-600 text-xs uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-3 border border-slate-200 w-12 text-center text-slate-400">ល.រ</th>
-                <th className="px-4 py-3 border border-slate-200 w-48">អត្តលេខ (ID)*</th>
-                <th className="px-4 py-3 border border-slate-200">ឈ្មោះពេញ (Full Name)*</th>
+                <th className="px-4 py-3 border border-slate-200 w-48">អត្តលេខ*</th>
+                <th className="px-4 py-3 border border-slate-200">ឈ្មោះពេញ*</th>
                 <th className="px-4 py-3 border border-slate-200 w-32">ភេទ (M/F)*</th>
-                <th className="px-4 py-3 border border-slate-200 w-48">លេខទូរសព្ទ (Phone)</th>
+                <th className="px-4 py-3 border border-slate-200 w-48">លេខទូរសព្ទ</th>
               </tr>
             </thead>
             <tbody>
@@ -163,8 +163,8 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
                       value={row.gender}
                       onChange={(e) => handleChange(idx, 'gender', e.target.value)}
                     >
-                      <option value="M">ប្រុស (M)</option>
-                      <option value="F">ស្រី (F)</option>
+                      <option value="M">ប្រុស</option>
+                      <option value="F">ស្រី</option>
                     </select>
                   </td>
                   <td className="border border-slate-200 p-0 relative">

@@ -49,10 +49,10 @@ export default function AdminUsersPage() {
               onChange={(e) => setRoleFilter(e.target.value)}
               className="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer"
             >
-              <option value="all">តួនាទីទាំងអស់ (All Roles)</option>
-              <option value="teacher">គ្រូបន្ទុកថ្នាក់ (Teacher)</option>
-              <option value="principal">នាយកសាលា (Principal)</option>
-              <option value="admin">អ្នកគ្រប់គ្រងប្រព័ន្ធ (Admin)</option>
+              <option value="all">តួនាទីទាំងអស់</option>
+              <option value="teacher">គ្រូបន្ទុកថ្នាក់</option>
+              <option value="principal">នាយកសាលា</option>
+              <option value="admin">អ្នកគ្រប់គ្រងប្រព័ន្ធ</option>
             </select>
           </div>
 
@@ -86,19 +86,19 @@ export default function AdminUsersPage() {
           <div className="text-2xl font-black text-slate-800 mt-1">{usersList.length} គណនី</div>
         </div>
         <div className="bg-white p-5 rounded-[20px] border border-slate-100/80 shadow-xs">
-          <div className="text-xs font-bold text-[#64748B]">គ្រូបង្រៀន (Teacher)</div>
+          <div className="text-xs font-bold text-[#64748B]">គ្រូបង្រៀន</div>
           <div className="text-2xl font-black text-[#155EEF] mt-1">
             {usersList.filter(u => u.role === 'teacher').length} នាក់
           </div>
         </div>
         <div className="bg-white p-5 rounded-[20px] border border-slate-100/80 shadow-xs">
-          <div className="text-xs font-bold text-[#64748B]">នាយកសាលា (Principal)</div>
+          <div className="text-xs font-bold text-[#64748B]">នាយកសាលា</div>
           <div className="text-2xl font-black text-purple-600 mt-1">
             {usersList.filter(u => u.role === 'principal').length} នាក់
           </div>
         </div>
         <div className="bg-white p-5 rounded-[20px] border border-slate-100/80 shadow-xs">
-          <div className="text-xs font-bold text-[#64748B]">អ្នកគ្រប់គ្រង (Admin)</div>
+          <div className="text-xs font-bold text-[#64748B]">អ្នកគ្រប់គ្រង</div>
           <div className="text-2xl font-black text-amber-600 mt-1">
             {usersList.filter(u => u.role === 'admin').length} នាក់
           </div>
@@ -123,9 +123,9 @@ export default function AdminUsersPage() {
               <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
                 <th className="py-4 px-6 w-16 text-center">ល.រ</th>
                 <th className="py-4 px-6">អត្តលេខ</th>
-                <th className="py-4 px-6 min-w-[180px]">ឈ្មោះពេញ (Full Name)</th>
-                <th className="py-4 px-6 font-mono">ឈ្មោះគណនី (Username)</th>
-                <th className="py-4 px-6 text-center">តួនាទី (Role)</th>
+                <th className="py-4 px-6 min-w-[180px]">ឈ្មោះពេញ</th>
+                <th className="py-4 px-6 font-mono">ឈ្មោះគណនី</th>
+                <th className="py-4 px-6 text-center">តួនាទី</th>
                 <th className="py-4 px-6 text-center">កូដសាលា</th>
                 <th className="py-4 px-6 text-center">ចូលចុងក្រោយ</th>
                 <th className="py-4 px-6 text-center">ស្ថានភាព</th>

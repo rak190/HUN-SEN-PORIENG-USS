@@ -237,7 +237,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
             <ul className="space-y-3 text-sm">
               <li className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-500 font-bold">ស្ថានភាពសិស្ស៖</span> <span className="font-black text-slate-800">{student.status === 'new' ? 'សិស្សថ្មី' : 'ត្រួតថ្នាក់'}</span></li>
               <li className="flex justify-between border-b border-slate-50 pb-2">
-                <span className="text-slate-500 font-bold">បណ្ណក្រីក្រ (Poor ID)៖</span> 
+                <span className="text-slate-500 font-bold">បណ្ណក្រីក្រ៖</span> 
                 {student.id_poor !== 'none' ? (
                   <span className="font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded">{student.id_poor === 'level_1' ? 'កម្រិត ១' : 'កម្រិត ២'}</span>
                 ) : (
@@ -254,7 +254,7 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
 
           <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-2xs print:shadow-none print:border-slate-800 print:rounded-none">
             <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2 print:border-slate-400">
-              <HeartPulse className="w-5 h-5 text-rose-500" /> សុខភាព (GEIP)
+              <HeartPulse className="w-5 h-5 text-rose-500" /> សុខភាព
             </h2>
             <ul className="space-y-3 text-sm">
               <li className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-500 font-bold">ទម្ងន់ / កម្ពស់៖</span> <span className="font-black text-slate-800">{student.weight_kg} kg / {student.height_m} m</span></li>

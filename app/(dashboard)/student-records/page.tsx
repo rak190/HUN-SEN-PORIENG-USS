@@ -104,7 +104,7 @@ export default function StudentRecordsPage() {
       `}</style>
       <div className="flex items-center justify-between print:hidden bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">សៀវភៅសិក្ខាគារិក (Student Record Book)</h1>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">សៀវភៅសិក្ខាគារិក</h1>
           <p className="text-sm font-bold text-slate-500 mt-1">ថ្នាក់ទី {activeClass.name} • ឆ្នាំសិក្សា ២០២៥-២០២៦</p>
         </div>
 
@@ -148,14 +148,14 @@ export default function StudentRecordsPage() {
                 className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-50 transition-colors shadow-sm"
               >
                 <Printer className="w-4 h-4" />
-                បោះពុម្ព (Print)
+                បោះពុម្ព
               </button>
               <button
                 onClick={handlePrintAll}
                 className="flex items-center gap-2 px-4 py-2.5 bg-[#155EEF] text-white text-sm font-bold rounded-xl hover:bg-[#155EEF]/90 transition-colors shadow-sm shadow-[#155EEF]/20"
               >
                 <Printer className="w-4 h-4" />
-                បោះពុម្ពទាំងអស់ (Print All)
+                បោះពុម្ពទាំងអស់
               </button>
             </div>
           </div>
@@ -166,7 +166,7 @@ export default function StudentRecordsPage() {
           {isLoading ? (
             <div className="p-12 text-center text-slate-500 font-bold">កំពុងទាញយកទិន្នន័យសិស្ស...</div>
           ) : students.length === 0 ? (
-            <div className="p-12 text-center text-slate-500 font-bold">មិនមានទិន្នន័យសិស្សទេ (No students found)</div>
+            <div className="p-12 text-center text-slate-500 font-bold">មិនមានទិន្នន័យសិស្សទេ</div>
           ) : (
             <>
               {/* Single view for screen, hidden when batch printing */}

@@ -521,9 +521,9 @@ export default function MonthlyAttendanceForm() {
               <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-4">អត្តលេខ</th>
               <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-5">គោត្តនាម & នាម</th>
               <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center">ភេទ</th>
-              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-rose-600">ឥតច្បាប់ (A)</th>
-              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-[#155EEF]">ច្បាប់ (E)</th>
-              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-purple-600">សរុប (Total)</th>
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-rose-600">ឥតច្បាប់</th>
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-[#155EEF]">ច្បាប់</th>
+              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-purple-600">សរុប</th>
               <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-4 text-center rounded-r-xl">ចុះសួរសុខទុក្ខ</th>
             </tr>
           </thead>
