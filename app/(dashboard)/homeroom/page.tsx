@@ -256,12 +256,33 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   const activities: ActivityLog[] = activityData || [];
 
-  // TODO: Fetch real atRiskStudents based on EWS logic
-  const mockAtRiskStudents = [
-    { id: '101', name: 'សៅ សុភាព', reasons: ['អវត្តមាន ៤ ដងក្នុងខែនេះ', 'ធ្លាក់ពិន្ទុគណិតវិទ្យា (៤៥)'], severity: 'high' as const },
-    { id: '102', name: 'ដួង វិចិត្រ', reasons: ['ធ្លាក់ពិន្ទុរូបវិទ្យា និងគីមីវិទ្យា'], severity: 'medium' as const },
-    { id: '103', name: 'ម៉ៅ រស្មី', reasons: ['បញ្ហាវិន័យ៖ ឈ្លោះប្រកែកគ្នា'], severity: 'high' as const }
-  ];
+  // 7. Fetch real At-Risk students based on new risk_level schema
+  let atRiskQuery = supabase
+    .from('students')
+    .select('id, full_name, risk_level, behavior_history')
+    .in('risk_level', ['high', 'medium']);
+    
+  if (classId !== 'all') {
+    atRiskQuery = atRiskQuery.eq('class_id', classId);
+  }
+  
+  const { data: atRiskData } = await atRiskQuery;
+  const atRiskStudents = (atRiskData || []).map(s => {
+    // Safely parse JSONB array or use default reason
+    let reasons: string[] = [];
+    if (Array.isArray(s.behavior_history)) {
+      reasons = s.behavior_history;
+    }
+    if (reasons.length === 0) {
+       reasons = [s.risk_level === 'high' ? 'អវត្តមានច្រើន / ពិន្ទុធ្លាក់ចុះខ្លាំង' : 'ត្រូវការការតាមដានបន្ថែម'];
+    }
+    return {
+      id: s.id,
+      name: s.full_name,
+      reasons: reasons,
+      severity: s.risk_level as 'high' | 'medium'
+    };
+  });
 
-  return <DashboardClient stats={stats} activities={activities} profile={profile} atRiskStudents={mockAtRiskStudents} />;
+  return <DashboardClient stats={stats} activities={activities} profile={profile} atRiskStudents={atRiskStudents} />;
 }

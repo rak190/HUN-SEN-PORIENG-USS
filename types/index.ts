@@ -7,6 +7,29 @@
  */
 export type UserRole = 'teacher' | 'principal' | 'admin' | 'monitor';
 
+export interface AIGeneration {
+  id: string;
+  teacher_id: string;
+  class_id: string;
+  type: 'lesson_plan' | 'quiz' | 'worksheet';
+  title: string;
+  content_json: Record<string, any>;
+  created_at: string;
+}
+
+export interface Document {
+  id: string;
+  class_id: string;
+  uploader_id: string;
+  title: string;
+  type: 'excel' | 'word' | 'pdf' | 'archive' | 'image' | 'other';
+  file_url: string;
+  size: string;
+  category: 'upload' | 'export' | 'template';
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+}
+
 export interface Profile {
   id: string;
   username: string;

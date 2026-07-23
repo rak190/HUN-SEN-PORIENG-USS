@@ -591,8 +591,8 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
 
       {/* Footer Modal */}
       {footerModalData && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={() => setFooterModalData(null)}>
-          <div className="bg-white rounded-3xl w-full max-w-lg p-6 sm:p-8 space-y-6 shadow-2xl scale-100 animate-slideUp relative" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 animate-overlayFade" onClick={() => setFooterModalData(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-lg p-6 sm:p-8 space-y-6 shadow-2xl relative animate-modalScale" onClick={(e) => e.stopPropagation()}>
             <button 
               onClick={() => setFooterModalData(null)}
               className="absolute top-6 right-6 text-slate-400 hover:text-slate-700 transition-colors bg-slate-100 hover:bg-slate-200 rounded-full p-2 cursor-pointer"

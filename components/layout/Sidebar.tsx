@@ -36,7 +36,10 @@ import {
   Briefcase,
   FolderOpen,
   X,
-  MessageCircle
+  MessageCircle,
+  AlertCircle,
+  Server,
+  FileText
 } from 'lucide-react';
 
 interface MenuItem {
@@ -89,15 +92,41 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'principal-announcements', label: 'Announcements', khmerLabel: 'សេចក្តីជូនដំណឹង', href: '/principal/announcements', icon: Megaphone, roles: ['principal'], badge: 'ថ្មី' },
   { id: 'principal-settings', label: 'School Settings', khmerLabel: 'ការកំណត់សាលា', href: '/principal/settings', icon: Building2, roles: ['principal'] },
 
-  // --- ADMIN TABS (System Management) ---
-  { id: 'admin-dashboard', label: 'Admin Dashboard', khmerLabel: 'ផ្ទាំងគ្រប់គ្រងប្រព័ន្ធ', href: '/admin', icon: LayoutDashboard, roles: ['admin'], badge: 'ប្រព័ន្ធ' },
-  { id: 'admin-users', label: 'User Management', khmerLabel: 'គ្រប់គ្រងអ្នកប្រើប្រាស់', href: '/admin/users', icon: UserCog, roles: ['admin'] },
-  { id: 'admin-logs', label: 'System Logs', khmerLabel: 'កំណត់ហេតុប្រព័ន្ធ', href: '/admin/logs', icon: History, roles: ['admin'] },
-  { id: 'admin-backup', label: 'Database Backup', khmerLabel: 'បម្រុងទុកទិន្នន័យ', href: '/admin/backup', icon: Database, roles: ['admin'] },
-  { id: 'admin-settings', label: 'System Settings', khmerLabel: 'ការកំណត់ប្រព័ន្ធ', href: '/admin/settings', icon: Settings, roles: ['admin'] },
+  // --- ADMIN TABS (ICT Focal Teacher / GIEP Assistant) ---
+  { 
+    id: 'admin-system', label: 'System', khmerLabel: 'ប្រព័ន្ធ', icon: Settings, roles: ['admin'],
+    children: [
+      { id: 'admin-dashboard', label: 'Admin Dashboard', khmerLabel: 'ផ្ទាំងគ្រប់គ្រងសាលា', href: '/admin', icon: LayoutDashboard, roles: ['admin'], badge: 'ទូទៅ' },
+      { id: 'admin-school-info', label: 'School Info', khmerLabel: 'ព័ត៌មានសាលា', href: '/admin/giep-import', icon: Building2, roles: ['admin'] },
+      { id: 'admin-academic-setup', label: 'Academic Structure', khmerLabel: 'រចនាសម្ព័ន្ធឆ្នាំសិក្សា', href: '/admin/academic-setup', icon: BookOpen, roles: ['admin'] },
+      { id: 'admin-users', label: 'Manage Accounts', khmerLabel: 'គ្រប់គ្រងគណនី', href: '/admin/users', icon: UserCog, roles: ['admin'] },
+      { id: 'admin-classes', label: 'Classes', khmerLabel: 'ថ្នាក់រៀន', href: '/classes', icon: Users, roles: ['admin'] },
+    ]
+  },
+  {
+    id: 'admin-teachers', label: 'Teacher Structure', khmerLabel: 'រចនាសម្ព័ន្ធគ្រូ', icon: UserCog, roles: ['admin'],
+    children: [
+      { id: 'admin-teacher-list', label: 'Teacher List', khmerLabel: 'បញ្ជីគ្រូបង្រៀន', href: '/admin/teachers', icon: Users, roles: ['admin'] },
+    ]
+  },
+  {
+    id: 'admin-students', label: 'Student Data', khmerLabel: 'ទិន្នន័យសិស្ស', icon: Database, roles: ['admin'],
+    children: [
+      { id: 'admin-student-list', label: 'Master Student List', khmerLabel: 'បញ្ជីសិស្សសរុប', href: '/admin/students', icon: Users, roles: ['admin'] },
+      { id: 'admin-attendance', label: 'Master Attendance', khmerLabel: 'អវត្តមានសរុប', href: '/admin/attendance', icon: Calendar, roles: ['admin'] },
+    ]
+  },
+  {
+    id: 'admin-results', label: 'Academic Results', khmerLabel: 'លទ្ធផលសិក្សា', icon: FileSpreadsheet, roles: ['admin'],
+    children: [
+      { id: 'admin-grades', label: 'Master Scores', khmerLabel: 'ពិន្ទុរួម (Master File)', href: '/admin/master-scores', icon: FileEdit, roles: ['admin'] },
+      { id: 'admin-moeys-reports', label: 'MoEYS Reports', khmerLabel: 'របាយការណ៍ក្រសួង', href: '/admin/moeys-reports', icon: FileText, roles: ['admin'] },
+    ]
+  },
 
   // --- MONITOR TABS (Class Monitor) ---
   { id: 'monitor-attendance', label: 'Daily Attendance', khmerLabel: 'ស្រង់វត្តមានប្រចាំថ្ងៃ', href: '/monitor/attendance', icon: Calendar, roles: ['monitor'], badge: 'ស្រង់' },
+  { id: 'monitor-missing', label: 'Missing Days', khmerLabel: 'ថ្ងៃដែលមិនទាន់ស្រង់អវត្តមាន', href: '/monitor/missing', icon: AlertCircle, roles: ['monitor'], badge: 'សំខាន់' },
 ];
 
 interface SidebarProps {
@@ -282,8 +311,8 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
 
       {/* Support Telegram Modal */}
       {showSupportModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowSupportModal(false)}>
-          <div className="bg-white rounded-[32px] w-full max-w-sm p-8 text-center shadow-2xl relative animate-slideUp" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 animate-overlayFade" onClick={() => setShowSupportModal(false)}>
+          <div className="bg-white rounded-[32px] w-full max-w-sm p-8 text-center shadow-2xl relative animate-modalScale" onClick={(e) => e.stopPropagation()}>
             <button 
               onClick={() => setShowSupportModal(false)}
               className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"

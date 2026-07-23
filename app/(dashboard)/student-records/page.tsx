@@ -19,6 +19,8 @@ const DEMO_STUDENTS: Student[] = [
 export default function StudentRecordsPage() {
   const { activeClass } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
+  const [gradesData, setGradesData] = useState<any[]>([]);
+  const [teacherName, setTeacherName] = useState<string>('..................................');
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [isPrintingAll, setIsPrintingAll] = useState(false);
@@ -26,25 +28,43 @@ export default function StudentRecordsPage() {
 
   useEffect(() => {
     if (!activeClass?.id) return;
-    const fetchStudents = async () => {
+    const fetchClassData = async () => {
       setIsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('students')
-          .select('*')
-          .eq('class_id', activeClass.id)
-          .order('full_name', { ascending: true });
-          
-        if (error || !data || data.length === 0) {
-          if (error) console.warn("Could not fetch real students, falling back to demo data:", error);
-          
-          // Fallback to DEMO data
-          setStudents(DEMO_STUDENTS);
-          setSelectedStudentId(DEMO_STUDENTS[0].id);
-        } else {
-          // Use real data
-          setStudents(data);
-          setSelectedStudentId(data[0].id);
+        // Fetch all required class data concurrently
+        const [studentsRes, gradesRes] = await Promise.all([
+          supabase.from('students').select('*').eq('class_id', activeClass.id).order('full_name', { ascending: true }),
+          supabase.from('grades').select('*').eq('class_id', activeClass.id)
+        ]);
+        
+        let fetchedStudents = studentsRes.data;
+
+        if (studentsRes.error || !fetchedStudents || fetchedStudents.length === 0) {
+          if (studentsRes.error) console.warn("Could not fetch real students, falling back to demo data:", studentsRes.error);
+          fetchedStudents = DEMO_STUDENTS;
+        }
+
+        setStudents(fetchedStudents);
+        setSelectedStudentId(fetchedStudents[0].id);
+
+        if (gradesRes.data) {
+          setGradesData(gradesRes.data);
+        }
+
+        // Fetch homeroom teacher name
+        if (activeClass.teacher_id) {
+          if (activeClass.teacher_id === 'demo-teacher-id') {
+             setTeacherName('លោកគ្រូ/អ្នកគ្រូ សុខា');
+          } else {
+             const { data: profileData } = await supabase
+               .from('profiles')
+               .select('full_name')
+               .eq('id', activeClass.teacher_id)
+               .single();
+             if (profileData && profileData.full_name) {
+               setTeacherName(profileData.full_name);
+             }
+          }
         }
       } catch (err) {
         console.warn("Failed to load students, using demo data");
@@ -54,8 +74,8 @@ export default function StudentRecordsPage() {
         setIsLoading(false);
       }
     };
-    fetchStudents();
-  }, [activeClass?.id]);
+    fetchClassData();
+  }, [activeClass?.id, activeClass?.teacher_id]);
 
   if (!activeClass) {
     return (
@@ -170,11 +190,13 @@ export default function StudentRecordsPage() {
           ) : (
             <>
               {/* Single view for screen, hidden when batch printing */}
-              <div className={isPrintingAll ? "hidden" : "block"}>
+              <div className={isPrintingAll ? "hidden" : "block print:w-[1122px] print:h-[770px] print:overflow-visible break-inside-avoid box-border relative"}>
                 <StudentRecordBook 
                   classInfo={activeClass} 
                   student={students.find(s => s.id === selectedStudentId) || students[0]}
                   allStudents={students}
+                  gradesData={gradesData}
+                  teacherName={teacherName}
                 />
               </div>
 
@@ -182,11 +204,13 @@ export default function StudentRecordsPage() {
               {isPrintingAll && (
                 <div className="print:block hidden">
                   {students.map((std, index) => (
-                    <div key={std.id} className={index !== students.length - 1 ? "print:break-after-page" : ""}>
+                    <div key={std.id} className="break-after-page print:w-[1122px] print:h-[770px] print:overflow-visible break-inside-avoid box-border relative">
                       <StudentRecordBook 
                         classInfo={activeClass} 
                         student={std}
                         allStudents={students}
+                        gradesData={gradesData}
+                        teacherName={teacherName}
                       />
                     </div>
                   ))}

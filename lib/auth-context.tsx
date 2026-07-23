@@ -11,7 +11,7 @@ interface AuthContextType {
   classes: Classroom[];
   loading: boolean;
   isDemoMode: boolean;
-  login: (username: string, password: string) => Promise<{ error?: string; role?: string }>;
+  login: (username: string, password: string, expectedRole?: string) => Promise<{ error?: string; role?: string }>;
   register: (username: string, password: string, fullName: string, role?: 'teacher' | 'principal' | 'admin', schoolCode?: string) => Promise<{ error?: string }>;
   logout: () => Promise<void>;
   setActiveClass: (cls: Classroom | null) => void;
@@ -181,7 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function login(username: string, password: string): Promise<{ error?: string; role?: string }> {
+  async function login(username: string, password: string, expectedRole?: string): Promise<{ error?: string; role?: string }> {
     const cleanUsername = username.trim().toLowerCase();
     const email = `${cleanUsername}@kruai.app`;
 
@@ -190,11 +190,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const isTeacherDemo = cleanUsername === 'teacher' || cleanUsername === 'teacher1' || cleanUsername === 'demo' || cleanUsername === 'homeroom';
     const isMonitorDemo = cleanUsername === 'monitor';
 
-    // 1. Instant Demo Mode: never make a network call for demo users
-    if (isAdminDemo || isPrincipalDemo || isTeacherDemo || isMonitorDemo || password === 'password123') {
+    // 1. Instant Demo Mode: only allow if they use the correct demo password
+    const isDemoAccount = isAdminDemo || isPrincipalDemo || isTeacherDemo || isMonitorDemo;
+    
+    if (isDemoAccount || password === 'password123') {
+      if (password !== 'password123') {
+        return { error: 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវទេ។ (Demo Password is: password123)' };
+      }
+      
+      const assignedRole = isAdminDemo ? 'admin' : isPrincipalDemo ? 'principal' : isMonitorDemo ? 'monitor' : 'teacher';
+      
+      if (expectedRole && assignedRole !== expectedRole) {
+         return { error: `គណនីនេះមិនមានសិទ្ធិជា ${expectedRole} ទេ។ សូមជ្រើសរើសតួនាទីឲ្យបានត្រឹមត្រូវ។` };
+      }
+
       setIsDemoMode(true);
       setUser({ id: 'demo-teacher-id', email });
-      const assignedRole = isAdminDemo ? 'admin' : isPrincipalDemo ? 'principal' : isMonitorDemo ? 'monitor' : 'teacher';
+      
       const assignedName = isAdminDemo 
         ? 'លោកគ្រូ/អ្នកគ្រូ សុខា (អ្នកគ្រប់គ្រងប្រព័ន្ធ)' 
         : isPrincipalDemo 
@@ -226,15 +238,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: 'គណនី ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវទេ។' };
       }
 
-      setIsDemoMode(false);
       const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
-      return { role: userProfile?.role || 'teacher' };
+      const userRole = userProfile?.role || 'teacher';
+      
+      if (expectedRole && userRole !== expectedRole) {
+         await supabase.auth.signOut();
+         return { error: `គណនីនេះមិនមានសិទ្ធិជា ${expectedRole} ទេ។ សូមជ្រើសរើសតួនាទីឲ្យបានត្រឹមត្រូវ។` };
+      }
+
+      setIsDemoMode(false);
+      return { role: userRole };
     } catch (e: any) {
       // If network fails (Failed to fetch / offline), allow seamless offline fallback
+      // ONLY if they provided the demo password. Otherwise, fail.
       if (e?.message?.includes('fetch') || e?.name === 'TypeError') {
+        if (password !== 'password123') {
+           return { error: 'បណ្តាញមានបញ្ហា។ សូមពិនិត្យអ៊ីនធឺណិតរបស់អ្នក ឬប្រើពាក្យសម្ងាត់ Demo (password123) ដើម្បីបន្ត។' };
+        }
+
+        const assignedRole = isAdminDemo ? 'admin' : isPrincipalDemo ? 'principal' : isMonitorDemo ? 'monitor' : 'teacher';
+        
+        if (expectedRole && assignedRole !== expectedRole) {
+           return { error: `គណនីនេះមិនមានសិទ្ធិជា ${expectedRole} ទេ។ សូមជ្រើសរើសតួនាទីឲ្យបានត្រឹមត្រូវ។` };
+        }
+
         setIsDemoMode(true);
         setUser({ id: 'demo-teacher-id', email });
-        const assignedRole = isAdminDemo ? 'admin' : isPrincipalDemo ? 'principal' : isMonitorDemo ? 'monitor' : 'teacher';
+        
         const assignedName = isAdminDemo 
           ? 'លោកគ្រូ/អ្នកគ្រូ សុខា (អ្នកគ្រប់គ្រងប្រព័ន្ធ)' 
           : isPrincipalDemo 

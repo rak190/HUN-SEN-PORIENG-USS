@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FolderOpen, FileText, Upload, Download, FileSpreadsheet, File, Search,
   Clock, CheckCircle2, Trash2, FileCheck, Eye, ExternalLink, Calendar,
   MoreVertical, RefreshCw
 } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
+import { createClient } from '@/lib/supabase/client';
+import { Document } from '@/types';
 
 const OFFICIAL_TEMPLATES = [
   { id: 'tpl-1', title: 'ទម្រង់បញ្ជីរាយនាមសិស្ស', type: 'excel', format: '.xlsx', size: '24 KB', date: '01 តុលា 2026', author: 'MoEYS / GEIP' },
@@ -27,9 +30,96 @@ const EXPORTED_REPORTS = [
 ];
 
 export default function DocumentsPage() {
+  const { activeClass, profile } = useAuth();
+  const supabase = createClient();
+  
   const [activeTab, setActiveTab] = useState<'templates' | 'uploads' | 'exports'>('templates');
   const [searchQuery, setSearchQuery] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (activeClass?.id) fetchDocuments();
+  }, [activeClass?.id]);
+
+  const fetchDocuments = async () => {
+    if (!activeClass) return;
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('class_id', activeClass.id)
+      .order('created_at', { ascending: false });
+    
+    if (data) {
+      setDocuments(data as Document[]);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeClass || !profile) return;
+    setUploading(true);
+    try {
+      const res = await fetch('/api/r2/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, fileType: file.type || 'application/octet-stream' })
+      });
+      const { url, objectKey, error: r2Error } = await res.json();
+      
+      if (r2Error) throw new Error(r2Error);
+
+      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' }});
+
+      let type: Document['type'] = 'other';
+      if (file.name.endsWith('.pdf')) type = 'pdf';
+      else if (file.name.match(/\.(xls|xlsx)$/i)) type = 'excel';
+      else if (file.name.match(/\.(doc|docx)$/i)) type = 'word';
+      else if (file.name.match(/\.(zip|rar)$/i)) type = 'archive';
+      else if (file.name.match(/\.(png|jpg|jpeg)$/i)) type = 'image';
+
+      let size = (file.size / 1024).toFixed(1) + ' KB';
+      if (file.size > 1024 * 1024) size = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+
+      const { error: dbError } = await supabase.from('documents').insert({
+        class_id: activeClass.id,
+        uploader_id: profile.id,
+        title: file.name,
+        type,
+        file_url: objectKey,
+        size,
+        category: 'upload',
+        status: 'pending'
+      });
+
+      if (dbError) throw dbError;
+      
+      fetchDocuments();
+      alert('ឯកសារបញ្ជូនបានជោគជ័យ!');
+    } catch (err: any) {
+      console.error(err);
+      alert('មានកំហុសក្នុងការបញ្ជូនឯកសារ៖ ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('តើអ្នកពិតជាចង់លុបឯកសារនេះមែនទេ?')) return;
+    await supabase.from('documents').delete().eq('id', id);
+    fetchDocuments();
+  };
+
+  const handleView = async (objectKey: string) => {
+    if (!objectKey) {
+      alert('ឯកសារមិនមាននៅក្នុងប្រព័ន្ធទេ');
+      return;
+    }
+    const res = await fetch(`/api/r2/download?key=${encodeURIComponent(objectKey)}`);
+    const { url } = await res.json();
+    if (url) window.open(url, '_blank');
+  };
 
   const getIconForType = (type: string, className: string = "w-6 h-6") => {
     switch (type) {
@@ -127,7 +217,7 @@ export default function DocumentsPage() {
                   
                   <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                     <div className="text-xs font-bold text-slate-400">ដោយ៖ <span className="text-slate-600">{tpl.author}</span></div>
-                    <button className="p-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-lg transition-colors group-hover:scale-105 duration-200">
+                    <button onClick={() => alert('កំពុងទាញយកឯកសារផ្លូវការ...')} className="p-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-lg transition-colors group-hover:scale-105 duration-200 cursor-pointer">
                       <Download className="w-4 h-4" />
                     </button>
                   </div>
@@ -152,9 +242,9 @@ export default function DocumentsPage() {
               </div>
               <h3 className="font-black text-slate-800 text-lg mb-1">ទាញទម្លាក់ឯកសារនៅទីនេះ</h3>
               <p className="text-sm font-bold text-slate-500 mb-6">ឬចុចប៊ូតុងខាងក្រោមដើម្បីជ្រើសរើសឯកសារពីកុំព្យូទ័ររបស់អ្នក (PDF, JPG, PNG, DOCX)</p>
-              <label className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-md cursor-pointer transition-colors">
-                ជ្រើសរើសឯកសារ
-                <input type="file" className="hidden" />
+              <label className={`inline-flex items-center justify-center px-6 py-3 rounded-xl text-white font-black text-sm shadow-md cursor-pointer transition-colors ${uploading ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                {uploading ? 'កំពុងបញ្ជូនឯកសារ...' : 'ជ្រើសរើសឯកសារ'}
+                <input type="file" className="hidden" disabled={uploading} onChange={handleFileUpload} />
               </label>
             </div>
 
@@ -175,16 +265,16 @@ export default function DocumentsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
-                    {UPLOADED_FILES.map(file => (
+                    {documents.filter(d => d.category === 'upload').map(file => (
                       <tr key={file.id} className="hover:bg-slate-50 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <File className="w-5 h-5 text-rose-500" />
+                            <File className={`w-5 h-5 ${getBgForType(file.type).split(' ')[0].replace('bg-', 'text-')}`} />
                             <span>{file.title}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-slate-500">{file.size}</td>
-                        <td className="px-6 py-4 text-slate-500">{file.date}</td>
+                        <td className="px-6 py-4 text-slate-500">{new Date(file.created_at).toLocaleDateString('en-GB')}</td>
                         <td className="px-6 py-4">
                           {file.status === 'approved' ? (
                             <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs flex items-center gap-1 w-max">
@@ -198,12 +288,19 @@ export default function DocumentsPage() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><Eye className="w-4 h-4" /></button>
-                            <button className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => handleView(file.file_url)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer"><Eye className="w-4 h-4" /></button>
+                            <button onClick={() => handleDelete(file.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         </td>
                       </tr>
                     ))}
+                    {documents.filter(d => d.category === 'upload').length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                          មិនទាន់មានឯកសារបានបញ្ជូននៅឡើយទេ
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -232,7 +329,7 @@ export default function DocumentsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
-                  {EXPORTED_REPORTS.map(exp => (
+                  {documents.filter(d => d.category === 'export').map(exp => (
                     <tr key={exp.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -241,19 +338,26 @@ export default function DocumentsPage() {
                           </div>
                           <div>
                             <div className="text-slate-800">{exp.title}</div>
-                            <div className="text-[10px] text-slate-400 font-medium mt-0.5">ទិន្នន័យ {exp.rows} បន្ទាត់</div>
+                            <div className="text-[10px] text-slate-400 font-medium mt-0.5">ទំហំ {exp.size}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-slate-500">{exp.generatedBy}</td>
-                      <td className="px-6 py-4 text-slate-500 flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {exp.date}</td>
+                      <td className="px-6 py-4 text-slate-500">លោកគ្រូ/អ្នកគ្រូ</td>
+                      <td className="px-6 py-4 text-slate-500 flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {new Date(exp.created_at).toLocaleDateString('en-GB')}</td>
                       <td className="px-6 py-4 text-right">
-                        <button className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-xl text-xs transition-colors">
+                        <button onClick={() => handleView(exp.file_url)} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-xl text-xs transition-colors cursor-pointer">
                           <Download className="w-3.5 h-3.5" /> ទាញយក
                         </button>
                       </td>
                     </tr>
                   ))}
+                  {documents.filter(d => d.category === 'export').length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
+                        មិនទាន់មានរបាយការណ៍ត្រូវបានទាញយកទេ
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

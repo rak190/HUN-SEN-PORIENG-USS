@@ -94,8 +94,8 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 lg:p-10 animate-fadeIn">
-      <div className="w-full h-full max-w-7xl bg-white rounded-[24px] shadow-2xl overflow-hidden flex flex-col relative">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 lg:p-10 animate-overlayFade">
+      <div className="w-full h-full max-w-7xl bg-white rounded-[24px] shadow-2xl overflow-hidden flex flex-col relative animate-modalScale">
         
         {/* Header */}
         <div className="px-6 py-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">

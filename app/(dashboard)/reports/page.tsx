@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth-context';
+import { createClient } from '@/lib/supabase/client';
 import {
   BarChart3, CalendarCheck, Award, Download, CheckCircle2, Send, FileSpreadsheet, Printer, 
   Home, HeartHandshake, FileText, AlertTriangle, UserPlus, FileSignature, LayoutList, RefreshCw, Eye, ArrowLeft, History
@@ -51,18 +52,101 @@ export default function ReportsPage() {
   const [sending, setSending] = useState(false);
   const [submittedReports, setSubmittedReports] = useState([{ month: 'ខែមិថុនា 2026', date: '30-Jun-2026', status: 'Approved' }]);
 
-  const handleGenerate = () => {
+  const supabase = createClient();
+
+  const handleGenerate = async () => {
     setStep('GENERATING');
-    // Simulate data aggregation
-    setTimeout(() => {
+    try {
+      const monthPrefix = new Date().toISOString().substring(0, 7); // e.g. "2026-07"
+      
+      // 1. Fetch Students
+      const { data: students } = await supabase
+        .from('students')
+        .select('id, full_name, gender')
+        .eq('class_id', activeClass?.id);
+
+      const totalStudents = students ? students.length : 0;
+      const totalGirls = students ? students.filter(s => s.gender === 'F' || s.gender === 'ស្រី').length : 0;
+      
+      // 2. Fetch Attendance (Mock logic for attendance, assuming monthly_attendance_summary or just using fake for now if table missing)
+      // Since attendance table might not have easy rate, we'll try to fetch monthly_attendance_summary
+      const { data: attendance } = await supabase
+        .from('monthly_attendance_summary')
+        .select('*')
+        .eq('class_id', activeClass?.id)
+        .eq('month', monthPrefix);
+
+      let attendanceRate = 100;
+      let absentManyTimes: string[] = [];
+      if (attendance && attendance.length > 0 && totalStudents > 0) {
+        const totalAbsences = attendance.reduce((sum, a) => sum + (a.absent_count || 0), 0);
+        const maxPossibleDays = 25; // Approximate school days per month
+        const totalPossible = totalStudents * maxPossibleDays;
+        attendanceRate = totalPossible > 0 ? Math.max(0, Math.round(((totalPossible - totalAbsences) / totalPossible) * 100)) : 100;
+        
+        const manyAbsencesIds = attendance.filter(a => (a.absent_count || 0) > 3).map(a => a.student_id);
+        if (manyAbsencesIds.length > 0 && students) {
+           absentManyTimes = students.filter(s => manyAbsencesIds.includes(s.id)).map(s => s.full_name);
+        }
+      }
+
+      // 3. Fetch Grades / Report Cards
+      const { data: reportCards } = await supabase
+        .from('monthly_report_cards')
+        .select('*')
+        .eq('class_id', activeClass?.id)
+        .eq('month', monthPrefix);
+
+      let weakStudents: string[] = [];
+      let topStudents: string[] = [];
+      if (reportCards && reportCards.length > 0 && students) {
+        // Weak students (average < 25)
+        const weakIds = reportCards.filter(r => r.average_score < 25).map(r => r.student_id);
+        weakStudents = students.filter(s => weakIds.includes(s.id)).map(s => s.full_name);
+
+        // Top students (rank 1, 2, 3)
+        const sorted = [...reportCards].sort((a, b) => (a.rank || 999) - (b.rank || 999));
+        const topIds = sorted.slice(0, 3).map(r => r.student_id);
+        topStudents = students.filter(s => topIds.includes(s.id)).map(s => s.full_name);
+      }
+
+      // 4. Fetch Home Visits
+      const { data: homeVisitsData } = await supabase
+        .from('home_visits')
+        .select('*')
+        .gte('date', `${monthPrefix}-01`)
+        .lte('date', `${monthPrefix}-31`); // crude date filter
+
+      let homeVisits = 0;
+      let parentMeetings = 0; // if we want to simulate or fetch this too
+      if (homeVisitsData && students) {
+        const studentIds = students.map(s => s.id);
+        homeVisits = homeVisitsData.filter(v => studentIds.includes(v.student_id)).length;
+      }
+
       setReport({
-        ...DEFAULT_REPORT,
+        month: `ខែ${new Date().getMonth() + 1} ${new Date().getFullYear()}`, // Need a real khmer month mapping
+        totalStudents,
+        totalGirls,
+        attendanceRate,
+        absentManyTimes,
+        weakStudents,
+        topStudents,
+        disciplineCases: 0,
+        parentMeetings,
+        homeVisits,
+        studentsNeedingSupport: weakStudents.length,
         teacherComments: 'ជារួមក្នុងខែនេះ អត្រាវត្តមាន និងការសិក្សារបស់សិស្សមានភាពល្អប្រសើរ។',
-        giepEvidence: '- បានចុះដល់ផ្ទះសិស្សរៀនយឺត ៤ គ្រួសារ\n- បានរៀបចំថ្នាក់បំប៉នគណិតវិទ្យា',
-        requestToPrincipal: 'សូមស្នើសុំសៀវភៅអានបន្ថែមសម្រាប់បណ្ណាល័យថ្នាក់។'
+        giepEvidence: homeVisits > 0 ? `- បានចុះដល់ផ្ទះសិស្ស ${homeVisits} គ្រួសារ` : '- មិនមានទិន្នន័យចុះផ្ទះសិស្សទេ',
+        requestToPrincipal: ''
       });
+      
       setStep('REVIEW');
-    }, 1500);
+    } catch (err) {
+      console.error(err);
+      alert('មានកំហុសក្នុងការទាញយកទិន្នន័យ។ សូមសាកល្បងម្តងទៀត។');
+      setStep('IDLE');
+    }
   };
 
   const handleSendToPrincipal = async () => {
@@ -265,7 +349,19 @@ export default function ReportsPage() {
             </label>
 
             <label className="block">
-              <span className="text-xs font-bold text-slate-600 mb-1.5 block">៣. សំណូមពរដល់នាយកសាលា</span>
+              <span className="text-xs font-bold text-slate-600 mb-1.5 block">៣. ចំនួនករណីវិន័យ</span>
+              <input 
+                type="number"
+                min="0"
+                value={report.disciplineCases} 
+                onChange={(e) => setReport({...report, disciplineCases: parseInt(e.target.value) || 0})}
+                className="w-full p-3 border border-slate-200 rounded-xl text-sm font-bold bg-slate-50 focus:bg-white focus:border-[#155EEF] transition-colors"
+                placeholder="ចំនួនករណីវិន័យ"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-xs font-bold text-slate-600 mb-1.5 block">៤. សំណូមពរដល់នាយកសាលា</span>
               <textarea 
                 value={report.requestToPrincipal} 
                 onChange={(e) => setReport({...report, requestToPrincipal: e.target.value})}

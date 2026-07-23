@@ -114,13 +114,13 @@ export default function PrincipalReportsPage() {
   const [showEwsModal, setShowEwsModal] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   
-  const [liveTrendData, setLiveTrendData] = useState<any[] | null>(null);
+  const [liveData, setLiveData] = useState<any | null>(null);
 
   useEffect(() => {
     async function loadData() {
       const data = await fetchPrincipalDashboardData();
-      if (data && data.trendData) {
-        setLiveTrendData(data.trendData);
+      if (data) {
+        setLiveData(data);
       }
     }
     loadData();
@@ -128,13 +128,23 @@ export default function PrincipalReportsPage() {
 
   const currentData = useMemo(() => {
     const base = MOCK_TERMS[selectedTerm];
-    if (liveTrendData) {
-      return { ...base, trendData: liveTrendData };
+    if (liveData) {
+      return { 
+        ...base, 
+        trendData: liveData.trendData,
+        students: liveData.totalStudents.toString(),
+        girls: liveData.girlsCount.toString(),
+        boys: liveData.boysCount.toString(),
+        attendance: liveData.overallAttendance,
+        gpa: liveData.overallGpa,
+        atRisk: liveData.atRiskCount.toString(),
+        tableData: liveData.tableData
+      };
     }
     return base;
-  }, [selectedTerm, liveTrendData]);
+  }, [selectedTerm, liveData]);
 
-  const atRiskStudents = [
+  const atRiskStudents = liveData?.atRiskList || [
     { id: '101', name: 'សៅ សុភាព', reasons: ['អវត្តមាន ៤ ដងក្នុងខែនេះ', 'ធ្លាក់ពិន្ទុគណិតវិទ្យា (៤៥)'], severity: 'high' as const },
     { id: '102', name: 'ដួង វិចិត្រ', reasons: ['ធ្លាក់ពិន្ទុរូបវិទ្យា និងគីមីវិទ្យា'], severity: 'medium' as const },
     { id: '103', name: 'ម៉ៅ រស្មី', reasons: ['បញ្ហាវិន័យ៖ ឈ្លោះប្រកែកគ្នា'], severity: 'high' as const },
@@ -142,9 +152,9 @@ export default function PrincipalReportsPage() {
   ];
 
 
-  const generateSvgPath = (data: typeof currentData.trendData, key: 'attendancePct' | 'gradePct') => {
+  const generateSvgPath = (data: any[], key: 'attendancePct' | 'gradePct') => {
     if (!data || data.length === 0) return '';
-    const points = data.map((d, i) => {
+    const points = data.map((d: any, i: number) => {
       const x = i * (500 / (data.length - 1 || 1));
       const y = 100 - d[key];
       return `${x},${y}`;
@@ -243,15 +253,18 @@ export default function PrincipalReportsPage() {
             </div>
             
             <div className="p-6 sm:p-8 overflow-y-auto space-y-4">
-              {atRiskStudents.map((student) => (
-                <div key={student.id} className="p-4 border border-slate-100 rounded-2xl bg-white shadow-sm flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+              {atRiskStudents.map((student: any) => (
+                <div key={student.id} className="p-4 border border-slate-100 rounded-2xl bg-slate-50 flex flex-col sm:flex-row sm:items-start gap-4">
+                  <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-sm shrink-0 mt-1">
+                    {student.name.charAt(0)}
+                  </div>
                   <div>
                     <h4 className="font-black text-slate-900 flex items-center gap-2">
                       {student.name}
                       {student.severity === 'high' && <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-black rounded-full">ធ្ងន់ធ្ងរ</span>}
                     </h4>
                     <ul className="mt-2 space-y-1">
-                      {student.reasons.map((r, i) => (
+                      {student.reasons.map((r: string, i: number) => (
                         <li key={i} className="text-xs font-bold text-slate-600 flex items-start gap-1.5">
                           <span className="text-rose-500 mt-0.5">•</span> {r}
                         </li>
@@ -358,7 +371,7 @@ export default function PrincipalReportsPage() {
               </svg>
             </div>
             <div className="absolute bottom-0 left-10 right-0 flex justify-between text-[11px] font-extrabold text-[#64748B] px-2">
-              {currentData.trendData.map((d, i) => <span key={i}>{d.monthLabel}</span>)}
+              {currentData.trendData.map((d: any, i: number) => <span key={i}>{d.monthLabel}</span>)}
             </div>
           </div>
         </div>
@@ -427,7 +440,7 @@ export default function PrincipalReportsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/80 text-sm font-semibold">
-              {currentData.tableData.map((r, idx) => (
+              {currentData.tableData.map((r: any, idx: number) => (
                 <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
                   <td className="py-4 px-6 font-extrabold text-slate-800 whitespace-nowrap">{r.grade}</td>
                   <td className="py-4 px-6 text-center text-slate-600">{r.classes} ថ្នាក់</td>
