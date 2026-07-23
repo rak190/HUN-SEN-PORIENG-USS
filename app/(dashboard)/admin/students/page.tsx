@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   Users, Search, Filter, FileSpreadsheet, 
-  Download, Edit2, Check, X, ShieldCheck
+  Download, Edit2, Check, X, ShieldCheck,
+  ArrowRightLeft, UserX
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import StudentMigrationModal from './components/StudentMigrationModal';
 
 export default function MasterStudentsPage() {
   const [students, setStudents] = useState<any[]>([]);
@@ -16,6 +18,9 @@ export default function MasterStudentsPage() {
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
+
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [isMigrationModalOpen, setIsMigrationModalOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -95,6 +100,25 @@ export default function MasterStudentsPage() {
     const matchesClass = filterClass === 'all' || s.class_name === filterClass;
     return matchesSearch && matchesClass;
   });
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedStudents(filteredStudents.map(s => s.id));
+    } else {
+      setSelectedStudents([]);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedStudents(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleMigrationComplete = () => {
+    fetchStudents();
+    setSelectedStudents([]);
+  };
 
   return (
     <div className="space-y-6 animate-fadeIn select-none pb-12 max-w-7xl mx-auto">
@@ -179,11 +203,43 @@ export default function MasterStudentsPage() {
           </div>
         </div>
 
+        {/* Bulk Actions Bar */}
+        {selectedStudents.length > 0 && (
+          <div className="bg-indigo-50/80 px-4 py-3 border-b border-indigo-100 flex items-center justify-between animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold text-indigo-800">
+                បានជ្រើសរើស {selectedStudents.length} នាក់
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setIsMigrationModalOpen(true)}
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors flex items-center gap-2"
+              >
+                <ArrowRightLeft className="w-4 h-4" /> ផ្ទេរថ្នាក់ (Migrate)
+              </button>
+              <button 
+                className="px-4 py-1.5 bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 text-xs font-bold rounded-lg transition-colors flex items-center gap-2"
+              >
+                <UserX className="w-4 h-4" /> ផ្អាកការសិក្សា
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div className="overflow-x-auto min-h-[400px]">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
+                <th className="p-4 w-12 text-center">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-slate-300 text-[#155EEF] focus:ring-[#155EEF] cursor-pointer"
+                    checked={filteredStudents.length > 0 && selectedStudents.length === filteredStudents.length}
+                    onChange={handleSelectAll}
+                  />
+                </th>
                 <th className="p-4 font-extrabold whitespace-nowrap">ឈ្មោះសិស្ស</th>
                 <th className="p-4 font-extrabold whitespace-nowrap">ភេទ</th>
                 <th className="p-4 font-extrabold whitespace-nowrap">អត្តលេខ</th>
@@ -210,7 +266,15 @@ export default function MasterStudentsPage() {
                   const isEditing = editingId === student.id;
 
                   return (
-                    <tr key={student.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <tr key={student.id} className={`hover:bg-slate-50/50 transition-colors group ${selectedStudents.includes(student.id) ? 'bg-blue-50/30' : ''}`}>
+                      <td className="p-4 text-center">
+                        <input 
+                          type="checkbox" 
+                          className="w-4 h-4 rounded border-slate-300 text-[#155EEF] focus:ring-[#155EEF] cursor-pointer"
+                          checked={selectedStudents.includes(student.id)}
+                          onChange={() => toggleSelect(student.id)}
+                        />
+                      </td>
                       <td className="p-4 font-extrabold text-slate-900 text-sm">
                         {isEditing ? (
                           <input type="text" className="border border-slate-300 rounded px-2 py-1 w-40" value={editForm.full_name} onChange={e => setEditForm({...editForm, full_name: e.target.value})} />
@@ -238,10 +302,16 @@ export default function MasterStudentsPage() {
                       </td>
                       <td className="p-4 text-center">
                         {isEditing ? (
-                          <label className="flex items-center justify-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={editForm.is_active} onChange={e => setEditForm({...editForm, is_active: e.target.checked})} className="w-4 h-4 text-[#155EEF] rounded border-slate-300 focus:ring-[#155EEF]" />
-                            <span className="text-xs font-bold text-slate-600">Active</span>
-                          </label>
+                          <select 
+                            className="border border-slate-300 rounded px-2 py-1 text-xs font-bold" 
+                            value={editForm.is_active ? 'active' : 'dropped'} 
+                            onChange={e => setEditForm({...editForm, is_active: e.target.value === 'active'})}
+                          >
+                            <option value="active">សកម្ម (Active)</option>
+                            <option value="dropped">បោះបង់ការសិក្សា (Dropped Out)</option>
+                            <option value="transferred">ផ្ទេរចេញ (Transferred Out)</option>
+                            <option value="suspended">ពន្យារការសិក្សា (Suspended)</option>
+                          </select>
                         ) : (
                           student.is_active ? (
                             <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-100">
@@ -278,6 +348,15 @@ export default function MasterStudentsPage() {
           </table>
         </div>
       </div>
+      
+      {isMigrationModalOpen && (
+        <StudentMigrationModal 
+          isOpen={isMigrationModalOpen} 
+          onClose={() => setIsMigrationModalOpen(false)} 
+          selectedStudentIds={selectedStudents}
+          onComplete={handleMigrationComplete}
+        />
+      )}
     </div>
   );
 }

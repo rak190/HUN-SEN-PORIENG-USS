@@ -15,15 +15,27 @@ export default function SystemHealthPage() {
   const handleBackup = () => {
     setIsBackingUp(true);
     setTimeout(() => {
+      // Mock CSV Export
+      const csvContent = "data:text/csv;charset=utf-8,id,student_name,subject,score\n1,Sokha,Math,45\n2,Bopha,Physics,35";
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `GIEP_Backup_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
       setIsBackingUp(false);
-      alert('ការបម្រុងទុកទិន្នន័យបានជោគជ័យ (Database Backup Successful)!');
-    }, 2000);
+      alert('ទិន្នន័យត្រូវបានទាញយកជា CSV ដោយជោគជ័យ (CSV Backup Downloaded)!');
+    }, 1500);
   };
 
   const logsList = [
+    { id: 'LOG-1094', time: '14:05 រសៀល', user: 'kruadmin041030', action: 'កែប្រែពិន្ទុ (Math: 35 -> 48) សម្រាប់សិស្ស ID: ST-9921', type: 'warn', status: 'បានកត់ត្រា' },
+    { id: 'LOG-1093', time: '13:45 រសៀល', user: 'kruadmin041030', action: 'ទាញយករបាយការណ៍ (REP-03)', type: 'info', status: 'ជោគជ័យ' },
     { id: 'LOG-1092', time: '11:32 ព្រឹក', user: 'kruadmin041030', action: 'ចូលប្រើប្រព័ន្ធ', type: 'info', status: 'ជោគជ័យ' },
-    { id: 'LOG-1091', time: '11:28 ព្រឹក', user: 'sysadmin_porieng', action: 'កែប្រែការកំណត់ Role', type: 'warn', status: 'បានកត់ត្រា' },
-    { id: 'LOG-1088', time: '09:12 ព្រឹក', user: 'unknown_guest', action: 'ព្យាយាមចូលប្រើប្រព័ន្ធ', type: 'error', status: 'បដិសេធ' },
+    { id: 'LOG-1091', time: '11:28 ព្រឹក', user: 'sysadmin_porieng', action: 'កែប្រែការកំណត់ Role របស់ user: teacher_sok', type: 'warn', status: 'បានកត់ត្រា' },
+    { id: 'LOG-1088', time: '09:12 ព្រឹក', user: 'unknown_guest', action: 'ព្យាយាមចូលប្រើប្រព័ន្ធជាមួយពាក្យសម្ងាត់ខុស', type: 'error', status: 'បដិសេធ' },
   ];
 
   const filteredLogs = logsList.filter(l => 

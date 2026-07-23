@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { 
   BookOpen, Plus, Search, Calendar, ChevronRight, CheckCircle2, 
-  Users, Building, School, Settings, ArrowRight, Save
+  Users, Building, School, Settings, ArrowRight, Save, Wand2, GraduationCap, AlertCircle
 } from 'lucide-react';
 
 export default function AcademicSetupPage() {
@@ -49,6 +49,12 @@ export default function AcademicSetupPage() {
         <div className={`flex items-center gap-3 ${activeStep >= 3 ? 'text-[#155EEF]' : 'text-slate-400'}`}>
           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black ${activeStep >= 3 ? 'bg-blue-100' : 'bg-slate-100'}`}>3</div>
           <span className="font-bold text-sm hidden sm:block">គ្រូបន្ទុកថ្នាក់</span>
+        </div>
+        <ChevronRight className="w-5 h-5 text-slate-300" />
+        
+        <div className={`flex items-center gap-3 ${activeStep >= 4 ? 'text-indigo-600' : 'text-slate-400'}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black ${activeStep >= 4 ? 'bg-indigo-100' : 'bg-slate-100'}`}>4</div>
+          <span className="font-bold text-sm hidden sm:block">ឡើងថ្នាក់</span>
         </div>
       </div>
 
@@ -196,10 +202,87 @@ export default function AcademicSetupPage() {
                 ត្រឡប់ក្រោយ
               </button>
               <button 
+                onClick={() => setActiveStep(4)}
+                className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-sm shadow-md flex items-center gap-2"
+              >
+                បន្ទាប់ (រៀបចំឡើងថ្នាក់) <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: Promotion Wizard */}
+        {activeStep === 4 && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex items-center gap-3 mb-6">
+              <Wand2 className="w-6 h-6 text-indigo-600" />
+              <h2 className="text-xl font-extrabold text-slate-800">ការឡើងថ្នាក់ដោយស្វ័យប្រវត្តិ (Promotion Wizard)</h2>
+            </div>
+            
+            <p className="text-sm font-semibold text-slate-600 mb-8">
+              កំណត់លក្ខខណ្ឌ ដើម្បីឲ្យប្រព័ន្ធធ្វើការរុញសិស្សទៅថ្នាក់ថ្មី ដោយស្វ័យប្រវត្តិ។ 
+              ទិន្នន័យឆ្នាំចាស់ {academicYear === '2025-2026' ? '2024-2025' : 'ឆ្នាំមុន'} នឹងត្រូវបានរក្សាទុកជា Archive។
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                {/* Source */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-700 uppercase">១. ថ្នាក់ប្រភព (Source Class)</label>
+                  <select className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-800 outline-none">
+                    <option>ថ្នាក់ ១០ ក</option>
+                    <option>ថ្នាក់ ១០ ខ</option>
+                  </select>
+                </div>
+                
+                {/* Condition */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-700 uppercase">២. លក្ខខណ្ឌ (Pass Criteria)</label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500 whitespace-nowrap">មធ្យមភាគ {`>=`}</span>
+                    <input type="number" defaultValue={25} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-800 text-center outline-none" />
+                  </div>
+                </div>
+
+                {/* Destination */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-700 uppercase">៣. ថ្នាក់គោលដៅ (Dest. Class)</label>
+                  <select className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-800 outline-none">
+                    <option>ថ្នាក់ ១១ ក</option>
+                    <option>ថ្នាក់ ១១ ខ</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-lg border border-amber-200 w-full sm:w-auto">
+                  <AlertCircle className="w-4 h-4" />
+                  <span className="text-xs font-bold">សិស្សដែលធ្លាក់ នឹងត្រូវបានកត់ត្រាជា "ត្រួតថ្នាក់" ដោយស្វ័យប្រវត្តិ។</span>
+                </div>
+                
+                <button 
+                  onClick={() => {
+                    alert(`ប្រព័ន្ធនឹងដំណើរការ:\n- បិទបញ្ជីថ្នាក់ ១០ក ឆ្នាំសិក្សាចាស់ (${academicYear === '2025-2026' ? '2024-2025' : 'ឆ្នាំមុន'})\n- បង្កើតទិន្នន័យសិស្សថ្មីសម្រាប់ឆ្នាំ ${academicYear}\n- សិស្សមានពិន្ទុ >= 25 នឹងចូលថ្នាក់ ១១ក\n- សិស្សមានពិន្ទុ < 25 នឹងជាប់ឈ្មោះជា 'ត្រួតថ្នាក់'\n\nទិន្នន័យត្រូវបានរក្សាទុកដោយសុវត្ថិភាព!`);
+                  }}
+                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-sm shadow-md flex items-center gap-2 w-full sm:w-auto justify-center"
+                >
+                  <GraduationCap className="w-4 h-4" /> ដំណើរការ (Execute)
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-between pt-8 border-t border-slate-100 mt-8">
+              <button 
+                onClick={() => setActiveStep(3)}
+                className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-sm transition-colors"
+              >
+                ត្រឡប់ក្រោយ
+              </button>
+              <button 
                 onClick={() => alert('រក្សាទុកការកំណត់សាលាដោយជោគជ័យ!')}
                 className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm shadow-md shadow-emerald-500/20 flex items-center gap-2"
               >
-                <Save className="w-4 h-4" /> រក្សាទុកទិន្នន័យ (Save)
+                <Save className="w-4 h-4" /> បញ្ចប់ការរៀបចំ (Finish Setup)
               </button>
             </div>
           </div>

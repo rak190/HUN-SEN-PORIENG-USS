@@ -230,6 +230,51 @@ export default function UserFormModal({
             </div>
           </div>
 
+          {/* Teacher Assignment Matrix (Only show if role === teacher) */}
+          {role === 'teacher' && (
+            <div className="pt-4 border-t border-slate-100">
+              <h4 className="text-sm font-extrabold text-slate-800 mb-3">ការកំណត់មុខវិជ្ជា និងបន្ទុកថ្នាក់ (Assignment Matrix)</h4>
+              
+              <div className="space-y-4">
+                {/* Subjects */}
+                <div>
+                  <label className="block text-[11px] font-extrabold text-slate-500 mb-2 uppercase">
+                    មុខវិជ្ជាបង្រៀន (Subjects)
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {['គណិតវិទ្យា', 'រូបវិទ្យា', 'គីមីវិទ្យា', 'ភាសាខ្មែរ', 'អង់គ្លេស', 'ប្រវត្តិវិទ្យា', 'ICT'].map(sub => (
+                      <label key={sub} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
+                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-slate-300 text-[#155EEF] focus:ring-[#155EEF]" />
+                        <span className="text-xs font-bold text-slate-700">{sub}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Classes & Homeroom */}
+                <div>
+                  <label className="block text-[11px] font-extrabold text-slate-500 mb-2 uppercase">
+                    ថ្នាក់រៀន និងបន្ទុកថ្នាក់ (Classes & Homeroom)
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {['១០ក', '១០ខ', '១១ក', '១១ខ', '១២ក', '១២ខ'].map(cls => (
+                      <div key={cls} className="p-2 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input type="checkbox" className="w-3.5 h-3.5 rounded border-slate-300 text-[#155EEF] focus:ring-[#155EEF]" />
+                          <span className="text-xs font-bold text-slate-700">ថ្នាក់ {cls}</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 pl-5 cursor-pointer opacity-70 hover:opacity-100 transition-opacity">
+                          <input type="checkbox" className="w-3 h-3 rounded-full border-amber-300 text-amber-500 focus:ring-amber-500" />
+                          <span className="text-[10px] font-bold text-amber-600">គ្រូបន្ទុកថ្នាក់</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
             <button

@@ -537,6 +537,15 @@ export default function AdminUsersPage() {
                               >
                                 <Edit2 className="w-3.5 h-3.5" /> កែប្រែ
                               </button>
+                              <button
+                                onClick={() => { 
+                                  setActiveDropdown(null); 
+                                  alert(`Password for ${u.name} has been reset to 123456`);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 flex items-center gap-2 cursor-pointer transition-colors"
+                              >
+                                <Key className="w-3.5 h-3.5" /> Reset Pass
+                              </button>
                               <div className="h-px w-full bg-slate-50 my-1" />
                               <button
                                 onClick={() => { setActiveDropdown(null); handleOpenDelete(u); }}
