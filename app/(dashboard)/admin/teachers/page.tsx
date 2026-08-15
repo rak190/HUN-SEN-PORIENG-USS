@@ -1,321 +1,501 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, Search, Filter, FileSpreadsheet, Download, 
-  CheckCircle2, XCircle, Edit2, Check, X, Building2,
-  MoreVertical, ShieldCheck, UserCircle
+  CheckCircle2, XCircle, Edit2, Check, X, ShieldCheck,
+  UserPlus, Lock, Unlock, KeyRound, AlertTriangle, Plus, ChevronDown, Upload, Save, Building
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { useTeachers } from './useTeachers';
 
-type Teacher = {
-  id: string;
-  full_name: string;
-  gender: string;
-  ministry_id: string;
-  subject_specialty: string;
-  qualification_level: string;
-  is_giep_trained: boolean;
-};
+export default function TeacherAccountsPage() {
+  const {
+    searchQuery,
+    setSearchQuery,
+    filterRole,
+    setFilterRole,
+    loading,
+    accounts,
+    filteredAccounts,
+    isAddingTeacher,
+    savingTeacherId,
+    batchResults,
+    setBatchResults,
+    draftGrid,
+    hasValidDrafts,
+    handleDraftChange,
+    handlePaste,
+    handleSaveDrafts,
+    handleKeyDown,
+    toggleStatus,
+    handleResetPassword,
+    handleUpdateTeacher,
+    handleDeleteTeacher,
+    handleExport,
+  } = useTeachers();
 
-export default function TeacherStructurePage() {
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterSubject, setFilterSubject] = useState('all');
-  const [filterGiep, setFilterGiep] = useState('all');
-  
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Partial<Teacher>>({});
+  const [showExcelMenu, setShowExcelMenu] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchTeachers();
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowExcelMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const fetchTeachers = async () => {
-    setLoading(true);
-    // Note: If no real data exists, we'll fall back to mock data
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, full_name, ministry_id, subject_specialty, qualification_level, is_giep_trained')
-      .in('role', ['teacher', 'monitor']); // assuming we want anyone who teaches
-
-    if (error || !data || data.length === 0) {
-      // Fallback to mock data for demo
-      setTeachers([
-        { id: '1', full_name: 'លោកគ្រូ សុខា', gender: 'ប្រុស', ministry_id: 'MOE-1001', subject_specialty: 'គណិតវិទ្យា', qualification_level: 'បរិញ្ញាបត្រ', is_giep_trained: true },
-        { id: '2', full_name: 'អ្នកគ្រូ នារី', gender: 'ស្រី', ministry_id: 'MOE-1002', subject_specialty: 'ភាសាខ្មែរ', qualification_level: 'បរិញ្ញាបត្រ', is_giep_trained: false },
-        { id: '3', full_name: 'លោកគ្រូ សម្បត្តិ', gender: 'ប្រុស', ministry_id: 'MOE-1003', subject_specialty: 'រូបវិទ្យា', qualification_level: 'អនុបណ្ឌិត', is_giep_trained: true },
-        { id: '4', full_name: 'អ្នកគ្រូ សុជាតា', gender: 'ស្រី', ministry_id: 'MOE-1004', subject_specialty: 'គីមីវិទ្យា', qualification_level: 'បរិញ្ញាបត្រ', is_giep_trained: false },
-        { id: '5', full_name: 'លោកគ្រូ វិចិត្រ', gender: 'ប្រុស', ministry_id: 'MOE-1005', subject_specialty: 'ICT', qualification_level: 'បរិញ្ញាបត្រ', is_giep_trained: true },
-      ]);
-    } else {
-      // Map data
-      const mapped = data.map((d: any) => ({
-        id: d.id,
-        full_name: d.full_name,
-        gender: 'មិនបញ្ជាក់', // Not in current schema, placeholder
-        ministry_id: d.ministry_id || 'N/A',
-        subject_specialty: d.subject_specialty || 'ទូទៅ',
-        qualification_level: d.qualification_level || 'បរិញ្ញាបត្រ',
-        is_giep_trained: d.is_giep_trained || false
-      }));
-      setTeachers(mapped);
-    }
-    setLoading(false);
-  };
-
-  const startEdit = (t: Teacher) => {
-    setEditingId(t.id);
-    setEditForm({ ...t });
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditForm({});
-  };
-
-  const saveEdit = async () => {
-    if (!editingId) return;
-    
-    // In a real app, make API call to save
-    // await supabase.from('profiles').update(editForm).eq('id', editingId);
-
-    setTeachers(teachers.map(t => t.id === editingId ? { ...t, ...editForm } : t));
-    setEditingId(null);
-    setEditForm({});
-  };
-
-  // Derived filters
-  const subjects = ['all', ...Array.from(new Set(teachers.map(t => t.subject_specialty)))];
+  const roles = ['all', 'teacher', 'admin', 'principal', 'monitor'];
   
-  const filteredTeachers = teachers.filter(t => {
-    const matchesSearch = t.full_name.includes(searchQuery) || t.ministry_id.includes(searchQuery);
-    const matchesSubject = filterSubject === 'all' || t.subject_specialty === filterSubject;
-    const matchesGiep = filterGiep === 'all' || 
-                        (filterGiep === 'trained' && t.is_giep_trained) || 
-                        (filterGiep === 'untrained' && !t.is_giep_trained);
-    return matchesSearch && matchesSubject && matchesGiep;
-  });
+  const activeCount = accounts.filter(a => a.status === 'សកម្ម').length;
+  const lockedCount = accounts.filter(a => a.status === 'បានផ្អាក').length;
 
   return (
-    <div className="space-y-6 animate-fadeIn select-none pb-12">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2">
+    <div className="space-y-6 animate-fadeIn select-none p-4 md:p-8 bg-slate-50 min-h-screen">
+      {/* Top Header */}
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 flex items-center gap-2">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
             <Users className="w-8 h-8 text-[#155EEF]" />
-            រចនាសម្ព័ន្ធគ្រូ (Teacher Structure)
+            គ្រប់គ្រងគណនីគ្រូបង្រៀន
           </h1>
           <p className="text-xs font-semibold text-[#64748B] mt-1">
-            គ្រប់គ្រងទិន្នន័យគ្រូបង្រៀន មុខវិជ្ជា និងប្រវត្តិការបណ្តុះបណ្តាល GIEP
+            បញ្ជីគណនីសរុប (Master Account Directory) សម្រាប់គ្រប់គ្រងសិទ្ធិបុគ្គលិក
           </p>
         </div>
-
-        <div className="flex gap-2">
-          <Link 
-            href="/admin/giep-import"
-            className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-bold rounded-xl text-xs shadow-sm transition-colors flex items-center gap-2"
-          >
-            <FileSpreadsheet className="w-4 h-4" /> ធ្វើសមកាលកម្ម (GIEP Sync)
-          </Link>
-          <button className="px-4 py-2 bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 font-bold rounded-xl text-xs shadow-sm transition-colors flex items-center gap-2">
-            <Download className="w-4 h-4" /> ទាញចេញ (Export)
-          </button>
+        
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+          <div className="relative flex-1 sm:flex-none sm:w-64 md:w-72">
+            <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="ស្វែងរកអ៊ីមែល ឬ ឈ្មោះ..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white border border-slate-100/80 rounded-full py-3 pl-11 pr-4 text-sm font-semibold shadow-xs focus:outline-none focus:ring-2 focus:ring-[#155EEF] text-slate-700 placeholder-slate-400 transition-all"
+            />
+          </div>
+          
+          <div className="flex gap-2 relative" ref={menuRef}>
+            {hasValidDrafts && (
+              <button 
+                onClick={handleSaveDrafts}
+                disabled={isAddingTeacher}
+                className={`px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-full text-sm transition-colors shadow-sm flex items-center justify-center gap-2 ${isAddingTeacher ? 'opacity-50 cursor-wait' : 'animate-pulse-subtle'}`}
+              >
+                {isAddingTeacher ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                រក្សាទុកគណនី ({draftGrid.filter(d => d.username && d.fullName).length})
+              </button>
+            )}
+            
+            <button 
+              onClick={() => setShowExcelMenu(!showExcelMenu)}
+              className="px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-full text-sm transition-colors flex items-center gap-2 border border-slate-200 shadow-sm whitespace-nowrap hover:border-slate-300"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Excel
+              <ChevronDown className="w-4 h-4 text-slate-400 ml-1" />
+            </button>
+            
+            {showExcelMenu && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2">
+                <button 
+                  onClick={() => { setShowExcelMenu(false); setShowImportModal(true); }}
+                  className="w-full text-left px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2 transition-colors"
+                >
+                  <Upload className="w-4 h-4" /> ទាញទិន្នន័យចូល (Import)
+                </button>
+                <button 
+                  onClick={() => { setShowExcelMenu(false); handleExport(); }}
+                  className="w-full text-left px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2 transition-colors"
+                >
+                  <Download className="w-4 h-4" /> ទាញទិន្នន័យចេញ (Export)
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-50 text-[#155EEF] rounded-xl flex items-center justify-center">
-            <Users className="w-6 h-6" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">
+          <div className="flex justify-between items-start">
+            <h2 className="text-4xl font-black text-white tracking-tight leading-none">{accounts.length || '០'}</h2>
+            <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all shadow-2xs">
+              <Users className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
+            </div>
           </div>
-          <div>
-            <h4 className="font-extrabold text-slate-800 text-2xl leading-none mb-1">{teachers.length}</h4>
-            <p className="text-[11px] font-bold text-slate-500">ចំនួនគ្រូបង្រៀនសរុប</p>
-          </div>
+          <p className="text-sm font-bold text-blue-100 mt-4">គណនីសរុប</p>
         </div>
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-            <ShieldCheck className="w-6 h-6" />
+        
+        <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
+          <div className="flex justify-between items-start">
+            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{activeCount || '០'}</h2>
+            <div className="w-9 h-9 bg-yellow-100 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+              <CheckCircle2 className="w-4 h-4 text-yellow-900" />
+            </div>
           </div>
-          <div>
-            <h4 className="font-extrabold text-slate-800 text-2xl leading-none mb-1">
-              {teachers.filter(t => t.is_giep_trained).length}
-            </h4>
-            <p className="text-[11px] font-bold text-slate-500">បានទទួលវគ្គបណ្តុះបណ្តាល GIEP</p>
-          </div>
+          <p className="text-sm font-bold text-yellow-950 mt-4">គណនីសកម្ម</p>
         </div>
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
-            <Building2 className="w-6 h-6" />
+        
+        <div className="bg-white rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-slate-100 hover:border-slate-200">
+          <div className="flex justify-between items-start">
+            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{lockedCount || '០'}</h2>
+            <div className="w-9 h-9 bg-rose-50 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+              <Lock className="w-4 h-4 text-rose-500" />
+            </div>
           </div>
-          <div>
-            <h4 className="font-extrabold text-slate-800 text-2xl leading-none mb-1">
-              {subjects.length - 1}
-            </h4>
-            <p className="text-[11px] font-bold text-slate-500">មុខវិជ្ជា/ឯកទេសសរុប</p>
+          <p className="text-sm font-bold text-slate-500 mt-4">គណនីជាប់សោ</p>
+        </div>
+        
+        <div className="bg-white rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-slate-100 hover:border-slate-200">
+          <div className="flex justify-between items-start">
+            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{roles.length - 1 || '០'}</h2>
+            <div className="w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+              <ShieldCheck className="w-4 h-4 text-slate-600" />
+            </div>
           </div>
+          <p className="text-sm font-bold text-slate-500 mt-4">តួនាទី (Roles)</p>
         </div>
       </div>
 
-      {/* Main Table Container */}
-      <div className="bg-white rounded-[24px] shadow-sm border border-slate-200/80 overflow-hidden">
-        
-        {/* Filters */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="relative w-full md:w-72">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="ស្វែងរកឈ្មោះ ឬអត្តលេខ..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#155EEF]"
-            />
+      <div className="bg-white p-6 rounded-[24px] shadow-xs border border-slate-100/80 flex flex-col justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+          <div>
+            <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+              <span>បញ្ជីគណនីសរុប</span>
+            </h3>
+            <p className="text-[11px] text-[#64748B] font-medium">គណនីទាំងអស់សម្រាប់ចូលប្រើប្រាស់ប្រព័ន្ធ</p>
           </div>
 
-          <div className="flex gap-2 w-full md:w-auto overflow-x-auto">
-            <div className="flex items-center gap-2 shrink-0">
-              <Filter className="w-4 h-4 text-slate-400" />
-              <select 
-                value={filterSubject}
-                onChange={(e) => setFilterSubject(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF] cursor-pointer"
-              >
-                <option value="all">មុខវិជ្ជាទាំងអស់</option>
-                {subjects.filter(s => s !== 'all').map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-            
+          <div className="relative">
             <select 
-              value={filterGiep}
-              onChange={(e) => setFilterGiep(e.target.value)}
-              className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF] shrink-0 cursor-pointer"
+              value={filterRole} 
+              onChange={e => setFilterRole(e.target.value)}
+              className="appearance-none pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200/60 rounded-full text-xs font-bold text-[#64748B] outline-none focus:ring-2 focus:ring-[#155EEF]/20 cursor-pointer w-full sm:w-48 transition-colors hover:bg-slate-100"
             >
-              <option value="all">ការបណ្តុះបណ្តាល (ទាំងអស់)</option>
-              <option value="trained">បានបណ្តុះបណ្តាល</option>
-              <option value="untrained">មិនទាន់បានបណ្តុះបណ្តាល</option>
+              <option value="all">គ្រប់តួនាទីទាំងអស់</option>
+              <option value="teacher">គ្រូបន្ទុកថ្នាក់ (Teacher)</option>
+              <option value="admin">អ្នកគ្រប់គ្រងប្រព័ន្ធ (Admin)</option>
+              <option value="principal">នាយកសាលា (Principal)</option>
+              <option value="monitor">ប្រធានថ្នាក់ (Monitor)</option>
             </select>
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
-                <th className="p-4 font-extrabold whitespace-nowrap">មន្ត្រី/គ្រូបង្រៀន</th>
-                <th className="p-4 font-extrabold whitespace-nowrap">អត្តលេខ</th>
-                <th className="p-4 font-extrabold whitespace-nowrap">មុខវិជ្ជាឯកទេស</th>
-                <th className="p-4 font-extrabold whitespace-nowrap">កម្រិតវប្បធម៌</th>
-                <th className="p-4 font-extrabold whitespace-nowrap text-center">GIEP Training</th>
-                <th className="p-4 font-extrabold text-right">សកម្មភាព</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
+        
+        {loading ? (
+          <div className="p-12 text-center text-slate-400 font-bold animate-pulse">កំពុងផ្ទុកទិន្នន័យ...</div>
+        ) : (
+          <div className="overflow-x-auto flex-1 max-h-[500px] pb-4">
+            <table className="w-full text-left border-collapse border-spacing-y-1 min-w-[800px]" style={{borderSpacing: '0 4px', borderCollapse: 'separate'}}>
+              <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm rounded-xl">
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-sm font-bold text-slate-400 animate-pulse">
-                    កំពុងផ្ទុកទិន្នន័យ...
-                  </td>
+                  <th className="px-4 py-2.5 text-[11px] font-black text-slate-400 uppercase tracking-wider w-[30%]">ឈ្មោះពេញ (Full Name)</th>
+                  <th className="px-4 py-2.5 text-[11px] font-black text-slate-400 uppercase tracking-wider w-[20%] text-center">តួនាទី (Role)</th>
+                  <th className="px-4 py-2.5 text-[11px] font-black text-slate-400 uppercase tracking-wider w-[15%] text-center">ស្ថានភាព</th>
+                  <th className="px-4 py-2.5 text-[11px] font-black text-slate-400 uppercase tracking-wider w-[20%] text-center">ឈ្មោះគណនី / ពាក្យសម្ងាត់</th>
+                  <th className="px-4 py-2.5 text-[11px] font-black text-slate-400 uppercase tracking-wider w-[15%] text-right">សកម្មភាព</th>
                 </tr>
-              ) : filteredTeachers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-sm font-bold text-slate-400">
-                    រកមិនឃើញទិន្នន័យដែលផ្គូផ្គងទេ
-                  </td>
-                </tr>
-              ) : (
-                filteredTeachers.map(teacher => {
-                  const isEditing = editingId === teacher.id;
+              </thead>
+              <tbody onPaste={handlePaste}>
+                {filteredAccounts.length === 0 && draftGrid.every(d => !d.fullName) && (
+                  <tr>
+                    <td colSpan={5} className="text-center py-8 text-slate-400 font-semibold text-sm">
+                      សូមវាយឈ្មោះគណនីនៅខាងក្រោម ឬទាញទិន្នន័យចូលតាម Excel (Paste)
+                    </td>
+                  </tr>
+                )}
+                
+                {filteredAccounts.map((a, index) => (
+                  <tr key={a.id} className="bg-white hover:bg-emerald-50/30 hover:shadow-xs transition-all duration-200 group rounded-xl relative">
+                    <td className="px-4 py-1.5 rounded-l-xl border-y border-l border-slate-100 group-hover:border-emerald-200 transition-colors relative">
+                      {savingTeacherId === a.id && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-3/4 bg-emerald-500 rounded-r-md animate-pulse"></div>}
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center font-black uppercase text-[11px] border ${a.status !== 'សកម្ម' ? 'bg-rose-50 text-rose-500 border-rose-200' : 'bg-emerald-100 text-emerald-700 border-emerald-200'}`}>
+                          {a.name?.replace(/លោកគ្រូ|អ្នកគ្រូ/, '').trim().substring(0, 1) || '?'}
+                        </div>
+                        <input
+                          type="text"
+                          data-row={index} data-col={0}
+                          onKeyDown={(e) => handleKeyDown(e, index, 0)}
+                          defaultValue={a.name}
+                          placeholder="ឈ្មោះពេញ"
+                          onBlur={(e) => {
+                            if (e.target.value !== a.name) {
+                              handleUpdateTeacher(a.id, { name: e.target.value });
+                            }
+                          }}
+                          className="bg-transparent border border-transparent outline-none font-extrabold text-slate-800 text-[13px] hover:bg-slate-50 focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 rounded-md px-2 py-1 w-full transition-all"
+                        />
+                      </div>
+                    </td>
+                    <td className="px-4 py-1.5 border-y border-slate-100 group-hover:border-emerald-200 transition-colors text-center">
+                      <select 
+                        value={a.role}
+                        data-row={index} data-col={1}
+                        onKeyDown={(e) => handleKeyDown(e, index, 1)}
+                        onChange={(e) => handleUpdateTeacher(a.id, { role: e.target.value })}
+                        className="w-full bg-transparent border border-transparent hover:border-slate-200 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 rounded-lg px-1 py-1 text-[11px] font-bold text-slate-700 outline-none transition-all cursor-pointer text-center"
+                      >
+                        <option value="teacher">គ្រូបន្ទុកថ្នាក់ (Teacher)</option>
+                        <option value="admin">អ្នកគ្រប់គ្រង (Admin)</option>
+                        <option value="principal">នាយក (Principal)</option>
+                        <option value="monitor">ប្រធានថ្នាក់ (Monitor)</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-1.5 border-y border-slate-100 group-hover:border-emerald-200 transition-colors text-center">
+                      {a.status === 'សកម្ម' ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[11px] font-bold border border-emerald-100">
+                          <CheckCircle2 className="w-3 h-3" /> សកម្ម
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 rounded-lg text-[11px] font-bold border border-rose-100">
+                          <Lock className="w-3 h-3" /> {a.status}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-1.5 border-y border-slate-100 group-hover:border-emerald-200 transition-colors text-center">
+                      <input
+                        type="text"
+                        data-row={index} data-col={2}
+                        onKeyDown={(e) => handleKeyDown(e, index, 2)}
+                        defaultValue={a.username}
+                        placeholder="Username"
+                        onBlur={(e) => {
+                          if (e.target.value !== a.username) {
+                            handleUpdateTeacher(a.id, { username: e.target.value });
+                          }
+                        }}
+                        className="bg-transparent border border-transparent outline-none font-mono font-bold text-slate-600 text-[11px] hover:bg-slate-50 focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 rounded-md px-2 py-1 w-full transition-all text-center"
+                      />
+                    </td>
+                    <td className="px-4 py-1.5 text-right rounded-r-xl border-y border-r border-slate-100 group-hover:border-emerald-200 transition-colors">
+                      <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-1">
+                        <button 
+                          onClick={() => handleResetPassword(a.id)}
+                          className="p-1.5 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded transition-colors cursor-pointer" 
+                          title="កំណត់ពាក្យសម្ងាត់ឡើងវិញ"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => toggleStatus(a.id, a.status)}
+                          className={`p-1.5 rounded transition-colors cursor-pointer ${a.status === 'សកម្ម' ? 'text-slate-400 hover:text-rose-500 hover:bg-rose-50' : 'text-slate-400 hover:text-emerald-500 hover:bg-emerald-50'}`} 
+                          title={a.status === 'សកម្ម' ? "ផ្អាកគណនី" : "បើកគណនី"}
+                        >
+                          {a.status === 'សកម្ម' ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteTeacher(a.id, a.name)} 
+                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer" 
+                          title="លុបគណនី"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
 
+                {/* Draft Grid for Quick Entry */}
+                {draftGrid.map((draft, index) => {
+                  const rowIdx = filteredAccounts.length + index;
                   return (
-                    <tr key={teacher.id} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-blue-100 text-[#155EEF] flex items-center justify-center shrink-0">
-                            <UserCircle className="w-6 h-6" />
+                    <tr key={`draft-${index}`} className="bg-slate-50/50 hover:bg-emerald-50/30 transition-all duration-200 group rounded-xl border-t border-slate-100">
+                      <td className="px-4 py-1.5 rounded-l-xl border-y border-l border-slate-200 border-dashed relative">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 rounded-lg shrink-0 bg-white text-slate-400 border border-slate-200 shadow-sm">
+                            <Plus className="w-3.5 h-3.5" />
                           </div>
-                          <div>
-                            <div className="font-extrabold text-slate-900 text-sm">
-                              {isEditing ? (
-                                <input type="text" className="border border-slate-300 rounded px-2 py-1 w-32" value={editForm.full_name} onChange={e => setEditForm({...editForm, full_name: e.target.value})} />
-                              ) : teacher.full_name}
-                            </div>
-                            <div className="text-[10px] font-bold text-slate-500">{teacher.gender}</div>
-                          </div>
+                          <input
+                            type="text"
+                            data-row={rowIdx} data-col={0}
+                            onKeyDown={(e) => handleKeyDown(e, rowIdx, 0)}
+                            placeholder={index === 0 ? "វាយឈ្មោះពេញថ្មីទីនេះ..." : "-"}
+                            value={draft.fullName}
+                            onChange={(e) => handleDraftChange(index, 'fullName', e.target.value)}
+                            disabled={isAddingTeacher}
+                            className="bg-transparent border border-transparent outline-none font-bold text-slate-700 text-[13px] hover:bg-white focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 rounded-md px-2 py-1.5 w-full transition-all placeholder:text-slate-300"
+                          />
                         </div>
                       </td>
-                      <td className="p-4 text-xs font-bold text-slate-700">
-                        {isEditing ? (
-                          <input type="text" className="border border-slate-300 rounded px-2 py-1 w-24 text-xs" value={editForm.ministry_id} onChange={e => setEditForm({...editForm, ministry_id: e.target.value})} />
-                        ) : (
-                          <span className="px-2 py-1 bg-slate-100 rounded-md font-mono">{teacher.ministry_id}</span>
-                        )}
+                      <td className="px-4 py-1.5 border-y border-slate-200 border-dashed text-center">
+                        <select 
+                          value={draft.role}
+                          data-row={rowIdx} data-col={1}
+                          onKeyDown={(e) => handleKeyDown(e, rowIdx, 1)}
+                          onChange={(e) => handleDraftChange(index, 'role', e.target.value)}
+                          disabled={isAddingTeacher}
+                          className={`w-full bg-transparent border border-transparent hover:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 rounded-lg px-2 py-1.5 text-[11px] font-bold outline-none transition-all cursor-pointer ${!draft.fullName ? 'text-slate-300' : 'text-slate-700'} text-center`}
+                        >
+                          <option value="teacher">គ្រូបន្ទុកថ្នាក់ (Teacher)</option>
+                          <option value="admin">អ្នកគ្រប់គ្រង (Admin)</option>
+                          <option value="principal">នាយក (Principal)</option>
+                          <option value="monitor">ប្រធានថ្នាក់ (Monitor)</option>
+                        </select>
                       </td>
-                      <td className="p-4 text-sm font-bold text-slate-700">
-                        {isEditing ? (
-                          <input type="text" className="border border-slate-300 rounded px-2 py-1 w-24 text-sm" value={editForm.subject_specialty} onChange={e => setEditForm({...editForm, subject_specialty: e.target.value})} />
-                        ) : teacher.subject_specialty}
+                      <td className="px-4 py-1.5 border-y border-slate-200 border-dashed text-center">
+                        <span className="text-[11px] font-semibold text-slate-400 italic">បង្កើតថ្មី</span>
                       </td>
-                      <td className="p-4 text-xs font-bold text-slate-600">
-                        {isEditing ? (
-                          <select className="border border-slate-300 rounded px-2 py-1 text-xs" value={editForm.qualification_level} onChange={e => setEditForm({...editForm, qualification_level: e.target.value})}>
-                            <option value="បរិញ្ញាបត្រ">បរិញ្ញាបត្រ</option>
-                            <option value="អនុបណ្ឌិត">អនុបណ្ឌិត</option>
-                            <option value="បណ្ឌិត">បណ្ឌិត</option>
-                            <option value="សញ្ញាបត្រគរុកោសល្យ">សញ្ញាបត្រគរុកោសល្យ</option>
-                          </select>
-                        ) : teacher.qualification_level}
+                      <td className="px-4 py-1.5 border-y border-slate-200 border-dashed relative">
+                        <div className="flex gap-2 w-full">
+                          <input
+                            type="text"
+                            data-row={rowIdx} data-col={2}
+                            onKeyDown={(e) => handleKeyDown(e, rowIdx, 2)}
+                            placeholder="Username"
+                            value={draft.username}
+                            onChange={(e) => handleDraftChange(index, 'username', e.target.value)}
+                            disabled={isAddingTeacher}
+                            className="bg-transparent border border-transparent outline-none font-bold text-slate-700 text-[13px] hover:bg-white focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 rounded-md px-2 py-1.5 w-1/2 transition-all placeholder:text-slate-300"
+                          />
+                          <input
+                            type="text"
+                            data-row={rowIdx} data-col={3}
+                            onKeyDown={(e) => handleKeyDown(e, rowIdx, 3)}
+                            placeholder="Password123!"
+                            value={draft.password}
+                            onChange={(e) => handleDraftChange(index, 'password', e.target.value)}
+                            disabled={isAddingTeacher}
+                            className="bg-transparent border border-transparent outline-none font-bold text-slate-700 text-[13px] hover:bg-white focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 rounded-md px-2 py-1.5 w-1/2 transition-all placeholder:text-slate-300"
+                          />
+                        </div>
                       </td>
-                      <td className="p-4 text-center">
-                        {isEditing ? (
-                          <label className="flex items-center justify-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={editForm.is_giep_trained} onChange={e => setEditForm({...editForm, is_giep_trained: e.target.checked})} className="w-4 h-4 text-[#155EEF] rounded border-slate-300 focus:ring-[#155EEF]" />
-                            <span className="text-xs font-bold text-slate-600">បានទទួល</span>
-                          </label>
-                        ) : (
-                          teacher.is_giep_trained ? (
-                            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3" /> YES
-                            </div>
-                          ) : (
-                            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 text-[10px] font-black border border-slate-200">
-                              <XCircle className="w-3 h-3" /> NO
-                            </div>
-                          )
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        {isEditing ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <button onClick={saveEdit} className="p-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg transition-colors">
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button onClick={cancelEdit} className="p-1.5 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-lg transition-colors">
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button onClick={() => startEdit(teacher)} className="p-2 text-slate-400 hover:text-[#155EEF] hover:bg-blue-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        )}
+                      <td className="px-4 py-1.5 border-y border-r border-slate-200 border-dashed rounded-r-xl">
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowImportModal(false)} />
+          <div className="relative w-full max-w-lg bg-white rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-slate-800">នាំចូលទិន្នន័យ (Import)</h3>
+                <p className="text-sm font-semibold text-slate-500 mt-1">ចម្លង និងដាក់ទិន្នន័យពី Excel (Copy & Paste)</p>
+              </div>
+              <button onClick={() => setShowImportModal(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 text-sm font-semibold text-slate-600">
+                <p className="mb-2">ទម្រង់ជួរឈរ (Columns):</p>
+                <div className="flex gap-2">
+                  <span className="px-2 py-1 bg-white border border-slate-200 rounded font-bold">ឈ្មោះពេញ (Full Name)</span>
+                  <span className="px-2 py-1 bg-white border border-slate-200 rounded font-bold">តួនាទី (Role)</span>
+                  <span className="px-2 py-1 bg-white border border-slate-200 rounded font-bold">ឈ្មោះគណនី (Username)</span>
+                  <span className="px-2 py-1 bg-white border border-slate-200 rounded font-bold">ពាក្យសម្ងាត់ (Password)</span>
+                </div>
+              </div>
+              <textarea 
+                className="w-full h-48 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-[#155EEF]/20 outline-none resize-none"
+                placeholder="Paste ទិន្នន័យទីនេះ..."
+                onPaste={(e) => {
+                   handlePaste(e);
+                   setShowImportModal(false);
+                }}
+              ></textarea>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {batchResults && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setBatchResults(null)} />
+          <div className="relative w-full max-w-2xl bg-white rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-500" /> លទ្ធផលនៃការបញ្ចូល (Batch Results)
+                </h3>
+                <p className="text-sm font-semibold text-slate-500 mt-1">
+                  ជោគជ័យ {batchResults.successes.length} គណនី / បរាជ័យ {batchResults.errors.length} គណនី
+                </p>
+              </div>
+              <button onClick={() => setBatchResults(null)} className="p-2 hover:bg-slate-200 rounded-xl transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              {batchResults.errors.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-bold text-rose-600 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" /> គណនីដែលបរាជ័យ (Failed)
+                  </h4>
+                  <div className="bg-rose-50 border border-rose-100 rounded-2xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-rose-100/50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-rose-700 font-bold">ឈ្មោះគណនី (Username)</th>
+                          <th className="px-4 py-2 text-left text-rose-700 font-bold">មូលហេតុ (Error)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {batchResults.errors.map((err, i) => (
+                          <tr key={i} className="border-t border-rose-100">
+                            <td className="px-4 py-2 font-mono text-rose-900 font-bold">{err.username}</td>
+                            <td className="px-4 py-2 text-rose-600">{err.error}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {batchResults.successes.filter(s => s.generatedPassword).length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-bold text-emerald-600 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> គណនីដែលទទួលបានជោគជ័យ និង PIN ថ្មី
+                  </h4>
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-2xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-emerald-100/50">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-emerald-800 font-bold">ឈ្មោះ (Name)</th>
+                          <th className="px-4 py-2 text-left text-emerald-800 font-bold">គណនី (Username)</th>
+                          <th className="px-4 py-2 text-left text-emerald-800 font-bold">ពាក្យសម្ងាត់ (PIN)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {batchResults.successes.filter(s => s.generatedPassword).map((s, i) => (
+                          <tr key={i} className="border-t border-emerald-100">
+                            <td className="px-4 py-2 text-emerald-900 font-bold">{s.name}</td>
+                            <td className="px-4 py-2 font-mono text-emerald-700">{s.username}</td>
+                            <td className="px-4 py-2 font-mono font-black text-emerald-900 tracking-wider bg-emerald-200/30">{s.generatedPassword}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-emerald-600 font-bold bg-emerald-100/50 p-3 rounded-xl">
+                    ⚠️ សូមថតទំព័រនេះ ឬចម្លងទុក ដើម្បីផ្ញើពាក្យសម្ងាត់ជូនម្ចាស់គណនី។ ពាក្យសម្ងាត់នេះនឹងមិនត្រូវបានបង្ហាញម្តងទៀតទេ។
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button 
+                onClick={() => setBatchResults(null)}
+                className="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-700 transition-colors"
+              >
+                បិទ (Close)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

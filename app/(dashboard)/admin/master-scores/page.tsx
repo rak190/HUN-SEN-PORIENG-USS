@@ -1,380 +1,336 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect } from 'react';
 import { 
-  FileSpreadsheet, Upload, Download, Search, 
-  Filter, CheckCircle2, AlertCircle, RefreshCw,
-  Building2, Users, FileEdit, Check, X, Lock, Unlock
+  FileSpreadsheet, AlertCircle, Search, 
+  Filter, CheckCircle2, Clock, Check,
+  Upload, Send, Building2
 } from 'lucide-react';
+import { MasterScoreUploadModal } from '@/components/admin/MasterScoreUploadModal';
 import { createClient } from '@/lib/supabase/client';
-import { MasterGradeImportModal } from '@/components/principal/MasterGradeImportModal';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
 
 export default function MasterScoresPage() {
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [gradesData, setGradesData] = useState<any[]>([]);
-  const [selectedPeriod, setSelectedPeriod] = useState('dec');
+  const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [classesStatus, setClassesStatus] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterClass, setFilterClass] = useState('all');
-
-  const [activeTab, setActiveTab] = useState<'tracking' | 'overrides'>('tracking');
-  const [isLocked, setIsLocked] = useState(false);
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editScore, setEditScore] = useState<number>(0);
+  const [filterStatus, setFilterStatus] = useState('all');
+  
+  const [draftCount, setDraftCount] = useState(0);
+  const [publishedClassesCount, setPublishedClassesCount] = useState(0);
+  
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   const supabase = createClient();
 
-  const startEdit = (g: any) => {
-    setEditingId(g.id);
-    setEditScore(g.total_score);
-  };
+  useEffect(() => {
+    const curMonth = new Date().getMonth();
+    const monthIds = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    setSelectedPeriod(monthIds[curMonth]);
+  }, []);
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditScore(0);
-  };
-
-  const saveEdit = async (id: string) => {
-    if (!id) return;
-    
-    const { error } = await supabase
-      .from('grades')
-      .update({ total_score: editScore })
-      .eq('id', id);
-
-    if (error) {
-      alert('Error updating score: ' + error.message);
-      return;
-    }
-
-    setGradesData(gradesData.map(g => g.id === id ? { ...g, total_score: editScore } : g));
-    setEditingId(null);
-  };
+  const todayStr = new Date().toLocaleDateString('km-KH', { month: 'long', year: 'numeric' });
 
   useEffect(() => {
-    fetchMasterGrades();
-  }, [selectedPeriod]);
+    if (!selectedPeriod) return;
+    
+    async function fetchStats() {
+      setLoading(true);
+      try {
+        // 1. Fetch all classes & their homeroom teachers
+        const { data: dbClasses, error: classErr } = await supabase
+          .from('classes')
+          .select('id, name, teacher_id, profiles:teacher_id(full_name)');
+          
+        if (classErr) {
+           console.error("Classes fetch error:", classErr.message, classErr.details, classErr.hint);
+        }
 
-  const fetchMasterGrades = async () => {
-    setLoading(true);
-    // Fetch grades with nested student and class data
-    const { data, error } = await supabase
-      .from('grades')
-      .select(`
-        id,
-        period,
-        total_score,
-        student:students(id, full_name, student_id_number, gender, class_id),
-        classes!grades_class_id_fkey(id, name)
-      `)
-      .eq('period', selectedPeriod)
-      .limit(500); // Limit for demo purposes
+        // 2. Fetch grades for selected period
+        const { data: gradesData, error: gradesErr } = await supabase
+          .from('grades')
+          .select('class_id, status')
+          .eq('period', selectedPeriod);
+          
+        if (gradesErr) {
+           console.error("Grades fetch error:", gradesErr.message, gradesErr.details, gradesErr.hint);
+        }
 
-    if (error || !data) {
-      console.error(error);
-      setGradesData([]);
-    } else {
-      // Flatten the data for the table
-      const formatted = data.map((g: any) => ({
-        id: g.id,
-        student_id: g.student?.id,
-        student_name: g.student?.full_name || 'Unknown',
-        student_id_number: g.student?.student_id_number || 'N/A',
-        gender: g.student?.gender === 'F' ? 'ស្រី' : 'ប្រុស',
-        class_name: g.classes?.name || 'Unknown Class',
-        total_score: g.total_score || 0
-      }));
-      setGradesData(formatted);
+        // Group status by class
+        const classStatusesMap: Record<string, 'published' | 'draft' | 'missing'> = {};
+        dbClasses?.forEach(c => {
+           classStatusesMap[c.id] = 'missing';
+        });
+
+        gradesData?.forEach(g => {
+           // If a class has ANY draft, consider it draft. 
+           // If it has published, it's published.
+           if (g.status === 'draft') {
+              if (classStatusesMap[g.class_id] !== 'published') {
+                 classStatusesMap[g.class_id] = 'draft';
+              }
+           } else if (g.status === 'published') {
+              classStatusesMap[g.class_id] = 'published';
+           }
+        });
+
+        // Compute counts
+        let dCount = 0;
+        let pCount = 0;
+        Object.values(classStatusesMap).forEach(status => {
+           if (status === 'draft') dCount++;
+           if (status === 'published') pCount++;
+        });
+
+        setDraftCount(dCount);
+        setPublishedClassesCount(pCount);
+
+        // Build array for table
+        const combined = dbClasses?.map(c => ({
+           id: c.id,
+           name: c.name,
+           teacher: (c.profiles as any)?.full_name || 'មិនមានគ្រូ',
+           status: classStatusesMap[c.id]
+        })) || [];
+
+        // Sort by name logically
+        combined.sort((a, b) => {
+          const numA = parseInt(a.name.match(/\d+/)?.[0] || '0', 10);
+          const numB = parseInt(b.name.match(/\d+/)?.[0] || '0', 10);
+          if (numA === numB) return a.name.localeCompare(b.name);
+          return numA - numB;
+        });
+        
+        setClassesStatus(combined);
+
+      } catch (err: any) {
+        console.error('Error fetching stats:', err.message || err);
+      } finally {
+        setLoading(false);
+      }
     }
-    setLoading(false);
+    
+    fetchStats();
+  }, [selectedPeriod, isPublishing, isUploadModalOpen]);
+
+  const handlePublishScores = async () => {
+    if (!window.confirm('តើអ្នកពិតជាចង់បោះពុម្ពផ្សាយពិន្ទុព្រាងទាំងអស់ទៅកាន់គ្រូបន្ទុកថ្នាក់មែនទេ? (Are you sure you want to publish all draft scores to teachers?)')) return;
+    
+    setIsPublishing(true);
+    try {
+       const { error } = await supabase
+         .from('grades')
+         .update({ status: 'published' })
+         .eq('status', 'draft')
+         .eq('period', selectedPeriod);
+         
+       if (error) throw error;
+       alert('ពិន្ទុត្រូវបានបោះពុម្ពផ្សាយជោគជ័យ! (Scores published successfully!)');
+       
+       // Force a refetch by toggling a piece of state or just resetting counts manually.
+       // The easiest is just trusting the user to wait for the next render.
+       setDraftCount(0);
+       setIsUploadModalOpen(false); // Just to trigger useEffect dependency
+    } catch (err: any) {
+       console.error(err);
+       alert('មានបញ្ហាក្នុងការបោះពុម្ពផ្សាយ៖ ' + err.message);
+    } finally {
+       setIsPublishing(false);
+       // Hack to force refetch
+       setSelectedPeriod(selectedPeriod + ' ');
+       setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
+    }
   };
 
-  const handleImportComplete = () => {
-    fetchMasterGrades();
-  };
-
-  const classList = ['all', ...Array.from(new Set(gradesData.map(g => g.class_name)))].sort();
-
-  const filteredGrades = gradesData.filter(g => {
-    const matchesSearch = g.student_name.includes(searchQuery) || g.student_id_number.includes(searchQuery);
-    const matchesClass = filterClass === 'all' || g.class_name === filterClass;
-    return matchesSearch && matchesClass;
+  const filteredClasses = classesStatus.filter(c => {
+    const matchesSearch = c.name.includes(searchQuery) || c.teacher.includes(searchQuery);
+    const matchesStatus = filterStatus === 'all' || c.status === filterStatus;
+    return matchesSearch && matchesStatus;
   });
 
+  const missingClasses = classesStatus.filter(c => c.status === 'missing');
+
+  if (loading && classesStatus.length === 0) {
+    return <div className="p-12 text-center text-slate-500 font-bold animate-pulse">កំពុងផ្ទុកទិន្នន័យ...</div>;
+  }
+
   return (
-    <div className="space-y-6 animate-fadeIn select-none pb-12 max-w-7xl mx-auto">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2 border-b border-slate-100">
+    <div className="space-y-6 animate-fadeIn select-none p-4 md:p-8 bg-slate-50 min-h-screen">
+      {/* Header & Controls */}
+      <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 flex items-center gap-2">
-            <FileSpreadsheet className="w-8 h-8 text-[#155EEF]" />
-            ផ្ទាំងគ្រប់គ្រងពិន្ទុរួម (Master Scores Dashboard)
+            <FileSpreadsheet className="w-7 h-7 text-[#155EEF]" />
+            ផ្ទាំងត្រួតពិនិត្យពិន្ទុសរុប
           </h1>
-          <p className="text-xs font-semibold text-[#64748B] mt-1">
-            ទាញចូល និងគ្រប់គ្រងពិន្ទុសរុបសម្រាប់គ្រប់ថ្នាក់រៀនទាំងអស់ក្នុងសាលា
+          <p className="text-sm font-semibold text-[#64748B] mt-1">
+            ទិដ្ឋភាពទូទៅនៃការបញ្ចូលពិន្ទុសិស្សប្រចាំខែ {todayStr}
           </p>
         </div>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-200">
+            <span className="text-xs font-bold text-slate-500 hidden sm:block">ខែ៖</span>
+            <select 
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+              className="appearance-none bg-transparent text-slate-700 py-1 pr-6 focus:outline-none font-bold text-sm cursor-pointer"
+            >
+              {ACADEMIC_PERIODS.map(p => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+          </div>
 
-        <div className="flex gap-2">
           <button 
-            onClick={() => setIsImportModalOpen(true)}
-            className="px-5 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-sm shadow-sm transition-all flex items-center gap-2"
+            onClick={() => setIsUploadModalOpen(true)}
+            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-all border border-slate-200 shadow-sm flex items-center gap-2"
           >
-            <Upload className="w-4 h-4" /> ទាញចូល (Import Master Excel)
+            <Upload className="w-4 h-4 text-[#155EEF]" /> អាប់ឡូតពិន្ទុ
+          </button>
+          
+          <button 
+            onClick={handlePublishScores}
+            disabled={isPublishing || draftCount === 0}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-emerald-500/20 flex items-center gap-2 disabled:opacity-50 disabled:shadow-none"
+          >
+            <Send className="w-4 h-4" /> {isPublishing ? 'កំពុងបោះពុម្ព...' : 'បោះពុម្ពផ្សាយ'}
           </button>
         </div>
       </header>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-50 text-[#155EEF] rounded-xl flex items-center justify-center">
-            <Users className="w-6 h-6" />
+      {/* Mini Stats Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-2">
+        <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">
+          <div className="flex justify-between items-start">
+            <h2 className="text-4xl font-black text-white tracking-tight leading-none">{classesStatus.length}</h2>
+            <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all shadow-2xs">
+              <Building2 className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
+            </div>
           </div>
-          <div>
-            <h4 className="font-extrabold text-slate-800 text-2xl leading-none mb-1">{gradesData.length}</h4>
-            <p className="text-[11px] font-bold text-slate-500">សិស្សមានពិន្ទុខែនេះ</p>
-          </div>
+          <p className="text-sm font-bold text-blue-100 mt-4">ថ្នាក់សរុប</p>
         </div>
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-            <Building2 className="w-6 h-6" />
+
+        <div className="bg-rose-500 rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-rose-400/30">
+          <div className="flex justify-between items-start">
+            <h2 className="text-4xl font-black text-white tracking-tight leading-none">{missingClasses.length}</h2>
+            <div className="w-9 h-9 bg-rose-400 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+              <AlertCircle className="w-4 h-4 text-rose-50" />
+            </div>
           </div>
-          <div>
-            <h4 className="font-extrabold text-slate-800 text-2xl leading-none mb-1">
-              {classList.length > 1 ? classList.length - 1 : 0}
-            </h4>
-            <p className="text-[11px] font-bold text-slate-500">ថ្នាក់រៀនបានបញ្ជូនពិន្ទុ</p>
-          </div>
+          <p className="text-sm font-bold text-rose-100 mt-4">មិនទាន់មានពិន្ទុ</p>
         </div>
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
-            <CheckCircle2 className="w-6 h-6" />
+
+        <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
+          <div className="flex justify-between items-start">
+            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{draftCount}</h2>
+            <div className="w-9 h-9 bg-yellow-100 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+              <Clock className="w-4 h-4 text-yellow-900" />
+            </div>
           </div>
-          <div>
-            <h4 className="font-extrabold text-slate-800 text-2xl leading-none mb-1">
-              100%
-            </h4>
-            <p className="text-[11px] font-bold text-slate-500">ភាពពេញលេញទិន្នន័យរួម</p>
+          <p className="text-sm font-bold text-yellow-950 mt-4">រង់ចាំបោះពុម្ពផ្សាយ</p>
+        </div>
+
+        <div className="bg-emerald-500 rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-emerald-400/30">
+          <div className="flex justify-between items-start">
+            <h2 className="text-4xl font-black text-white tracking-tight leading-none">{publishedClassesCount}</h2>
+            <div className="w-9 h-9 bg-emerald-400 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+              <CheckCircle2 className="w-4 h-4 text-emerald-50" />
+            </div>
           </div>
+          <p className="text-sm font-bold text-emerald-100 mt-4">បានបោះពុម្ពផ្សាយរួច</p>
         </div>
       </div>
 
-      {/* Main Container */}
-      <div className="bg-white rounded-[24px] shadow-sm border border-slate-200/80 overflow-hidden">
-        
-        {/* Tabs */}
-        <div className="flex border-b border-slate-100 px-4">
-          <button 
-            onClick={() => setActiveTab('tracking')}
-            className={`py-4 px-6 text-sm font-bold border-b-2 transition-colors ${activeTab === 'tracking' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            ផ្ទាំងតាមដានការបញ្ជូលពិន្ទុ (Submission Tracking)
-          </button>
-          <button 
-            onClick={() => setActiveTab('overrides')}
-            className={`py-4 px-6 text-sm font-bold border-b-2 transition-colors ${activeTab === 'overrides' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            បញ្ជីពិន្ទុរួម និងកែប្រែជំនួស (Master Proxy Overrides)
-          </button>
-        </div>
-
-        {activeTab === 'tracking' && (
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-black text-slate-800">ស្ថានភាពបញ្ជូនពិន្ទុប្រចាំខែ</h3>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1 text-xs font-bold text-slate-600"><span className="w-3 h-3 rounded-full bg-emerald-500"></span> រួចរាល់</div>
-                <div className="flex items-center gap-1 text-xs font-bold text-slate-600"><span className="w-3 h-3 rounded-full bg-yellow-400"></span> កំពុងបញ្ចូល</div>
-                <div className="flex items-center gap-1 text-xs font-bold text-slate-600"><span className="w-3 h-3 rounded-full bg-rose-500"></span> មិនទាន់មាន</div>
-                
-                <button 
-                  onClick={() => setIsLocked(!isLocked)}
-                  className={`ml-4 px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center gap-2 ${isLocked ? 'bg-rose-100 text-rose-700 border border-rose-200 hover:bg-rose-200' : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'}`}
-                >
-                  {isLocked ? (
-                    <><Lock className="w-4 h-4" /> ដោះសោរ (Unlock)</>
-                  ) : (
-                    <><Unlock className="w-4 h-4" /> ចាក់សោរទិន្នន័យ (Lock Month)</>
-                  )}
-                </button>
-              </div>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr>
-                    <th className="p-3 border-b border-slate-200 bg-slate-50 text-xs font-black text-slate-500">ថ្នាក់រៀន</th>
-                    {['គណិតវិទ្យា', 'រូបវិទ្យា', 'គីមីវិទ្យា', 'ជីវវិទ្យា', 'ភាសាខ្មែរ', 'ប្រវត្តិវិទ្យា', 'ICT'].map(sub => (
-                      <th key={sub} className="p-3 border-b border-slate-200 bg-slate-50 text-xs font-black text-slate-500 text-center">{sub}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {['១០ក', '១០ខ', '១១ក', '១១ខ', '១២ក', '១២ខ'].map(cls => (
-                    <tr key={cls} className="hover:bg-slate-50/50">
-                      <td className="p-3 text-sm font-black text-slate-800">{cls}</td>
-                      {[1, 2, 3, 4, 5, 6, 7].map(i => {
-                        // Mock random statuses for visual effect
-                        const rand = Math.random();
-                        let statusColor = 'bg-rose-100 text-rose-600';
-                        let Icon = X;
-                        if (rand > 0.4) { statusColor = 'bg-emerald-100 text-emerald-600'; Icon = Check; }
-                        else if (rand > 0.1) { statusColor = 'bg-yellow-100 text-yellow-700'; Icon = AlertCircle; }
-                        
-                        return (
-                          <td key={i} className="p-3 text-center">
-                            <div className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${statusColor}`}>
-                              <Icon className="w-4 h-4" />
-                            </div>
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      {/* Live Tracking Table */}
+      <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 overflow-hidden flex flex-col mt-8">
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2 mr-4">
+               <Building2 className="w-5 h-5 text-[#155EEF]" />
+               តាមដានស្ថានភាពថ្នាក់ (Live Tracking)
+            </h2>
+            <select 
+              value={filterStatus} 
+              onChange={e => setFilterStatus(e.target.value)}
+              className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#155EEF]/20 shadow-sm cursor-pointer"
+            >
+              <option value="all">គ្រប់ស្ថានភាពទាំងអស់</option>
+              <option value="published">🟢 បានបោះពុម្ពផ្សាយរួច</option>
+              <option value="draft">🟡 រង់ចាំបោះពុម្ពផ្សាយ</option>
+              <option value="missing">🔴 មិនទាន់មានពិន្ទុ</option>
+            </select>
           </div>
-        )}
-
-        {activeTab === 'overrides' && (
-          <>
-            {/* Filters */}
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="flex gap-4 w-full md:w-auto overflow-x-auto">
-            <div className="flex items-center gap-2 shrink-0">
-              <label className="text-xs font-bold text-slate-500">ខែ/ឆមាស:</label>
-              <select 
-                value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF] cursor-pointer"
-              >
-                {ACADEMIC_PERIODS.map(p => (
-                  <option key={p.id} value={p.id}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="flex items-center gap-2 shrink-0">
-              <Filter className="w-4 h-4 text-slate-400" />
-              <select 
-                value={filterClass}
-                onChange={(e) => setFilterClass(e.target.value)}
-                className="bg-white border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF] cursor-pointer"
-              >
-                <option value="all">គ្រប់ថ្នាក់រៀន</option>
-                {classList.filter(c => c !== 'all').map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="relative w-full md:w-72 shrink-0">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="relative w-full sm:w-64 group">
+            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#155EEF] transition-colors" />
             <input
               type="text"
-              placeholder="ស្វែងរកឈ្មោះ ឬអត្តលេខ..."
+              placeholder="ស្វែងរកឈ្មោះថ្នាក់ ឬ គ្រូ..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#155EEF]"
+              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-11 pr-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#155EEF]/20 transition-all shadow-sm"
             />
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto min-h-[400px]">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-black text-slate-500 uppercase tracking-wider">
-                <th className="p-4 font-extrabold whitespace-nowrap w-16">ល.រ</th>
-                <th className="p-4 font-extrabold whitespace-nowrap">ឈ្មោះសិស្ស</th>
-                <th className="p-4 font-extrabold whitespace-nowrap">ភេទ</th>
-                <th className="p-4 font-extrabold whitespace-nowrap">អត្តលេខ</th>
-                <th className="p-4 font-extrabold whitespace-nowrap">ថ្នាក់រៀន</th>
-                <th className="p-4 font-extrabold whitespace-nowrap text-right">ពិន្ទុសរុប</th>
-                <th className="p-4 font-extrabold text-right">សកម្មភាព</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">ថ្នាក់រៀន</th>
+                <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">គ្រូបន្ទុកថ្នាក់</th>
+                <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 text-center">ស្ថានភាពពិន្ទុប្រចាំខែ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-sm font-bold text-slate-400 animate-pulse">
-                    កំពុងទាញយកទិន្នន័យពិន្ទុ...
+              {filteredClasses.map((c) => (
+                <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="font-extrabold text-slate-800 text-sm">{c.name}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="font-bold text-slate-600 text-xs">{c.teacher}</span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    {c.status === 'published' && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-xs font-bold shadow-sm">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> បានបោះពុម្ពផ្សាយ
+                      </span>
+                    )}
+                    {c.status === 'draft' && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-full text-xs font-bold shadow-sm">
+                        <Clock className="w-3.5 h-3.5" /> រង់ចាំការបោះពុម្ពផ្សាយ
+                      </span>
+                    )}
+                    {c.status === 'missing' && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-100 rounded-full text-xs font-bold shadow-sm">
+                        <AlertCircle className="w-3.5 h-3.5" /> មិនទាន់មានពិន្ទុ
+                      </span>
+                    )}
                   </td>
                 </tr>
-              ) : filteredGrades.length === 0 ? (
+              ))}
+              {filteredClasses.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-sm font-bold text-slate-400 flex flex-col items-center">
-                    <FileSpreadsheet className="w-12 h-12 text-slate-200 mb-2" />
-                    មិនមានទិន្នន័យពិន្ទុសម្រាប់ខែនេះ ឬថ្នាក់នេះទេ។ សូមចុច "ទាញចូល" ដើម្បីបញ្ចូល។
-                  </td>
+                  <td colSpan={3} className="p-12 text-center text-slate-500 font-bold">គ្មានទិន្នន័យ</td>
                 </tr>
-              ) : (
-                filteredGrades.map((g, idx) => {
-                  const isEditing = editingId === g.id;
-                  
-                  return (
-                    <tr key={g.id} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="p-4 text-xs font-bold text-slate-400">{idx + 1}</td>
-                      <td className="p-4 font-extrabold text-slate-900 text-sm">{g.student_name}</td>
-                      <td className="p-4 text-xs font-bold text-slate-500">{g.gender}</td>
-                      <td className="p-4 text-xs font-bold text-slate-500 font-mono bg-slate-50 rounded px-2">{g.student_id_number}</td>
-                      <td className="p-4">
-                        <span className="px-2.5 py-1 bg-[#155EEF]/10 text-[#155EEF] font-black text-xs rounded-lg border border-[#155EEF]/20">
-                          {g.class_name}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right font-black text-slate-900 text-base">
-                        {isEditing ? (
-                          <input 
-                            type="number" 
-                            className="border border-slate-300 rounded px-2 py-1 w-20 text-right" 
-                            value={editScore} 
-                            onChange={e => setEditScore(Number(e.target.value))} 
-                          />
-                        ) : g.total_score}
-                      </td>
-                      <td className="p-4 text-right">
-                        {isEditing ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => saveEdit(g.id)} className="p-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg transition-colors">
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button onClick={cancelEdit} className="p-1.5 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-lg transition-colors">
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button 
-                            onClick={() => startEdit(g)}
-                            className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                            title="កែប្រែពិន្ទុ (Override Score)"
-                          >
-                            <FileEdit className="w-4 h-4" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
               )}
             </tbody>
           </table>
         </div>
-        </>
-        )}
       </div>
 
-      <MasterGradeImportModal 
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        onImportComplete={handleImportComplete}
+      <MasterScoreUploadModal 
+        isOpen={isUploadModalOpen} 
+        onClose={() => {
+           setIsUploadModalOpen(false);
+           // Force refetch hack
+           setSelectedPeriod(selectedPeriod + ' ');
+           setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
+        }} 
+        selectedPeriod={selectedPeriod}
       />
     </div>
   );

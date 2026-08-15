@@ -1,294 +1,202 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  BookOpen, Plus, Search, Calendar, ChevronRight, CheckCircle2, 
-  Users, Building, School, Settings, ArrowRight, Save, Wand2, GraduationCap, AlertCircle
+  School, Calendar, Plus, Save, Trash2, Edit3, Check, X, FileSpreadsheet, 
+  Download, Upload, AlertTriangle, Search, Users, Building, 
+  CalendarDays, Server, ChevronDown, CalendarCheck, ClipboardList
 } from 'lucide-react';
 
-export default function AcademicSetupPage() {
-  const [activeStep, setActiveStep] = useState(1);
-  const [academicYear, setAcademicYear] = useState('2025-2026');
+const MOCK_YEARS = [
+  { id: '1', name: '2025-2026', startDate: '01 វិច្ឆិកា 2025', endDate: '30 កញ្ញា 2026', isActive: true },
+  { id: '2', name: '2024-2025', startDate: '01 វិច្ឆិកា 2024', endDate: '30 កញ្ញា 2025', isActive: false },
+];
 
-  // Mock data for classes
-  const mockClasses = [
-    { id: '10A', name: 'ថ្នាក់ ១០ ក', shift: 'ព្រឹក', teacher: 'សុខ សាន្ត' },
-    { id: '10B', name: 'ថ្នាក់ ១០ ខ', shift: 'ព្រឹក', teacher: 'មិនទាន់ចាត់តាំង' },
-    { id: '11A', name: 'ថ្នាក់ ១១ ក', shift: 'រសៀល', teacher: 'ចាន់ ធូ' },
-  ];
+export default function PremiumMoEYSAcademicSetupPage() {
+  const [loading, setLoading] = useState(true);
+  const [academicYears, setAcademicYears] = useState<any[]>(MOCK_YEARS);
+  const [selectedYearId, setSelectedYearId] = useState<string | null>(null);
+  const [showYearModal, setShowYearModal] = useState(false);
+
+  useEffect(() => {
+    fetchAcademicYears();
+  }, []);
+
+  const fetchAcademicYears = async () => {
+    try {
+      const res = await fetch('/api/admin/academic-years');
+      const data = await res.json();
+      if (data.academicYears && data.academicYears.length > 0) {
+        setAcademicYears(data.academicYears);
+        const activeYear = data.academicYears.find((y: any) => y.is_active);
+        if (activeYear) setSelectedYearId(activeYear.id);
+        else setSelectedYearId(data.academicYears[0].id);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="space-y-6 animate-fadeIn select-none max-w-5xl mx-auto pb-12">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-100">
+    <div className="space-y-6 animate-fadeIn select-none p-4 md:p-8 bg-slate-50 min-h-screen">
+      
+      {/* Top Header */}
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 flex items-center gap-2">
-            <School className="w-8 h-8 text-[#155EEF]" />
-            ការកំណត់សាលារៀន (School Setup)
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+            <CalendarDays className="w-8 h-8 text-[#155EEF]" />
+            រចនាសម្ព័ន្ធឆ្នាំសិក្សា
           </h1>
-          <p className="text-xs font-semibold text-[#64748B] mt-1">
-            ដំណើរការរៀបចំឆ្នាំសិក្សា និងចាត់តាំងថ្នាក់រៀន តាមស្ដង់ដារ MoEYS SIS
+          <p className="text-xs font-semibold text-[#64748B] mt-0.5">
+            រៀបចំរចនាសម្ព័ន្ធមូលដ្ឋានសម្រាប់ប្រព័ន្ធសាលារៀន (GEIP Standard)
           </p>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+          <button onClick={() => setShowYearModal(true)} className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-full text-sm transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap group cursor-pointer">
+            <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" /> ឆ្នាំសិក្សាថ្មី
+          </button>
         </div>
       </header>
 
-      {/* Stepper Workflow */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-[20px] shadow-xs border border-slate-100">
-        <div className={`flex items-center gap-3 ${activeStep >= 1 ? 'text-[#155EEF]' : 'text-slate-400'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black ${activeStep >= 1 ? 'bg-blue-100' : 'bg-slate-100'}`}>1</div>
-          <span className="font-bold text-sm hidden sm:block">ឆ្នាំសិក្សា</span>
-        </div>
-        <ChevronRight className="w-5 h-5 text-slate-300" />
-        
-        <div className={`flex items-center gap-3 ${activeStep >= 2 ? 'text-[#155EEF]' : 'text-slate-400'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black ${activeStep >= 2 ? 'bg-blue-100' : 'bg-slate-100'}`}>2</div>
-          <span className="font-bold text-sm hidden sm:block">បង្កើតថ្នាក់រៀន</span>
-        </div>
-        <ChevronRight className="w-5 h-5 text-slate-300" />
-        
-        <div className={`flex items-center gap-3 ${activeStep >= 3 ? 'text-[#155EEF]' : 'text-slate-400'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black ${activeStep >= 3 ? 'bg-blue-100' : 'bg-slate-100'}`}>3</div>
-          <span className="font-bold text-sm hidden sm:block">គ្រូបន្ទុកថ្នាក់</span>
-        </div>
-        <ChevronRight className="w-5 h-5 text-slate-300" />
-        
-        <div className={`flex items-center gap-3 ${activeStep >= 4 ? 'text-indigo-600' : 'text-slate-400'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black ${activeStep >= 4 ? 'bg-indigo-100' : 'bg-slate-100'}`}>4</div>
-          <span className="font-bold text-sm hidden sm:block">ឡើងថ្នាក់</span>
+      {/* Action Switcher */}
+      <div className="flex flex-wrap items-center gap-2 pt-1 border-b border-slate-200/60 pb-4">
+        <div className="flex gap-1.5 p-1 bg-white rounded-xl border border-slate-100 shadow-xs">
+          <button 
+            type="button" 
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] transition-all bg-[#FFCF59] text-yellow-950 shadow-2xs font-extrabold cursor-default"
+          >
+            <CalendarDays className="w-3.5 h-3.5" /> ឆ្នាំសិក្សា
+          </button>
         </div>
       </div>
 
-      {/* Step Content */}
-      <div className="bg-white rounded-[24px] shadow-sm border border-slate-100/80 p-6 sm:p-8 overflow-hidden relative">
-        
-        {/* STEP 1: Academic Year */}
-        {activeStep === 1 && (
-          <div className="space-y-6 animate-fadeIn">
-            <div className="flex items-center gap-3 mb-6">
-              <Calendar className="w-6 h-6 text-indigo-600" />
-              <h2 className="text-xl font-extrabold text-slate-800">កំណត់ឆ្នាំសិក្សាបច្ចុប្បន្ន</h2>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">ឆ្នាំសិក្សា (Academic Year)</label>
-                <select 
-                  value={academicYear}
-                  onChange={(e) => setAcademicYear(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black text-slate-800 focus:border-[#155EEF] focus:ring-1 focus:ring-[#155EEF] outline-none"
-                >
-                  <option value="2025-2026">២០២៥ - ២០២៦</option>
-                  <option value="2024-2025">២០២៤ - ២០២៥</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700">កាលបរិច្ឆេទចូលរៀន (Start Date)</label>
-                <input type="date" defaultValue="2025-11-01" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-[#155EEF] outline-none" />
+      <div className="space-y-6 animate-fadeIn">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-6">
+          {/* Card 1: Active Year (Blue) */}
+          <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">
+            <div className="flex justify-between items-start">
+              <h2 className="text-3xl lg:text-4xl font-black text-white tracking-tight leading-none">
+                {academicYears.find(y => y.is_active || y.isActive)?.name || 'មិនមាន'}
+              </h2>
+              <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all shadow-2xs">
+                <CalendarDays className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
               </div>
             </div>
-
-            <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 flex items-start gap-3 mt-4">
-              <Settings className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-xs font-bold text-amber-800 leading-relaxed">
-                ការកំណត់ឆ្នាំសិក្សានឹងជះឥទ្ធិពលដល់ការទាញយករបាយការណ៍ SIS ទាំងអស់។ សូមប្រាកដថាអ្នកបានជ្រើសរើសឆ្នាំសិក្សាត្រឹមត្រូវមុននឹងបន្ត។
-              </p>
+            <p className="text-sm font-bold text-blue-100 mt-4">ឆ្នាំសិក្សាសកម្ម</p>
+          </div>
+          
+          {/* Card 2: Upcoming / Past Years (Yellow) */}
+          <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
+            <div className="flex justify-between items-start">
+              <h2 className="text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-none">
+                {academicYears.filter(y => !(y.is_active || y.isActive)).length || '0'}
+              </h2>
+              <div className="w-9 h-9 bg-yellow-100 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+                <Server className="w-4 h-4 text-yellow-900" />
+              </div>
             </div>
+            <p className="text-sm font-bold text-yellow-950 mt-4">ឆ្នាំផ្សេងៗ</p>
+          </div>
 
-            <div className="flex justify-end pt-4">
-              <button 
-                onClick={() => setActiveStep(2)}
-                className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-sm shadow-md flex items-center gap-2"
-              >
-                បន្ទាប់ (បង្កើតថ្នាក់រៀន) <ArrowRight className="w-4 h-4" />
-              </button>
+          {/* Card 3: Total Years (White) */}
+          <div className="bg-white rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-slate-100 hover:border-slate-200">
+            <div className="flex justify-between items-start">
+              <h2 className="text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-none">{academicYears.length || '0'}</h2>
+              <div className="w-9 h-9 bg-indigo-50 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+                <Calendar className="w-4 h-4 text-indigo-600" />
+              </div>
+            </div>
+            <p className="text-sm font-bold text-slate-500 mt-4">ចំនួនឆ្នាំសរុប</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-[24px] shadow-xs border border-slate-100/80 flex flex-col justify-between">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+                <span>បញ្ជីឆ្នាំសិក្សា (Academic Years)</span>
+              </h3>
+              <p className="text-[11px] text-[#64748B] font-medium">កំណត់ត្រាឆ្នាំសិក្សាទាំងអស់ក្នុងប្រព័ន្ធ</p>
             </div>
           </div>
-        )}
 
-        {/* STEP 2: Classes */}
-        {activeStep === 2 && (
-          <div className="space-y-6 animate-fadeIn">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <Building className="w-6 h-6 text-emerald-600" />
-                <h2 className="text-xl font-extrabold text-slate-800">គ្រប់គ្រងថ្នាក់រៀនសរុប</h2>
-              </div>
-              <button className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold rounded-lg text-xs flex items-center gap-2 border border-emerald-200">
-                <Plus className="w-4 h-4" /> បន្ថែមថ្នាក់រៀន
-              </button>
-            </div>
-
-            <div className="overflow-hidden border border-slate-200 rounded-2xl">
-              <table className="w-full text-left">
-                <thead className="bg-slate-50 text-xs font-black text-slate-500 uppercase tracking-wider border-b border-slate-200">
-                  <tr>
-                    <th className="px-6 py-4">ឈ្មោះថ្នាក់</th>
-                    <th className="px-6 py-4">វេនសិក្សា (Shift)</th>
-                    <th className="px-6 py-4 text-center">ស្ថានភាព</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm font-bold text-slate-700">
-                  {mockClasses.map((cls, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">{cls.name}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs ${cls.shift === 'ព្រឹក' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                          {cls.shift}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full text-[10px] border border-emerald-100">Active</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex justify-between pt-4">
-              <button 
-                onClick={() => setActiveStep(1)}
-                className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-sm transition-colors"
-              >
-                ត្រឡប់ក្រោយ
-              </button>
-              <button 
-                onClick={() => setActiveStep(3)}
-                className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-sm shadow-md flex items-center gap-2"
-              >
-                បន្ទាប់ (ចាត់តាំងគ្រូ) <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: Assign Teachers */}
-        {activeStep === 3 && (
-          <div className="space-y-6 animate-fadeIn">
-            <div className="flex items-center gap-3 mb-6">
-              <Users className="w-6 h-6 text-purple-600" />
-              <h2 className="text-xl font-extrabold text-slate-800">ចាត់តាំងគ្រូបន្ទុកថ្នាក់ (Homeroom Assignment)</h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {mockClasses.map((cls, idx) => (
-                <div key={idx} className="p-5 border border-slate-200 rounded-2xl bg-white shadow-xs hover:shadow-md transition-shadow">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="font-black text-lg text-slate-900">{cls.name}</h3>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase">{cls.shift}</p>
-                    </div>
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
-                      <BookOpen className="w-4 h-4 text-slate-400" />
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">គ្រូបន្ទុកថ្នាក់</label>
-                    <select className={`w-full p-2 border rounded-lg text-xs font-bold outline-none ${cls.teacher === 'មិនទាន់ចាត់តាំង' ? 'border-rose-300 text-rose-600 bg-rose-50' : 'border-slate-200 text-slate-700 bg-slate-50'}`}>
-                      <option>{cls.teacher}</option>
-                      {cls.teacher === 'មិនទាន់ចាត់តាំង' && <option>ជ្រើសរើសគ្រូ...</option>}
-                    </select>
-                  </div>
+          <div className="space-y-3 pr-1">
+            {academicYears.map(y => (
+              <div key={y.id} className="flex gap-3.5 items-start p-3.5 rounded-2xl bg-white hover:bg-slate-50 transition-all border border-slate-100/80 hover:border-slate-200 group relative shadow-2xs">
+                <div className={`p-3 rounded-2xl shadow-sm shrink-0 ${y.is_active || y.isActive ? 'bg-[#FFCF59] text-yellow-950' : 'bg-slate-100 text-slate-500'}`}>
+                  <Calendar className="w-5 h-5" />
                 </div>
-              ))}
-            </div>
-
-            <div className="flex justify-between pt-8 border-t border-slate-100 mt-8">
-              <button 
-                onClick={() => setActiveStep(2)}
-                className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-sm transition-colors"
-              >
-                ត្រឡប់ក្រោយ
-              </button>
-              <button 
-                onClick={() => setActiveStep(4)}
-                className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-sm shadow-md flex items-center gap-2"
-              >
-                បន្ទាប់ (រៀបចំឡើងថ្នាក់) <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 4: Promotion Wizard */}
-        {activeStep === 4 && (
-          <div className="space-y-6 animate-fadeIn">
-            <div className="flex items-center gap-3 mb-6">
-              <Wand2 className="w-6 h-6 text-indigo-600" />
-              <h2 className="text-xl font-extrabold text-slate-800">ការឡើងថ្នាក់ដោយស្វ័យប្រវត្តិ (Promotion Wizard)</h2>
-            </div>
-            
-            <p className="text-sm font-semibold text-slate-600 mb-8">
-              កំណត់លក្ខខណ្ឌ ដើម្បីឲ្យប្រព័ន្ធធ្វើការរុញសិស្សទៅថ្នាក់ថ្មី ដោយស្វ័យប្រវត្តិ។ 
-              ទិន្នន័យឆ្នាំចាស់ {academicYear === '2025-2026' ? '2024-2025' : 'ឆ្នាំមុន'} នឹងត្រូវបានរក្សាទុកជា Archive។
-            </p>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
-                {/* Source */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 uppercase">១. ថ្នាក់ប្រភព (Source Class)</label>
-                  <select className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-800 outline-none">
-                    <option>ថ្នាក់ ១០ ក</option>
-                    <option>ថ្នាក់ ១០ ខ</option>
-                  </select>
-                </div>
-                
-                {/* Condition */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 uppercase">២. លក្ខខណ្ឌ (Pass Criteria)</label>
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-500 whitespace-nowrap">មធ្យមភាគ {`>=`}</span>
-                    <input type="number" defaultValue={25} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-800 text-center outline-none" />
+                    <h4 className="text-sm font-extrabold text-slate-900 truncate group-hover:text-[#155EEF] transition-colors">
+                      {y.name}
+                    </h4>
+                    {y.is_active || y.isActive ? (
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 shrink-0 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> សកម្ម
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
+                        បញ្ចប់
+                      </span>
+                    )}
                   </div>
+                  <p className="text-xs text-[#64748B] mt-1 font-medium leading-relaxed">
+                    ចាប់ផ្តើម: <span className="font-bold text-slate-600">{y.start_date || y.startDate || '-'}</span> • បញ្ចប់: <span className="font-bold text-slate-600">{y.end_date || y.endDate || '-'}</span>
+                  </p>
                 </div>
-
-                {/* Destination */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 uppercase">៣. ថ្នាក់គោលដៅ (Dest. Class)</label>
-                  <select className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-800 outline-none">
-                    <option>ថ្នាក់ ១១ ក</option>
-                    <option>ថ្នាក់ ១១ ខ</option>
-                  </select>
+                <div className="flex flex-col items-end justify-between shrink-0 h-full">
+                  {!(y.is_active || y.isActive) && (
+                    <button className="text-[11px] font-extrabold text-[#155EEF] hover:underline cursor-pointer">
+                      ដាក់ជាសកម្ម
+                    </button>
+                  )}
+                  <button className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 transition-all mt-1 cursor-pointer" title="លុបកំណត់ត្រា">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
-              <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between">
-                <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-lg border border-amber-200 w-full sm:w-auto">
-                  <AlertCircle className="w-4 h-4" />
-                  <span className="text-xs font-bold">សិស្សដែលធ្លាក់ នឹងត្រូវបានកត់ត្រាជា "ត្រួតថ្នាក់" ដោយស្វ័យប្រវត្តិ។</span>
+      {/* MODALS */}
+      {showYearModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowYearModal(false)} />
+          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-xl font-black text-slate-800">បង្កើតឆ្នាំសិក្សាថ្មី</h3>
+              <button onClick={() => setShowYearModal(false)} className="p-2 hover:bg-slate-50 rounded-full transition-colors cursor-pointer"><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#64748B] mb-1">ឈ្មោះឆ្នាំសិក្សា</label>
+                <input type="text" placeholder="2025-2026" className="w-full bg-slate-50 border border-slate-200/60 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#155EEF] outline-none transition-all" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#64748B] mb-1">ថ្ងៃចាប់ផ្តើម</label>
+                  <input type="date" className="w-full bg-slate-50 border border-slate-200/60 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-[#155EEF] outline-none transition-all" />
                 </div>
-                
-                <button 
-                  onClick={() => {
-                    alert(`ប្រព័ន្ធនឹងដំណើរការ:\n- បិទបញ្ជីថ្នាក់ ១០ក ឆ្នាំសិក្សាចាស់ (${academicYear === '2025-2026' ? '2024-2025' : 'ឆ្នាំមុន'})\n- បង្កើតទិន្នន័យសិស្សថ្មីសម្រាប់ឆ្នាំ ${academicYear}\n- សិស្សមានពិន្ទុ >= 25 នឹងចូលថ្នាក់ ១១ក\n- សិស្សមានពិន្ទុ < 25 នឹងជាប់ឈ្មោះជា 'ត្រួតថ្នាក់'\n\nទិន្នន័យត្រូវបានរក្សាទុកដោយសុវត្ថិភាព!`);
-                  }}
-                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-sm shadow-md flex items-center gap-2 w-full sm:w-auto justify-center"
-                >
-                  <GraduationCap className="w-4 h-4" /> ដំណើរការ (Execute)
-                </button>
+                <div>
+                  <label className="block text-xs font-bold text-[#64748B] mb-1">ថ្ងៃបញ្ចប់</label>
+                  <input type="date" className="w-full bg-slate-50 border border-slate-200/60 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-[#155EEF] outline-none transition-all" />
+                </div>
               </div>
             </div>
-
-            <div className="flex justify-between pt-8 border-t border-slate-100 mt-8">
-              <button 
-                onClick={() => setActiveStep(3)}
-                className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-sm transition-colors"
-              >
-                ត្រឡប់ក្រោយ
-              </button>
-              <button 
-                onClick={() => alert('រក្សាទុកការកំណត់សាលាដោយជោគជ័យ!')}
-                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm shadow-md shadow-emerald-500/20 flex items-center gap-2"
-              >
-                <Save className="w-4 h-4" /> បញ្ចប់ការរៀបចំ (Finish Setup)
-              </button>
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3 justify-end">
+              <button onClick={() => setShowYearModal(false)} className="px-6 py-2.5 font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-full transition-colors shadow-xs cursor-pointer">បោះបង់</button>
+              <button onClick={() => setShowYearModal(false)} className="px-6 py-2.5 font-bold text-white bg-[#155EEF] hover:bg-blue-700 rounded-full transition-colors shadow-md shadow-blue-500/20 cursor-pointer">បង្កើត</button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
     </div>
   );
 }

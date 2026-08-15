@@ -50,12 +50,14 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
           else gender = 'M';
 
           const phone = row['លេខទូរសព្ទ'] || row['Phone'] || row['Parent Phone'] || '';
+          const deskNumber = row['ប្លង់តុ'] || row['Desk Number'] || row['Seat'] || null;
 
           return {
             student_id_number: String(idNum).trim(),
             full_name: String(fullName).trim(),
             gender,
             parent_phone: String(phone).trim(),
+            desk_number: deskNumber ? String(deskNumber).trim() : null,
             is_active: true,
           };
         }).filter(s => s.full_name !== '');
@@ -71,14 +73,15 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
 
   const handleDownloadTemplate = () => {
     const wsData = [
-      { 'អត្តលេខ': 'ID-001', 'គោត្តនាម និងនាម': 'សុខ សាន្ត', 'ភេទ': 'M', 'លេខទូរសព្ទ': '012345678' },
-      { 'អត្តលេខ': 'ID-002', 'គោត្តនាម និងនាម': 'កែវ ធីតា', 'ភេទ': 'F', 'លេខទូរសព្ទ': '098765432' }
+      { 'អត្តលេខ': 'ID-001', 'គោត្តនាម និងនាម': 'សុខ សាន្ត', 'ភេទ': 'M', 'ប្លង់តុ': '001', 'លេខទូរសព្ទ': '012345678' },
+      { 'អត្តលេខ': 'ID-002', 'គោត្តនាម និងនាម': 'កែវ ធីតា', 'ភេទ': 'F', 'ប្លង់តុ': '002', 'លេខទូរសព្ទ': '098765432' }
     ];
     const ws = XLSX.utils.json_to_sheet(wsData);
     
     ws['!cols'] = [
       { wch: 15 },
       { wch: 30 },
+      { wch: 10 },
       { wch: 10 },
       { wch: 20 },
     ];

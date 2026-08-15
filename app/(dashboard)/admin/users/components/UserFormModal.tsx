@@ -23,6 +23,8 @@ export default function UserFormModal({
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'teacher' | 'principal' | 'admin' | 'monitor'>('teacher');
   const [schoolCode, setSchoolCode] = useState('Porieng-2026');
+  const [homeroomGrade, setHomeroomGrade] = useState('');
+  const [homeroomSection, setHomeroomSection] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -32,12 +34,24 @@ export default function UserFormModal({
       setPassword(''); // Keep empty when editing unless changing password
       setRole(initialData.role || 'teacher');
       setSchoolCode(initialData.school || 'Porieng-2026');
+      
+      // Parse existing homeroomClass if available
+      if (initialData.homeroomClass) {
+        const parts = initialData.homeroomClass.split(' ');
+        setHomeroomGrade(parts[0] || '');
+        setHomeroomSection(parts[1] || '');
+      } else {
+        setHomeroomGrade('');
+        setHomeroomSection('');
+      }
     } else {
       setFullName('');
       setUsername('');
       setPassword('');
       setRole('teacher');
       setSchoolCode('Porieng-2026');
+      setHomeroomGrade('');
+      setHomeroomSection('');
     }
     setErrorMsg('');
   }, [initialData, isOpen]);
@@ -59,6 +73,8 @@ export default function UserFormModal({
       return;
     }
 
+    const homeroomClass = homeroomGrade && homeroomSection ? `${homeroomGrade} ${homeroomSection.trim()}` : undefined;
+
     try {
       await onSave({
         fullName,
@@ -66,6 +82,7 @@ export default function UserFormModal({
         password,
         role,
         schoolCode,
+        homeroomClass,
       });
     } catch (err: any) {
       setErrorMsg(err.message || 'មានបញ្ហាក្នុងការរក្សាទុក');
@@ -254,22 +271,30 @@ export default function UserFormModal({
                 {/* Classes & Homeroom */}
                 <div>
                   <label className="block text-[11px] font-extrabold text-slate-500 mb-2 uppercase">
-                    ថ្នាក់រៀន និងបន្ទុកថ្នាក់ (Classes & Homeroom)
+                    គ្រូបន្ទុកថ្នាក់ (Homeroom Class - Auto Create)
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {['១០ក', '១០ខ', '១១ក', '១១ខ', '១២ក', '១២ខ'].map(cls => (
-                      <div key={cls} className="p-2 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input type="checkbox" className="w-3.5 h-3.5 rounded border-slate-300 text-[#155EEF] focus:ring-[#155EEF]" />
-                          <span className="text-xs font-bold text-slate-700">ថ្នាក់ {cls}</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 pl-5 cursor-pointer opacity-70 hover:opacity-100 transition-opacity">
-                          <input type="checkbox" className="w-3 h-3 rounded-full border-amber-300 text-amber-500 focus:ring-amber-500" />
-                          <span className="text-[10px] font-bold text-amber-600">គ្រូបន្ទុកថ្នាក់</span>
-                        </label>
-                      </div>
-                    ))}
+                  <div className="flex gap-3">
+                    <select
+                      value={homeroomGrade}
+                      onChange={(e) => setHomeroomGrade(e.target.value)}
+                      className="w-1/2 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]"
+                    >
+                      <option value="">ជ្រើសរើសកម្រិត</option>
+                      {[7, 8, 9, 10, 11, 12].map(g => (
+                        <option key={g} value={g}>ថ្នាក់ទី {g}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={homeroomSection}
+                      onChange={(e) => setHomeroomSection(e.target.value)}
+                      placeholder="ក, ខ, A, B..."
+                      className="w-1/2 px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]"
+                    />
                   </div>
+                  <p className="text-[10px] text-slate-400 font-semibold mt-1.5">
+                    ប្រសិនបើថ្នាក់នេះមិនទាន់មាន ប្រព័ន្ធនឹងបង្កើតដោយស្វ័យប្រវត្តិ។
+                  </p>
                 </div>
               </div>
             </div>

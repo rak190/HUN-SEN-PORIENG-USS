@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(req: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user || user.user_metadata?.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
+  }
+
   const adminClient = createAdminClient();
   const body = await req.json();
 

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import QRCode from 'react-qr-code';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -39,7 +39,9 @@ import {
   MessageCircle,
   AlertCircle,
   Server,
-  FileText
+  FileText,
+  CalendarDays,
+  Award
 } from 'lucide-react';
 
 interface MenuItem {
@@ -93,36 +95,33 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'principal-settings', label: 'School Settings', khmerLabel: 'ការកំណត់សាលា', href: '/principal/settings', icon: Building2, roles: ['principal'] },
 
   // --- ADMIN TABS (ICT Focal Teacher / GIEP Assistant) ---
-  { 
-    id: 'admin-system', label: 'System', khmerLabel: 'ប្រព័ន្ធ', icon: Settings, roles: ['admin'],
+  { id: 'admin-dashboard', label: 'Dashboard', khmerLabel: 'ផ្ទាំងគ្រប់គ្រង', href: '/admin', icon: LayoutDashboard, roles: ['admin'] },
+  {
+    id: 'admin-structure-group', label: 'Structure', khmerLabel: 'រចនាសម្ព័ន្ធ', icon: Building2, roles: ['admin'],
     children: [
-      { id: 'admin-dashboard', label: 'Admin Dashboard', khmerLabel: 'ផ្ទាំងគ្រប់គ្រងសាលា', href: '/admin', icon: LayoutDashboard, roles: ['admin'], badge: 'ទូទៅ' },
-      { id: 'admin-school-info', label: 'School Info', khmerLabel: 'ព័ត៌មានសាលា', href: '/admin/giep-import', icon: Building2, roles: ['admin'] },
-      { id: 'admin-academic-setup', label: 'Academic Structure', khmerLabel: 'រចនាសម្ព័ន្ធឆ្នាំសិក្សា', href: '/admin/academic-setup', icon: BookOpen, roles: ['admin'] },
-      { id: 'admin-users', label: 'Manage Accounts', khmerLabel: 'គ្រប់គ្រងគណនី', href: '/admin/users', icon: UserCog, roles: ['admin'] },
-      { id: 'admin-classes', label: 'Classes', khmerLabel: 'ថ្នាក់រៀន', href: '/classes', icon: Users, roles: ['admin'] },
+      { id: 'admin-school-info', label: 'School Info', khmerLabel: 'ព័ត៌មានសាលា', href: '/admin/school-info', icon: School, roles: ['admin'] },
+      { id: 'admin-academic-setup', label: 'School Structure', khmerLabel: 'រចនាសម្ព័ន្ធឆ្នាំសិក្សា', href: '/admin/academic-setup', icon: CalendarDays, roles: ['admin'] },
+      { id: 'admin-exam-standards', label: 'Exam Standards', khmerLabel: 'ស្តង់ដារការប្រលង', href: '/admin/exam-standards', icon: Award, roles: ['admin'] },
     ]
   },
   {
-    id: 'admin-teachers', label: 'Teacher Structure', khmerLabel: 'រចនាសម្ព័ន្ធគ្រូ', icon: UserCog, roles: ['admin'],
+    id: 'admin-users-group', label: 'Account Management', khmerLabel: 'ការគ្រប់គ្រងគណនី', icon: UserCog, roles: ['admin'],
     children: [
-      { id: 'admin-teacher-list', label: 'Teacher List', khmerLabel: 'បញ្ជីគ្រូបង្រៀន', href: '/admin/teachers', icon: Users, roles: ['admin'] },
+      { id: 'admin-teachers', label: 'Staff Accounts', khmerLabel: 'គណនីបុគ្គលិក', href: '/admin/teachers', icon: Users, roles: ['admin'] },
+      { id: 'admin-classes', label: 'Classes', khmerLabel: 'ថ្នាក់រៀន', href: '/admin/classes', icon: BookOpen, roles: ['admin'] },
     ]
   },
   {
-    id: 'admin-students', label: 'Student Data', khmerLabel: 'ទិន្នន័យសិស្ស', icon: Database, roles: ['admin'],
+    id: 'admin-data-group', label: 'Data', khmerLabel: 'ទិន្នន័យ', icon: Database, roles: ['admin'],
     children: [
-      { id: 'admin-student-list', label: 'Master Student List', khmerLabel: 'បញ្ជីសិស្សសរុប', href: '/admin/students', icon: Users, roles: ['admin'] },
-      { id: 'admin-attendance', label: 'Master Attendance', khmerLabel: 'អវត្តមានសរុប', href: '/admin/attendance', icon: Calendar, roles: ['admin'] },
+      { id: 'admin-students', label: 'Student List', khmerLabel: 'បញ្ជីរាយនាមសិស្ស', href: '/admin/students', icon: GraduationCap, roles: ['admin'] },
+      { id: 'admin-scores', label: 'Exam Scores', khmerLabel: 'ពិន្ទុប្រលង', href: '/admin/master-scores', icon: FileSpreadsheet, roles: ['admin'] },
+      { id: 'admin-attendance', label: 'Total Attendance', khmerLabel: 'វត្តមានសរុប', href: '/admin/attendance', icon: Calendar, roles: ['admin'] },
+      { id: 'admin-certificates', label: 'Certificates', khmerLabel: 'បណ្ណសរសើរ', href: '/admin/certificates', icon: Award, roles: ['admin'] },
+      { id: 'admin-moeys-reports', label: 'Reports', khmerLabel: 'របាយការណ៍', href: '/admin/moeys-reports', icon: FileText, roles: ['admin'] },
     ]
   },
-  {
-    id: 'admin-results', label: 'Academic Results', khmerLabel: 'លទ្ធផលសិក្សា', icon: FileSpreadsheet, roles: ['admin'],
-    children: [
-      { id: 'admin-grades', label: 'Master Scores', khmerLabel: 'ពិន្ទុរួម (Master File)', href: '/admin/master-scores', icon: FileEdit, roles: ['admin'] },
-      { id: 'admin-moeys-reports', label: 'MoEYS Reports', khmerLabel: 'របាយការណ៍ក្រសួង', href: '/admin/moeys-reports', icon: FileText, roles: ['admin'] },
-    ]
-  },
+
 
   // --- MONITOR TABS (Class Monitor) ---
   { id: 'monitor-attendance', label: 'Daily Attendance', khmerLabel: 'ស្រង់វត្តមានប្រចាំថ្ងៃ', href: '/monitor/attendance', icon: Calendar, roles: ['monitor'], badge: 'ស្រង់' },
@@ -136,6 +135,7 @@ interface SidebarProps {
 
 export default function Sidebar({ onClose, className }: SidebarProps = {}) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { profile, logout } = useAuth();
   const userRole = profile?.role || 'teacher';
@@ -148,7 +148,11 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
     const initialExpanded: string[] = [];
     MENU_ITEMS.forEach(item => {
       if (item.children) {
-        if (item.children.some(child => child.href && (pathname === child.href || pathname.startsWith(`${child.href}/`)))) {
+        if (item.children.some(child => {
+          if (!child.href) return false;
+          const basePath = child.href.split('?')[0];
+          return pathname === basePath || pathname.startsWith(`${basePath}/`);
+        })) {
           initialExpanded.push(item.id);
         }
       }
@@ -202,7 +206,8 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
                     <div className="pl-4 pr-2 space-y-1 mt-1">
                       {item.children.map(child => {
                         if (!child.href) return null;
-                        const isChildActive = pathname === child.href || pathname.startsWith(`${child.href}/`);
+                        const basePath = child.href.split('?')[0];
+                        const isChildActive = pathname === basePath || pathname.startsWith(`${basePath}/`);
                         const ChildIcon = child.icon;
                         
                         return (
@@ -240,7 +245,8 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
 
             // Standalone item
             if (!item.href) return null;
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const basePath = item.href?.split('?')[0] || '';
+            const isActive = pathname === basePath || pathname.startsWith(`${basePath}/`);
             return (
               <Link
                 key={item.id}
@@ -275,10 +281,10 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
       <div className="space-y-1.5 pt-4 border-t border-slate-100 mt-4 shrink-0">
         {userRole === 'admin' && (
           <Link
-            href="/admin"
+            href="/admin/system-settings"
             onClick={onClose}
             className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${
-              pathname === '/admin'
+              pathname.startsWith('/admin/system-settings')
                 ? 'text-[#155EEF] bg-blue-50/90 font-bold border border-blue-100/60'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
             }`}
@@ -287,14 +293,16 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
             <span className="text-sm font-bold">ការកំណត់ប្រព័ន្ធ</span>
           </Link>
         )}
-        <a
-          href="#"
-          onClick={(e) => { e.preventDefault(); onClose?.(); setShowSupportModal(true); }}
-          className="flex items-center gap-3 text-slate-600 hover:text-slate-900 hover:bg-slate-50 px-4 py-3 rounded-xl font-medium transition-colors cursor-pointer"
-        >
-          <MessageSquare className="w-5 h-5" />
-          <span className="text-sm font-bold">ជំនួយ & គាំទ្រ</span>
-        </a>
+        {profile?.role !== 'admin' && (
+          <a
+            href="#"
+            onClick={(e) => { e.preventDefault(); onClose?.(); setShowSupportModal(true); }}
+            className="flex items-center gap-3 text-slate-600 hover:text-slate-900 hover:bg-slate-50 px-4 py-3 rounded-xl font-medium transition-colors cursor-pointer"
+          >
+            <MessageSquare className="w-5 h-5" />
+            <span className="text-sm font-bold">ជំនួយ & គាំទ្រ</span>
+          </a>
+        )}
         <button
           onClick={async () => {
             if (confirm('តើអ្នកពិតជាចង់ចាកចេញពីប្រព័ន្ធមែនទេ?')) {

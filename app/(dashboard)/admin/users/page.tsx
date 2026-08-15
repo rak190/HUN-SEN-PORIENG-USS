@@ -55,20 +55,25 @@ export default function AdminUsersPage() {
     fetchUsers();
   }, []);
 
+  const MOCK_USERS = [
+    { id: '1', full_name: 'Sys Admin', email: 'admin@school.edu.kh', role: 'admin', created_at: new Date().toISOString() },
+    { id: '2', full_name: 'លោកនាយក សុខ សាន្ត', email: 'principal@school.edu.kh', role: 'principal', created_at: new Date().toISOString() },
+    { id: '3', full_name: 'អ្នកគ្រូ នារី', email: 'tearch_nary@school.edu.kh', role: 'teacher', created_at: new Date().toISOString() },
+    { id: '4', full_name: 'លោកគ្រូ វាសនា', email: 'veasna_t@school.edu.kh', role: 'teacher', created_at: new Date().toISOString() },
+    { id: '5', full_name: 'លោកគ្រូ សម្បត្តិ', email: 'sombat@school.edu.kh', role: 'teacher', created_at: new Date().toISOString() },
+  ];
+
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/users');
-      const data = await res.json();
-      if (res.ok) {
-        setUsersList(data.users || []);
-        setIsDemo(data.isDemo || false);
-      } else {
-        showToast(data.error || 'កំហុសក្នុងការទាញយកបញ្ជីអ្នកប្រើប្រាស់', 'error');
-      }
+      // MOCK DATA FETCH
+      setTimeout(() => {
+        setUsersList(MOCK_USERS);
+        setIsDemo(true);
+        setLoading(false);
+      }, 500);
     } catch (err: any) {
       showToast('មិនអាចតភ្ជាប់ទៅកាន់ Server បានទេ', 'error');
-    } finally {
       setLoading(false);
     }
   };

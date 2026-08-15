@@ -46,3 +46,45 @@ export async function deleteActivityLog(id: string) {
 
   revalidatePath('/homeroom');
 }
+
+export async function addStudent(data: {
+  full_name: string;
+  student_id_number?: string;
+  gender?: string;
+}) {
+  const supabase = await createClient();
+  
+  // 1. Get current user
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData?.user) {
+    throw new Error('Unauthorized');
+  }
+
+  // 2. Enforce logic: Find the class assigned to this teacher
+  const { data: classroom, error: classError } = await supabase
+    .from('classes')
+    .select('id')
+    .eq('teacher_id', userData.user.id)
+    .single();
+
+  if (classError || !classroom) {
+    throw new Error('អ្នកមិនទាន់មានថ្នាក់គ្រប់គ្រងនៅឡើយទេ (You are not assigned to a class yet)');
+  }
+
+  // 3. Insert student securely with the enforced class_id
+  const { error } = await supabase.from('students').insert({
+    full_name: data.full_name,
+    student_id_number: data.student_id_number || null,
+    gender: data.gender || null,
+    class_id: classroom.id,
+    is_active: true
+  });
+
+  if (error) {
+    console.error('Error adding student:', error);
+    throw new Error('បរាជ័យក្នុងការបន្ថែមសិស្ស');
+  }
+
+  revalidatePath('/homeroom');
+  revalidatePath('/admin/students');
+}

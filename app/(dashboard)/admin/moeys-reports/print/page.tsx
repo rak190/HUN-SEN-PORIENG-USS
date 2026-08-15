@@ -1,25 +1,50 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { Printer, ChevronLeft } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Printer, ChevronLeft, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 
 export default function MoeysPrintLayout() {
-  
-  // Use a simple array for the mockup
-  const mockStudents = Array.from({ length: 30 }).map((_, i) => ({
-    id: i + 1,
-    name: i % 2 === 0 ? 'សុខ សុវណ្ណ' : 'ចាន់ ស្រីមុំ',
-    gender: i % 2 === 0 ? 'ប្រុស' : 'ស្រី',
-    dob: '01/01/2010',
-    khmer: Math.floor(Math.random() * 20) + 30,
-    math: Math.floor(Math.random() * 20) + 30,
-    physics: Math.floor(Math.random() * 20) + 30,
-    chemistry: Math.floor(Math.random() * 20) + 30,
-  })).map(s => ({
-    ...s,
-    total: s.khmer + s.math + s.physics + s.chemistry
-  })).sort((a, b) => b.total - a.total);
+  const [stats, setStats] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const supabase = createClient();
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    setLoading(true);
+    try {
+      const { data: students, error } = await supabase
+        .from('students')
+        .select('gender, status, poor_id_status, is_orphan, classes(name)');
+        
+      if (error) throw error;
+
+      const classStats: Record<string, any> = {};
+      (students || []).forEach((s: any) => {
+        const className = s.classes?.name || 'គ្មានថ្នាក់';
+        if (!classStats[className]) {
+          classStats[className] = { className, total: 0, female: 0, new: 0, repeater: 0, poor: 0, orphan: 0 };
+        }
+        classStats[className].total++;
+        if (s.gender === 'F') classStats[className].female++;
+        if (s.status === 'new') classStats[className].new++;
+        if (s.status === 'repeater') classStats[className].repeater++;
+        if (s.poor_id_status && s.poor_id_status !== 'none') classStats[className].poor++;
+        if (s.is_orphan) classStats[className].orphan++;
+      });
+
+      const statsArray = Object.values(classStats).sort((a: any, b: any) => a.className.localeCompare(b.className));
+      setStats(statsArray);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="bg-slate-100 min-h-screen font-khmer">
@@ -53,42 +78,59 @@ export default function MoeysPrintLayout() {
             <p className="font-extrabold text-sm mb-1">វិទ្យាល័យ ហ៊ុនសែន ពាមរក៍</p>
           </div>
           <div className="text-right">
-            <h1 className="font-moul text-lg">សន្លឹកពិន្ទុប្រចាំខែ និងចំណាត់ថ្នាក់</h1>
-            <p className="font-bold text-sm mt-1">ថ្នាក់ទី៖ ១០ក | ខែ៖ តុលា ២០២៥</p>
+            <h1 className="font-moul text-lg">សរុបស្ថិតិសិស្សដើមឆ្នាំ (REP-01)</h1>
+            <p className="font-bold text-sm mt-1">ឆ្នាំសិក្សា៖ ២០២៥-២០២៦</p>
           </div>
         </div>
 
         {/* Main Table */}
-        <table className="w-full border-collapse border border-black text-[11px]">
+        <table className="w-full border-collapse border border-black text-[12px]">
           <thead>
             <tr className="bg-slate-50 font-bold">
-              <th className="border border-black p-1 text-center w-8">ល.រ</th>
-              <th className="border border-black p-1 text-left w-32">គោត្តនាម និងនាម</th>
-              <th className="border border-black p-1 text-center w-12">ភេទ</th>
-              <th className="border border-black p-1 text-center w-20">ថ្ងៃខែឆ្នាំកំណើត</th>
-              <th className="border border-black p-1 text-center">ភាសាខ្មែរ<br/>(៥០)</th>
-              <th className="border border-black p-1 text-center">គណិត<br/>(៥០)</th>
-              <th className="border border-black p-1 text-center">រូបវិទ្យា<br/>(៥០)</th>
-              <th className="border border-black p-1 text-center">គីមីវិទ្យា<br/>(៥០)</th>
-              <th className="border border-black p-1 text-center font-black bg-slate-100">សរុប<br/>(២០០)</th>
-              <th className="border border-black p-1 text-center font-black bg-slate-100">ចំណាត់ថ្នាក់</th>
+              <th className="border border-black p-2 text-center w-12">ល.រ</th>
+              <th className="border border-black p-2 text-left">ថ្នាក់រៀន</th>
+              <th className="border border-black p-2 text-center">សិស្សសរុប</th>
+              <th className="border border-black p-2 text-center">សិស្សស្រី</th>
+              <th className="border border-black p-2 text-center">សិស្សថ្មី</th>
+              <th className="border border-black p-2 text-center">សិស្សត្រួតថ្នាក់</th>
+              <th className="border border-black p-2 text-center">សិស្សក្រីក្រ</th>
+              <th className="border border-black p-2 text-center">សិស្សកំព្រា</th>
             </tr>
           </thead>
           <tbody>
-            {mockStudents.map((student, index) => (
-              <tr key={index}>
-                <td className="border border-black p-1 text-center">{index + 1}</td>
-                <td className="border border-black p-1">{student.name}</td>
-                <td className="border border-black p-1 text-center">{student.gender}</td>
-                <td className="border border-black p-1 text-center">{student.dob}</td>
-                <td className="border border-black p-1 text-center">{student.khmer}</td>
-                <td className="border border-black p-1 text-center">{student.math}</td>
-                <td className="border border-black p-1 text-center">{student.physics}</td>
-                <td className="border border-black p-1 text-center">{student.chemistry}</td>
-                <td className="border border-black p-1 text-center font-bold bg-slate-50">{student.total}</td>
-                <td className="border border-black p-1 text-center font-bold bg-slate-50">{index + 1}</td>
+            {loading ? (
+              <tr>
+                <td colSpan={8} className="border border-black p-8 text-center text-slate-500 font-bold">
+                  <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  កំពុងទាញយកទិន្នន័យ...
+                </td>
               </tr>
-            ))}
+            ) : (
+              <>
+                {stats.map((stat, index) => (
+                  <tr key={index}>
+                    <td className="border border-black p-2 text-center font-bold">{index + 1}</td>
+                    <td className="border border-black p-2 font-black">{stat.className}</td>
+                    <td className="border border-black p-2 text-center">{stat.total}</td>
+                    <td className="border border-black p-2 text-center">{stat.female}</td>
+                    <td className="border border-black p-2 text-center">{stat.new}</td>
+                    <td className="border border-black p-2 text-center text-amber-700">{stat.repeater}</td>
+                    <td className="border border-black p-2 text-center text-rose-600">{stat.poor}</td>
+                    <td className="border border-black p-2 text-center text-rose-600">{stat.orphan}</td>
+                  </tr>
+                ))}
+                {/* Total Row */}
+                <tr className="bg-slate-100 font-black">
+                  <td colSpan={2} className="border border-black p-2 text-right">សរុបរួម៖</td>
+                  <td className="border border-black p-2 text-center">{stats.reduce((acc, curr) => acc + curr.total, 0)}</td>
+                  <td className="border border-black p-2 text-center">{stats.reduce((acc, curr) => acc + curr.female, 0)}</td>
+                  <td className="border border-black p-2 text-center">{stats.reduce((acc, curr) => acc + curr.new, 0)}</td>
+                  <td className="border border-black p-2 text-center text-amber-700">{stats.reduce((acc, curr) => acc + curr.repeater, 0)}</td>
+                  <td className="border border-black p-2 text-center text-rose-600">{stats.reduce((acc, curr) => acc + curr.poor, 0)}</td>
+                  <td className="border border-black p-2 text-center text-rose-600">{stats.reduce((acc, curr) => acc + curr.orphan, 0)}</td>
+                </tr>
+              </>
+            )}
           </tbody>
         </table>
 

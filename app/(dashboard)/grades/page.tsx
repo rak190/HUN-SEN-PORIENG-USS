@@ -178,6 +178,7 @@ export default function GradesPage() {
         .from('students')
         .select('*')
         .eq('class_id', activeClass?.id || '')
+        .order('desk_number', { ascending: true, nullsFirst: false })
         .order('full_name', { ascending: true });
 
       if (stdData && stdData.length > 0) {
@@ -197,7 +198,8 @@ export default function GradesPage() {
           .from('grades')
           .select('student_id, period, scores')
           .eq('class_id', activeClass?.id || '')
-          .in('period', targetPeriods);
+          .in('period', targetPeriods)
+          .eq('status', 'published'); // Filter to only show scores published by the Admin
 
         const newMap: Record<string, Record<string, number>> = {};
         if (gradesData) {

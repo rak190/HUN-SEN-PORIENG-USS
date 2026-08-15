@@ -97,6 +97,7 @@ export interface Student {
   transport_mode?: 'bicycle' | 'motorbike' | 'walking';
   dropout_risk?: boolean;
   home_visits?: HomeVisit[];
+  desk_number?: string | null;
 }
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'permission' | 'P' | 'A' | 'L' | 'E';

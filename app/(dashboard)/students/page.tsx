@@ -15,6 +15,7 @@ interface MassiveProfilingStudent {
   id: string;
   // Tab 1: Basic
   student_id_number: string;
+  desk_number?: string;
   full_name: string;
   gender: string;
   date_of_birth: string;
@@ -56,7 +57,7 @@ interface MassiveProfilingStudent {
 
 export const INITIAL_STUDENTS: MassiveProfilingStudent[] = [
   { 
-    id: 'std-1', student_id_number: '04931', full_name: 'កែវ ច័ន្ទធីតា', gender: 'F', date_of_birth: '2010-05-14', age: 15, birth_cert_no: 'B-001', student_phone: '012345678',
+    id: 'std-1', student_id_number: '04931', desk_number: 'A-01', full_name: 'កែវ ច័ន្ទធីតា', gender: 'F', date_of_birth: '2010-05-14', age: 15, birth_cert_no: 'B-001', student_phone: '012345678',
     status: 'new', prev_school: 'ប. ជា ស៊ីម', scholarship: 'no', id_poor: 'none', orphan: 'no', indigenous: 'no', distance_km: 2.5,
     weight_kg: 45, height_m: 1.53, bmi: 19.2, nutrition_status: 'ធម្មតា', disability: 'none', assistive_device: 'គ្មាន', health_issues: 'ធម្មតា',
     father_name: 'កែវ សំណាង', father_job: 'កសិករ', father_phone: '070789217', mother_name: 'វ៉ាត សំអូន', mother_job: 'កសិករ', mother_phone: '070789217',
@@ -65,7 +66,7 @@ export const INITIAL_STUDENTS: MassiveProfilingStudent[] = [
     risk_level: 'high', attendance_rate: 88
   },
   { 
-    id: 'std-2', student_id_number: '04932', full_name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', date_of_birth: '2009-11-20', age: 16, birth_cert_no: 'B-002', student_phone: '098765432',
+    id: 'std-2', student_id_number: '04932', desk_number: 'A-02', full_name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', date_of_birth: '2009-11-20', age: 16, birth_cert_no: 'B-002', student_phone: '098765432',
     status: 'repeater', prev_school: 'ប. បាក់ដោក', scholarship: 'yes', id_poor: 'level_1', orphan: 'no', indigenous: 'no', distance_km: 12.0,
     weight_kg: 40, height_m: 1.55, bmi: 16.6, nutrition_status: 'ស្គម', disability: 'none', assistive_device: 'គ្មាន', health_issues: 'ខ្សោយគំហើញ',
     father_name: 'ខៀវ សារ៉ុម', father_job: 'កសិករ', father_phone: '0967219931', mother_name: 'កុន ច្រិប', mother_job: 'កសិករ', mother_phone: '0967219931',
@@ -324,7 +325,7 @@ export default function StudentsPage() {
                 
                 {/* Dynamic Columns based on View Filter */}
                 {activeTableView === 1 && (
-                  <><th className="p-4 text-center">ភេទ</th><th className="p-4">ថ្ងៃខែឆ្នាំកំណើត</th><th className="p-4 text-center">អាយុ</th><th className="p-4">សំបុត្រកំណើត</th><th className="p-4">ទូរស័ព្ទសិស្ស</th></>
+                  <><th className="p-4 text-center">ភេទ</th><th className="p-4 text-center">ប្លង់តុ</th><th className="p-4">ថ្ងៃខែឆ្នាំកំណើត</th><th className="p-4 text-center">អាយុ</th><th className="p-4">សំបុត្រកំណើត</th><th className="p-4">ទូរស័ព្ទសិស្ស</th></>
                 )}
                 {activeTableView === 2 && (
                   <><th className="p-4 text-center">ស្ថានភាព</th><th className="p-4">សាលាមុន</th><th className="p-4 text-center">អាហារូបករណ៍</th><th className="p-4 text-center">ID Poor</th><th className="p-4 text-center">ចម្ងាយ(គ.ម)</th></>
@@ -357,6 +358,19 @@ export default function StudentsPage() {
                   {activeTableView === 1 && (
                     <>
                       <td className="p-4 text-center">{std.gender === 'F' ? <span className="text-pink-600 bg-pink-50 px-2 py-0.5 rounded">ស្រី</span> : <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">ប្រុស</span>}</td>
+                      <td className="p-4 text-center">
+                        <input
+                          type="text"
+                          defaultValue={std.desk_number || ''}
+                          placeholder="A-01"
+                          onBlur={(e) => {
+                            if (e.target.value !== std.desk_number) {
+                              setStudents(students.map(s => s.id === std.id ? { ...s, desk_number: e.target.value } : s));
+                            }
+                          }}
+                          className="w-16 bg-transparent border border-transparent hover:border-slate-200 focus:border-[#155EEF] rounded-lg px-2 py-1 text-center text-xs font-bold font-mono outline-none transition-colors"
+                        />
+                      </td>
                       <td className="p-4">{std.date_of_birth}</td>
                       <td className="p-4 text-center">{std.age}</td>
                       <td className="p-4 font-mono text-slate-500">{std.birth_cert_no || '-'}</td>

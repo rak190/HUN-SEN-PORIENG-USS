@@ -1,15 +1,23 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user || user.user_metadata?.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
+  }
+
   const { id } = await params;
   const adminClient = createAdminClient();
   const body = await req.json();
 
-  const { fullName, role, schoolCode, password } = body;
+  const { fullName, role, schoolCode, password, homeroomClass } = body;
 
   if (!adminClient) {
     // Return mock response for demo environment
@@ -65,6 +73,31 @@ export async function PATCH(
       }
     }
 
+    if (homeroomClass && role === 'teacher') {
+      // Unassign any previous class
+      await adminClient
+        .from('classes')
+        .update({ teacher_id: null })
+        .eq('teacher_id', id);
+
+      const { data: existingClass } = await adminClient
+        .from('classes')
+        .select('id')
+        .eq('name', homeroomClass)
+        .single();
+
+      if (existingClass) {
+        await adminClient
+          .from('classes')
+          .update({ teacher_id: id })
+          .eq('id', existingClass.id);
+      } else {
+        await adminClient
+          .from('classes')
+          .insert([{ name: homeroomClass, teacher_id: id }]);
+      }
+    }
+
     const roleKh =
       role === 'principal'
         ? 'នាយកសាលា'
@@ -82,6 +115,7 @@ export async function PATCH(
         role,
         roleKh,
         school: schoolCode || 'Porieng-2026',
+        homeroomClass,
       },
     });
   } catch (err: any) {
@@ -90,9 +124,16 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user || user.user_metadata?.role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
+  }
+
   const { id } = await params;
   const adminClient = createAdminClient();
 
