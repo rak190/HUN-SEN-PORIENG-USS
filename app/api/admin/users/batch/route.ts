@@ -66,7 +66,7 @@ export async function POST(req: Request) {
           username: cleanUsername,
           full_name: fullName.trim(),
           role: finalRole,
-          school_id: finalSchool.toLowerCase() === 'porieng-2026' ? 'main-school' : `school-${Date.now()}`,
+          school_id: '11111111-1111-1111-1111-111111111111',
           school_code: finalSchool,
           phone: phone || null,
           subject: subject || null,
