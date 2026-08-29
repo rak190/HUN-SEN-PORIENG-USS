@@ -6,29 +6,65 @@ export async function fetchPrincipalDashboardData() {
   try {
     const supabase = await createClient();
     
-    // 1. Fetch Students
-    const { data: studentsData, error: studentsError } = await supabase
-      .from('students')
-      .select('id, gender, dropout_risk, is_slow_learner, full_name, class_id, is_active')
-      .eq('is_active', true);
+    // 1. Fetch Active Academic Year
+    const { data: activeYear } = await supabase
+      .from('academic_years')
+      .select('id, start_date, end_date')
+      .eq('is_active', true)
+      .maybeSingle();
 
-    if (studentsError) throw studentsError;
+    const academicStartDate = activeYear?.start_date || `${new Date().getFullYear() - 1}-10-01`;
 
-    // 1.5 Fetch Classes
-    const { data: classesData, error: classesError } = await supabase
+    // 1.5 Fetch Classes for active year
+    let classesQuery = supabase
       .from('classes')
       .select('id, name, grade, track')
       .eq('is_archived', false);
 
-    // 2. Fetch Grades
-    const { data: gradesData } = await supabase
+    if (activeYear?.id) {
+      classesQuery = classesQuery.eq('academic_year_id', activeYear.id);
+    }
+
+    const { data: classesData, error: classesError } = await classesQuery;
+    if (classesError) throw classesError;
+
+    const activeClassIds = (classesData || []).map(c => c.id);
+
+    // 1.6 Fetch Students in active classes
+    let studentsQuery = supabase
+      .from('students')
+      .select('id, gender, dropout_risk, is_slow_learner, full_name, class_id, is_active')
+      .eq('is_active', true);
+
+    if (activeClassIds.length > 0) {
+      studentsQuery = studentsQuery.in('class_id', activeClassIds);
+    }
+
+    const { data: studentsData, error: studentsError } = await studentsQuery;
+    if (studentsError) throw studentsError;
+
+    // 2. Fetch Grades for active classes
+    let gradesQuery = supabase
       .from('grades')
       .select('period, total_score, class_id, scores');
 
-    // 3. Fetch Attendance
-    const { data: attendanceData } = await supabase
+    if (activeClassIds.length > 0) {
+      gradesQuery = gradesQuery.in('class_id', activeClassIds);
+    }
+
+    const { data: gradesData } = await gradesQuery;
+
+    // 3. Fetch Attendance for active classes within current school year range
+    let attendanceQuery = supabase
       .from('attendance_records')
-      .select('date, status, class_id');
+      .select('date, status, class_id')
+      .gte('date', academicStartDate);
+
+    if (activeClassIds.length > 0) {
+      attendanceQuery = attendanceQuery.in('class_id', activeClassIds);
+    }
+
+    const { data: attendanceData } = await attendanceQuery;
 
     // Compute Students Stats
     const totalStudents = studentsData?.length || 0;

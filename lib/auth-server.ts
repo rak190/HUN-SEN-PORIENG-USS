@@ -48,17 +48,25 @@ export async function getServerAuth() {
       };
     }
 
-    const cookieRole = cookieStore.get('kruai_role')?.value;
-    return {
-      user: { id: userId, email: email || 'user@kruai.app' },
-      profile: null,
-      role: cookieRole || 'teacher'
-    };
+    // Only allow demo teacher fallback for demo-teacher-id
+    if (userId === 'demo-teacher-id') {
+      return {
+        user: { id: 'demo-teacher-id', email: 'demo@kruai.app' },
+        profile: {
+          id: 'demo-teacher-id',
+          username: 'kruadmin041030',
+          full_name: 'លោកគ្រូ/អ្នកគ្រូ សុខា',
+          role: 'teacher',
+          school_id: 'main-school',
+          school_code: 'Porieng-2026',
+          created_at: new Date().toISOString(),
+        } as Profile,
+        role: 'teacher'
+      };
+    }
+
+    return { user: null, profile: null, role: null };
   } catch (e) {
-    return {
-      user: { id: userId, email: email || 'user@kruai.app' },
-      profile: null,
-      role: 'teacher'
-    };
+    return { user: null, profile: null, role: null };
   }
 }

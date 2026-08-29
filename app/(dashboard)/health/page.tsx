@@ -1,17 +1,36 @@
 import React from 'react';
 import { createClient } from '@/lib/supabase/server';
+import { getServerAuth } from '@/lib/auth-server';
 import HealthBoardClient from './HealthBoardClient';
 import { Student, StudentHealthRecord } from '@/types';
 
+export const dynamic = 'force-dynamic';
+
 export default async function HealthPage() {
   const supabase = await createClient();
+  const { user, role } = await getServerAuth();
 
-  // 1. Fetch Students
-  const { data: studentsData } = await supabase
+  let studentsQuery = supabase
     .from('students')
     .select('*')
+    .eq('is_active', true)
     .order('full_name', { ascending: true });
-    
+
+  // If teacher, only fetch students in classes assigned to this teacher
+  if (user && role === 'teacher') {
+    const { data: teacherClasses } = await supabase
+      .from('classes')
+      .select('id')
+      .eq('teacher_id', user.id);
+
+    const classIds = (teacherClasses || []).map(c => c.id);
+    if (classIds.length > 0) {
+      studentsQuery = studentsQuery.in('class_id', classIds);
+    }
+  }
+
+  // 1. Fetch Students
+  const { data: studentsData } = await studentsQuery;
   const students: Student[] = studentsData || [];
 
   // 2. Fetch Health Records for these students
