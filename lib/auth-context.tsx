@@ -13,7 +13,6 @@ interface AuthContextType {
   loading: boolean;
   isDemoMode: boolean;
   login: (username: string, password: string, expectedRole?: string) => Promise<{ error?: string; role?: string }>;
-  register: (username: string, password: string, fullName: string, role?: 'teacher' | 'principal' | 'admin', schoolCode?: string) => Promise<{ error?: string }>;
   logout: () => Promise<void>;
   setActiveClass: (cls: Classroom | null) => void;
   refreshClasses: () => Promise<void>;
@@ -201,49 +200,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: 'ឈ្មោះគណនី ឬពាក្យសម្ងាត់មិនត្រឹមត្រូវទេ។' };
   }
 
-  async function register(
-    username: string,
-    password: string,
-    fullName: string,
-    role: 'teacher' | 'principal' | 'admin' | 'monitor' = 'teacher',
-    schoolCode: string = 'Porieng-2026'
-  ): Promise<{ error?: string }> {
-    const cleanUsername = username.trim().toLowerCase();
-    const email = `${cleanUsername}@kruai.app`;
-
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) {
-        return { error: error.message };
-      }
-
-      if (data.user) {
-        const { error: profileError } = await supabase.from('profiles').insert([
-          {
-            id: data.user.id,
-            username: cleanUsername,
-            full_name: fullName.trim() || cleanUsername,
-            role,
-            school_id: '11111111-1111-1111-1111-111111111111',
-            school_code: schoolCode || 'Porieng-2026',
-          },
-        ]);
-
-        if (profileError) {
-          console.error('Profile insert error:', profileError);
-        }
-      }
-
-      return {};
-    } catch (e: any) {
-      return { error: e?.message || 'កំហុសក្នុងការចុះឈ្មោះ។' };
-    }
-  }
-
   async function logout() {
     try {
       await supabase.auth.signOut();
@@ -269,7 +225,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         isDemoMode,
         login,
-        register,
         logout,
         setActiveClass,
         refreshClasses,

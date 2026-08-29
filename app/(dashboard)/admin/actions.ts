@@ -1,7 +1,9 @@
 'use server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireAdmin } from '@/lib/auth-server';
 
 export async function fetchAdminDashboardData() {
+  await requireAdmin();
   const supabase = createAdminClient();
   if (!supabase) throw new Error("No admin client available");
 

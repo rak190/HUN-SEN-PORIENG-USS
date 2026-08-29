@@ -51,6 +51,12 @@ export interface SaveStudentPayload {
 
 export async function saveStudentAction(payload: SaveStudentPayload) {
   try {
+    const { requireClassAccess, requireAdmin } = await import('@/lib/auth-server');
+    if (payload.class_id) {
+      await requireClassAccess(payload.class_id);
+    } else {
+      await requireAdmin();
+    }
     const supabase = createAdminClient();
 
     const normalizedGender = payload.gender === 'F' || payload.gender === 'ស្រី' ? 'F' : 'M';

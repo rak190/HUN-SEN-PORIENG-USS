@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { r2Client, R2_BUCKET_NAME } from '@/lib/cloudflare-r2';
-import { getServerAuth } from '@/lib/auth-server';
+import { getServerAuth, requireClassAccess } from '@/lib/auth-server';
 import { createClient } from '@/lib/supabase/server';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.xlsx', '.xls', '.docx', '.doc', '.png', '.jpg', '.jpeg', '.webp', '.zip', '.rar'];
@@ -21,6 +21,14 @@ export async function POST(req: NextRequest) {
 
     if (!fileName || !fileType) {
       return NextResponse.json({ error: 'Missing fileName or fileType' }, { status: 400 });
+    }
+
+    if (classId) {
+      try {
+        await requireClassAccess(classId);
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message || 'Forbidden class access' }, { status: 403 });
+      }
     }
 
     // Validate file extension against allowed whitelist
