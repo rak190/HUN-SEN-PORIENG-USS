@@ -61,14 +61,22 @@ CREATE TABLE IF NOT EXISTS classes (
   teacher_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
   name VARCHAR(100) NOT NULL,
   grade VARCHAR(10) NOT NULL,
-  track VARCHAR(50) DEFAULT 'general',
-  shift VARCHAR(50) DEFAULT 'morning',
+  track VARCHAR(50) DEFAULT 'ទូទៅ',
+  shift VARCHAR(50) DEFAULT 'ព្រឹក',
   room VARCHAR(50),
+  room_number VARCHAR(50),
   subjects JSONB DEFAULT '[]'::jsonb,
   is_archived BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure all columns exist if classes table was already created
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS room_number VARCHAR(50);
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS room VARCHAR(50);
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS shift VARCHAR(50) DEFAULT 'ព្រឹក';
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS track VARCHAR(50) DEFAULT 'ទូទៅ';
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;
 
 -- 6. Create Students Master Table
 CREATE TABLE IF NOT EXISTS students (
@@ -99,6 +107,15 @@ CREATE TABLE IF NOT EXISTS students (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure all columns exist if students table was already created
+ALTER TABLE students ADD COLUMN IF NOT EXISTS desk_number VARCHAR(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS room_number VARCHAR(50);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS poverty_status VARCHAR(50) DEFAULT 'none';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS is_slow_learner BOOLEAN DEFAULT FALSE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS dropout_risk BOOLEAN DEFAULT FALSE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';
 
 -- 7. Create Student Enrollments (Multi-Year Historical Preservation)
 CREATE TABLE IF NOT EXISTS student_enrollments (
