@@ -9,6 +9,7 @@ import {
 import Link from 'next/link';
 import { MasterGradeImportModal } from '@/components/principal/MasterGradeImportModal';
 import { fetchPrincipalDashboardData } from '../actions';
+import Modal from '@/components/ui/Modal';
 
 const MOCK_TERMS = {
   'sem1-2026': {
@@ -232,56 +233,70 @@ export default function PrincipalReportsPage() {
         onImportComplete={() => {}} 
       />
 
-      {/* EWS Modal */}
-      {showEwsModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowEwsModal(false)} />
-          <div className="relative w-full max-w-2xl bg-white rounded-[32px] shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
-            <div className="p-6 sm:p-8 border-b border-slate-100 flex items-center justify-between bg-rose-50 rounded-t-[32px]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-rose-600" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-slate-900">សិស្សប្រឈមហានិភ័យ</h2>
-                  <p className="text-xs font-bold text-rose-600">Early Warning System (EWS)</p>
-                </div>
-              </div>
-              <button onClick={() => setShowEwsModal(false)} className="p-2 hover:bg-white rounded-xl transition-colors cursor-pointer text-slate-500">
-                <X className="w-5 h-5" />
-              </button>
+      {/* EWS Modal (Full-Screen Frosted Glass Portal) */}
+      <Modal
+        isOpen={showEwsModal}
+        onClose={() => setShowEwsModal(false)}
+        size="2xl"
+        headerBg="bg-rose-50/90"
+        icon={
+          <div className="w-10 h-10 bg-rose-100/80 rounded-2xl flex items-center justify-center shadow-xs">
+            <AlertTriangle className="w-5 h-5 text-rose-600" />
+          </div>
+        }
+        title="សិស្សប្រឈមហានិភ័យ"
+        subtitle="Early Warning System (EWS)"
+      >
+        <div className="p-6 sm:p-8 space-y-4">
+          {atRiskStudents.length === 0 ? (
+            <div className="text-center py-12 font-bold text-slate-400">
+              គ្មានសិស្សប្រឈមហានិភ័យទេ
             </div>
-            
-            <div className="p-6 sm:p-8 overflow-y-auto space-y-4">
-              {atRiskStudents.map((student: any) => (
-                <div key={student.id} className="p-4 border border-slate-100 rounded-2xl bg-slate-50 flex flex-col sm:flex-row sm:items-start gap-4">
-                  <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-sm shrink-0 mt-1">
+          ) : (
+            atRiskStudents.map((student: any) => (
+              <div
+                key={student.id}
+                className="p-4 border border-slate-100/90 rounded-2xl bg-white shadow-xs hover:border-[#155EEF]/30 flex flex-col sm:flex-row sm:items-center gap-4 justify-between transition-all"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center font-black text-sm shrink-0 mt-1 shadow-2xs">
                     {student.name.charAt(0)}
                   </div>
                   <div>
-                    <h4 className="font-black text-slate-900 flex items-center gap-2">
+                    <h4 className="font-extrabold text-slate-900 flex items-center gap-2">
                       {student.name}
-                      {student.severity === 'high' && <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-black rounded-full">ធ្ងន់ធ្ងរ</span>}
+                      {student.severity === 'high' && (
+                        <span className="px-2.5 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-extrabold rounded-full">
+                          ធ្ងន់ធ្ងរ
+                        </span>
+                      )}
                     </h4>
                     <ul className="mt-2 space-y-1">
                       {student.reasons.map((r: string, i: number) => (
-                        <li key={i} className="text-xs font-bold text-slate-600 flex items-start gap-1.5">
+                        <li
+                          key={i}
+                          className="text-xs font-semibold text-slate-600 flex items-start gap-1.5"
+                        >
                           <span className="text-rose-500 mt-0.5">•</span> {r}
                         </li>
                       ))}
                     </ul>
                   </div>
-                  <div className="shrink-0 w-full sm:w-auto">
-                    <button className="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-[#155EEF] hover:text-white text-slate-700 font-black rounded-xl text-xs transition-colors cursor-pointer">
-                      ចុះហៅអាណាព្យាបាល
-                    </button>
-                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
+                <div className="shrink-0 w-full sm:w-auto">
+                  <Link
+                    href="/parents"
+                    onClick={() => setShowEwsModal(false)}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-[#155EEF] hover:text-white text-slate-700 font-extrabold rounded-xl text-xs transition-all cursor-pointer block text-center shadow-xs active:scale-95"
+                  >
+                    ចុះហៅអាណាព្យាបាល
+                  </Link>
+                </div>
+              </div>
+            ))
+          )}
         </div>
-      )}
+      </Modal>
 
       {/* 4 Top Stat Cards (Homeroom Style) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">

@@ -8,18 +8,30 @@ import { createClient } from '@/lib/supabase/client';
 export default function MoeysPrintLayout() {
   const [stats, setStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [schoolName, setSchoolName] = useState('វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង');
+  const [academicYearName, setAcademicYearName] = useState('២០២៥-២០២៦');
   const supabase = createClient();
 
   useEffect(() => {
-    fetchStats();
+    fetchData();
   }, []);
 
-  const fetchStats = async () => {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: students, error } = await supabase
-        .from('students')
-        .select('gender, status, poor_id_status, is_orphan, classes(name)');
+      // 1. Fetch school info & active year
+      const [{ data: schoolData }, { data: yearData }, { data: students, error }] = await Promise.all([
+        supabase.from('system_settings').select('value').eq('key', 'school_info').maybeSingle(),
+        supabase.from('academic_years').select('name').eq('is_active', true).maybeSingle(),
+        supabase.from('students').select('gender, status, poor_id_status, is_orphan, classes(name)')
+      ]);
+
+      if (schoolData?.value?.schoolName) {
+        setSchoolName(schoolData.value.schoolName);
+      }
+      if (yearData?.name) {
+        setAcademicYearName(yearData.name);
+      }
         
       if (error) throw error;
 
@@ -55,7 +67,7 @@ export default function MoeysPrintLayout() {
         </Link>
         <button 
           onClick={() => window.print()}
-          className="px-6 py-2 bg-[#155EEF] text-white font-bold rounded-lg flex items-center gap-2 shadow-md hover:bg-blue-700 transition-colors"
+          className="px-6 py-2 bg-[#155EEF] text-white font-bold rounded-lg flex items-center gap-2 shadow-md hover:bg-blue-700 transition-colors cursor-pointer"
         >
           <Printer className="w-4 h-4" /> បោះពុម្ព (Print PDF)
         </button>
@@ -75,11 +87,11 @@ export default function MoeysPrintLayout() {
         <div className="flex justify-between items-end mb-6">
           <div>
             <p className="font-extrabold text-sm mb-1">មន្ទីរអប់រំ យុវជន និងកីឡាខេត្ត</p>
-            <p className="font-extrabold text-sm mb-1">វិទ្យាល័យ ហ៊ុនសែន ពាមរក៍</p>
+            <p className="font-extrabold text-sm mb-1">{schoolName}</p>
           </div>
           <div className="text-right">
             <h1 className="font-moul text-lg">សរុបស្ថិតិសិស្សដើមឆ្នាំ (REP-01)</h1>
-            <p className="font-bold text-sm mt-1">ឆ្នាំសិក្សា៖ ២០២៥-២០២៦</p>
+            <p className="font-bold text-sm mt-1">ឆ្នាំសិក្សា៖ {academicYearName}</p>
           </div>
         </div>
 

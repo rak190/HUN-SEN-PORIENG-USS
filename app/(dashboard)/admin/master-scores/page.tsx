@@ -4,11 +4,16 @@ import React, { useState, useEffect } from 'react';
 import { 
   FileSpreadsheet, AlertCircle, Search, 
   Filter, CheckCircle2, Clock, Check,
-  Upload, Send, Building2
+  Upload, Send, Building2, Download
 } from 'lucide-react';
 import { MasterScoreUploadModal } from '@/components/admin/MasterScoreUploadModal';
+import { MasterScoreRollbackModal } from '@/components/admin/MasterScoreRollbackModal';
+import { MonthlyExamSheetModal } from '@/components/admin/MonthlyExamSheetModal';
+import { GEIPExportModal } from '@/components/admin/GEIPExportModal';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
+import { calculateSummaryScores } from './actions';
+import { RotateCcw, History } from 'lucide-react';
 
 export default function MasterScoresPage() {
   const [loading, setLoading] = useState(true);
@@ -21,7 +26,11 @@ export default function MasterScoresPage() {
   const [publishedClassesCount, setPublishedClassesCount] = useState(0);
   
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isRollbackModalOpen, setIsRollbackModalOpen] = useState(false);
+  const [isMonthlyExamSheetModalOpen, setIsMonthlyExamSheetModalOpen] = useState(false);
+  const [isGEIPExportModalOpen, setIsGEIPExportModalOpen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false);
 
   const supabase = createClient();
 
@@ -39,115 +48,111 @@ export default function MasterScoresPage() {
     async function fetchStats() {
       setLoading(true);
       try {
-        // 1. Fetch all classes & their homeroom teachers
-        const { data: dbClasses, error: classErr } = await supabase
+        // 1. Fetch all classes
+        const { data: classesData, error: classErr } = await supabase
           .from('classes')
-          .select('id, name, teacher_id, profiles:teacher_id(full_name)');
-          
-        if (classErr) {
-           console.error("Classes fetch error:", classErr.message, classErr.details, classErr.hint);
-        }
+          .select('id, name, teacher_id, profiles:teacher_id(full_name)')
+          .order('name', { ascending: true });
 
-        // 2. Fetch grades for selected period
-        const { data: gradesData, error: gradesErr } = await supabase
+        if (classErr) throw classErr;
+
+        // 2. Fetch distinct grades for this period
+        const { data: gradesData, error: gradeErr } = await supabase
           .from('grades')
           .select('class_id, status')
           .eq('period', selectedPeriod);
-          
-        if (gradesErr) {
-           console.error("Grades fetch error:", gradesErr.message, gradesErr.details, gradesErr.hint);
-        }
 
-        // Group status by class
-        const classStatusesMap: Record<string, 'published' | 'draft' | 'missing'> = {};
-        dbClasses?.forEach(c => {
-           classStatusesMap[c.id] = 'missing';
+        if (gradeErr) throw gradeErr;
+
+        const classMap = new Map<string, { hasDraft: boolean; hasPublished: boolean }>();
+        gradesData.forEach((g: any) => {
+          const current = classMap.get(g.class_id) || { hasDraft: false, hasPublished: false };
+          if (g.status === 'draft') current.hasDraft = true;
+          if (g.status === 'published') current.hasPublished = true;
+          classMap.set(g.class_id, current);
         });
 
-        gradesData?.forEach(g => {
-           // If a class has ANY draft, consider it draft. 
-           // If it has published, it's published.
-           if (g.status === 'draft') {
-              if (classStatusesMap[g.class_id] !== 'published') {
-                 classStatusesMap[g.class_id] = 'draft';
-              }
-           } else if (g.status === 'published') {
-              classStatusesMap[g.class_id] = 'published';
-           }
+        let drafts = 0;
+        let published = 0;
+
+        const statusList = (classesData || []).map((c: any) => {
+          const stat = classMap.get(c.id);
+          let finalStatus = 'missing'; // default
+          if (stat?.hasDraft) {
+            finalStatus = 'draft';
+            drafts++;
+          } else if (stat?.hasPublished) {
+            finalStatus = 'published';
+            published++;
+          }
+          return {
+            id: c.id,
+            name: c.name,
+            teacher: c.profiles?.full_name || 'មិនទាន់មាន',
+            status: finalStatus
+          };
         });
 
-        // Compute counts
-        let dCount = 0;
-        let pCount = 0;
-        Object.values(classStatusesMap).forEach(status => {
-           if (status === 'draft') dCount++;
-           if (status === 'published') pCount++;
-        });
-
-        setDraftCount(dCount);
-        setPublishedClassesCount(pCount);
-
-        // Build array for table
-        const combined = dbClasses?.map(c => ({
-           id: c.id,
-           name: c.name,
-           teacher: (c.profiles as any)?.full_name || 'មិនមានគ្រូ',
-           status: classStatusesMap[c.id]
-        })) || [];
-
-        // Sort by name logically
-        combined.sort((a, b) => {
-          const numA = parseInt(a.name.match(/\d+/)?.[0] || '0', 10);
-          const numB = parseInt(b.name.match(/\d+/)?.[0] || '0', 10);
-          if (numA === numB) return a.name.localeCompare(b.name);
-          return numA - numB;
-        });
-        
-        setClassesStatus(combined);
-
-      } catch (err: any) {
-        console.error('Error fetching stats:', err.message || err);
+        setClassesStatus(statusList);
+        setDraftCount(drafts);
+        setPublishedClassesCount(published);
+      } catch (err) {
+        console.error("Error fetching master score stats:", err);
       } finally {
         setLoading(false);
       }
     }
-    
+
     fetchStats();
-  }, [selectedPeriod, isPublishing, isUploadModalOpen]);
+  }, [selectedPeriod]);
 
   const handlePublishScores = async () => {
-    if (!window.confirm('តើអ្នកពិតជាចង់បោះពុម្ពផ្សាយពិន្ទុព្រាងទាំងអស់ទៅកាន់គ្រូបន្ទុកថ្នាក់មែនទេ? (Are you sure you want to publish all draft scores to teachers?)')) return;
-    
+    if (!confirm(`តើអ្នកពិតជាចង់បោះពុម្ពផ្សាយពិន្ទុសម្រាប់ខែ "${selectedPeriod}" មែនទេ?`)) return;
     setIsPublishing(true);
     try {
-       const { error } = await supabase
-         .from('grades')
-         .update({ status: 'published' })
-         .eq('status', 'draft')
-         .eq('period', selectedPeriod);
-         
-       if (error) throw error;
-       alert('ពិន្ទុត្រូវបានបោះពុម្ពផ្សាយជោគជ័យ! (Scores published successfully!)');
-       
-       // Force a refetch by toggling a piece of state or just resetting counts manually.
-       // The easiest is just trusting the user to wait for the next render.
-       setDraftCount(0);
-       setIsUploadModalOpen(false); // Just to trigger useEffect dependency
+      const { error } = await supabase
+        .from('grades')
+        .update({ status: 'published', updated_at: new Date().toISOString() })
+        .eq('period', selectedPeriod)
+        .eq('status', 'draft');
+
+      if (error) throw error;
+      alert('បានបោះពុម្ពផ្សាយពិន្ទុជោគជ័យ!');
+      // Trigger refetch
+      setSelectedPeriod(selectedPeriod + ' ');
+      setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
     } catch (err: any) {
-       console.error(err);
-       alert('មានបញ្ហាក្នុងការបោះពុម្ពផ្សាយ៖ ' + err.message);
+      alert('កំហុសក្នុងការបោះពុម្ពផ្សាយ៖ ' + err.message);
     } finally {
-       setIsPublishing(false);
-       // Hack to force refetch
-       setSelectedPeriod(selectedPeriod + ' ');
-       setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
+      setIsPublishing(false);
+    }
+  };
+
+  const handleCalculateSummary = async () => {
+    if (!confirm(`តើអ្នកពិតជាចង់គណនាពិន្ទុ ${selectedPeriod} សម្រាប់សិស្សទាំងអស់មែនទេ?`)) return;
+    setIsCalculating(true);
+    try {
+      const res = await calculateSummaryScores(selectedPeriod);
+      if (res.success) {
+        alert(`បានគណនា និងរក្សាទុកពិន្ទុជោគជ័យសម្រាប់សិស្សចំនួន ${res.count} នាក់!`);
+        // Trigger refetch
+        setSelectedPeriod(selectedPeriod + ' ');
+        setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
+      } else {
+        alert('កំហុសក្នុងការគណនា៖ ' + res.error);
+      }
+    } catch (err: any) {
+      alert('កំហុសបណ្តាញ៖ ' + err.message);
+    } finally {
+      setIsCalculating(false);
     }
   };
 
   const filteredClasses = classesStatus.filter(c => {
-    const matchesSearch = c.name.includes(searchQuery) || c.teacher.includes(searchQuery);
-    const matchesStatus = filterStatus === 'all' || c.status === filterStatus;
-    return matchesSearch && matchesStatus;
+    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          c.teacher.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = filterStatus === 'all' || c.status === filterStatus;
+    return matchesSearch && matchesFilter;
   });
 
   const missingClasses = classesStatus.filter(c => c.status === 'missing');
@@ -185,8 +190,39 @@ export default function MasterScoresPage() {
           </div>
 
           <button 
+            onClick={() => setIsMonthlyExamSheetModalOpen(true)}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> បង្កើត Sheet ប្រឡង (៨ Tabs)
+          </button>
+
+          <button 
+            onClick={() => setIsGEIPExportModalOpen(true)}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-indigo-500/20 flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" /> ទាញទិន្នន័យចេញ GEIP
+          </button>
+
+          {(selectedPeriod === 'sem1-summary' || selectedPeriod === 'sem2-summary' || selectedPeriod === 'annual') && (
+            <button 
+              onClick={handleCalculateSummary}
+              disabled={isCalculating}
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-orange-500/20 flex items-center gap-2 disabled:opacity-50"
+            >
+              {isCalculating ? 'កំពុងគណនា...' : 'គណនាពិន្ទុឆមាស/ប្រចាំឆ្នាំ'}
+            </button>
+          )}
+
+          <button 
+            onClick={() => setIsRollbackModalOpen(true)}
+            className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-sm transition-all border border-amber-200 shadow-sm flex items-center gap-2 cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4 text-amber-600" /> ប្រវត្តិ & ស្តារពិន្ទុ
+          </button>
+
+          <button 
             onClick={() => setIsUploadModalOpen(true)}
-            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-all border border-slate-200 shadow-sm flex items-center gap-2"
+            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-all border border-slate-200 shadow-sm flex items-center gap-2 cursor-pointer"
           >
             <Upload className="w-4 h-4 text-[#155EEF]" /> អាប់ឡូតពិន្ទុ
           </button>
@@ -194,7 +230,7 @@ export default function MasterScoresPage() {
           <button 
             onClick={handlePublishScores}
             disabled={isPublishing || draftCount === 0}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-emerald-500/20 flex items-center gap-2 disabled:opacity-50 disabled:shadow-none"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 disabled:shadow-none cursor-pointer"
           >
             <Send className="w-4 h-4" /> {isPublishing ? 'កំពុងបោះពុម្ព...' : 'បោះពុម្ពផ្សាយ'}
           </button>
@@ -330,6 +366,28 @@ export default function MasterScoresPage() {
            setSelectedPeriod(selectedPeriod + ' ');
            setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
         }} 
+        selectedPeriod={selectedPeriod}
+      />
+
+      <MasterScoreRollbackModal
+        isOpen={isRollbackModalOpen}
+        onClose={() => setIsRollbackModalOpen(false)}
+        selectedPeriod={selectedPeriod}
+        onRollbackSuccess={() => {
+           setSelectedPeriod(selectedPeriod + ' ');
+           setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
+        }}
+      />
+
+      <MonthlyExamSheetModal
+        isOpen={isMonthlyExamSheetModalOpen}
+        onClose={() => setIsMonthlyExamSheetModalOpen(false)}
+        selectedPeriod={selectedPeriod}
+      />
+
+      <GEIPExportModal
+        isOpen={isGEIPExportModalOpen}
+        onClose={() => setIsGEIPExportModalOpen(false)}
         selectedPeriod={selectedPeriod}
       />
     </div>

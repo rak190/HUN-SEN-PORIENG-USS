@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getServerAuth } from '@/lib/auth-server';
 import { revalidatePath } from 'next/cache';
 import { ActivityType } from '@/types';
 
@@ -12,9 +13,9 @@ export async function createActivityLog(data: {
 }) {
   const supabase = await createClient();
   
-  // Get current user to link to created_by
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData?.user) {
+  // Get current user
+  const { user } = await getServerAuth();
+  if (!user) {
     throw new Error('Unauthorized');
   }
 
@@ -23,7 +24,7 @@ export async function createActivityLog(data: {
     description: data.description,
     activity_type: data.activity_type,
     class_id: data.class_id,
-    created_by: userData.user.id
+    created_by: user.id
   });
 
   if (error) {
@@ -55,8 +56,8 @@ export async function addStudent(data: {
   const supabase = await createClient();
   
   // 1. Get current user
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError || !userData?.user) {
+  const { user } = await getServerAuth();
+  if (!user) {
     throw new Error('Unauthorized');
   }
 
@@ -64,7 +65,7 @@ export async function addStudent(data: {
   const { data: classroom, error: classError } = await supabase
     .from('classes')
     .select('id')
-    .eq('teacher_id', userData.user.id)
+    .eq('teacher_id', user.id)
     .single();
 
   if (classError || !classroom) {

@@ -41,7 +41,8 @@ export default function CertificatesPage() {
 
   // Filters (Generator Mode)
   const [grade, setGrade] = useState('all');
-  const [academicYear, setAcademicYear] = useState('2024-2025');
+  const [academicYear, setAcademicYear] = useState('2025-2026');
+  const [availableYears, setAvailableYears] = useState<{ id: string; name: string }[]>([]);
 
   // Templates
   const [templates, setTemplates] = useState<CertificateTemplateConfig[]>([DEFAULT_TEMPLATE]);
@@ -53,29 +54,42 @@ export default function CertificatesPage() {
   // Refs for rendering PDFs
   const certRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // 1. Fetch Templates on Mount
+  // 1. Fetch Templates and Academic Years on Mount
   useEffect(() => {
-    async function loadTemplates() {
-      const { data, error } = await supabase
+    async function loadInitialData() {
+      // Load templates
+      const { data: tmplData } = await supabase
         .from('system_settings')
         .select('value')
         .eq('key', 'certificate_templates')
-        .single();
+        .maybeSingle();
         
-      if (data && data.value && Array.isArray(data.value)) {
-          const loadedTemplates = data.value as CertificateTemplateConfig[];
-          
-          // Ensure DEFAULT_TEMPLATE is always in the list
-          if (!loadedTemplates.find(t => t.id === DEFAULT_TEMPLATE.id)) {
-            loadedTemplates.unshift(DEFAULT_TEMPLATE);
-          }
-
-          setTemplates(loadedTemplates);
-          setActiveTemplateId(loadedTemplates[0].id);
-          setEditConfig(loadedTemplates[0]);
+      if (tmplData && tmplData.value && Array.isArray(tmplData.value)) {
+        const loadedTemplates = tmplData.value as CertificateTemplateConfig[];
+        
+        // Ensure DEFAULT_TEMPLATE is always in the list
+        if (!loadedTemplates.find(t => t.id === DEFAULT_TEMPLATE.id)) {
+          loadedTemplates.unshift(DEFAULT_TEMPLATE);
         }
+
+        setTemplates(loadedTemplates);
+        setActiveTemplateId(loadedTemplates[0].id);
+        setEditConfig(loadedTemplates[0]);
+      }
+
+      // Load academic years
+      const { data: yearsData } = await supabase
+        .from('academic_years')
+        .select('id, name, is_active')
+        .order('start_date', { ascending: false });
+
+      if (yearsData && yearsData.length > 0) {
+        setAvailableYears(yearsData);
+        const activeY = yearsData.find(y => y.is_active);
+        if (activeY) setAcademicYear(activeY.name);
+      }
     }
-    loadTemplates();
+    loadInitialData();
   }, [supabase]);
 
   // 2. Fetch Students for Generation
@@ -317,8 +331,16 @@ export default function CertificatesPage() {
                   onChange={(e) => setAcademicYear(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none cursor-pointer"
                 >
-                  <option value="2024-2025">២០២៤-២០២៥</option>
-                  <option value="2025-2026">២០២៥-២០២៦</option>
+                  {availableYears.length > 0 ? (
+                    availableYears.map(y => (
+                      <option key={y.id} value={y.name}>{y.name}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="2024-2025">២០២៤-២០២៥</option>
+                      <option value="2025-2026">២០២៥-២០២៦</option>
+                    </>
+                  )}
                 </select>
               </div>
               <div>

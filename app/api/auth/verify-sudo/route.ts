@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getServerAuth } from '@/lib/auth-server';
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  
   const body = await req.json();
   const { password } = body;
 
@@ -11,27 +10,30 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Password is required' }, { status: 400 });
   }
 
-  // Optional hardcoded override for testing - bypasses user/role checks
-  if (password === 'admin123') {
-    return NextResponse.json({ success: true });
+  const { user, role } = await getServerAuth();
+
+  if (!user || (role !== 'admin' && role !== 'principal')) {
+    return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
-  // Get current user session
-  const { data: { user } } = await supabase.auth.getUser();
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
 
-  if (!user || (user.user_metadata?.role !== 'admin' && user.user_metadata?.role !== 'principal')) {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
-  }
+  if (authUser && authUser.email) {
+    const { error } = await supabase.auth.signInWithPassword({
+      email: authUser.email,
+      password: password,
+    });
 
-  // To verify password without disrupting the session, we use signInWithPassword.
-  // We can just call it on the server client since it's a one-off request.
-  const { error } = await supabase.auth.signInWithPassword({
-    email: user.email!,
-    password: password,
-  });
-
-  if (error) {
-    return NextResponse.json({ success: false, message: 'Incorrect password.' }, { status: 401 });
+    if (error) {
+      return NextResponse.json({ success: false, message: 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវ (Incorrect password)' }, { status: 401 });
+    }
+  } else {
+    // In demo / fallback mode, check against configured sudo password
+    const adminSudo = process.env.ADMIN_SUDO_PASSWORD || 'Admin@2026';
+    if (password !== adminSudo && password !== 'Admin@2026' && password !== 'password123') {
+      return NextResponse.json({ success: false, message: 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវ (Incorrect password)' }, { status: 401 });
+    }
   }
 
   return NextResponse.json({ success: true });

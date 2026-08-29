@@ -4,18 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   Server, Shield, Lock, TerminalSquare, RefreshCcw, KeyRound,
   Database, ShieldAlert, CheckCircle2, AlertTriangle, 
-  History, Download, RefreshCw, FileText, Search, Activity
+  History, Download, RefreshCw, FileText, Search, Activity, Trash2
 } from 'lucide-react';
 
-const MOCK_LOGS = [
-  { id: 'LOG-1094', time: '14:05 រសៀល', user: 'kruadmin041030', action: 'កែប្រែពិន្ទុ (Math: 35 -> 48) សម្រាប់សិស្ស ID: ST-9921', type: 'warn', status: 'បានកត់ត្រា' },
-  { id: 'LOG-1093', time: '13:45 រសៀល', user: 'kruadmin041030', action: 'ទាញយករបាយការណ៍ (REP-03)', type: 'info', status: 'ជោគជ័យ' },
-  { id: 'LOG-1092', time: '11:32 ព្រឹក', user: 'kruadmin041030', action: 'ចូលប្រើប្រព័ន្ធ', type: 'info', status: 'ជោគជ័យ' },
-  { id: 'LOG-1091', time: '11:28 ព្រឹក', user: 'sysadmin_porieng', action: 'កែប្រែការកំណត់ Role របស់ user: teacher_sok', type: 'warn', status: 'បានកត់ត្រា' },
-  { id: 'LOG-1088', time: '09:12 ព្រឹក', user: 'unknown_guest', action: 'ព្យាយាមចូលប្រើប្រព័ន្ធជាមួយពាក្យសម្ងាត់ខុស', type: 'error', status: 'បដិសេធ' },
-  { id: 'LOG-1087', time: '08:45 ព្រឹក', user: 'system', action: 'បញ្ចប់ការបម្រុងទុកទិន្នន័យស្វ័យប្រវត្តិ', type: 'info', status: 'ជោគជ័យ' },
-];
-
+// Real logs are fetched from /api/admin/audit-logs
 export default function MergedSystemPage() {
   const [activeTab, setActiveTab] = useState<'settings' | 'logs'>('settings');
 
@@ -30,13 +22,24 @@ export default function MergedSystemPage() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
 
+  const fetchLogs = async () => {
+    setLoadingLogs(true);
+    try {
+      const res = await fetch('/api/admin/audit-logs');
+      const data = await res.json();
+      if (data.logs) {
+        setLogs(data.logs);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'logs') {
-      setLoadingLogs(true);
-      setTimeout(() => {
-        setLogs(MOCK_LOGS);
-        setLoadingLogs(false);
-      }, 300);
+      fetchLogs();
     }
   }, [activeTab]);
 
@@ -56,10 +59,50 @@ export default function MergedSystemPage() {
 
   const handleBackup = () => {
     setIsBackingUp(true);
-    setTimeout(() => {
-      alert('[Mock Action] ទិន្នន័យត្រូវបានទាញយកជា CSV ដោយជោគជ័យ (CSV Backup Downloaded)!');
+    try {
+      const csvContent = [
+        ['ID', 'Time', 'User', 'Action', 'Severity', 'Status'].join(','),
+        ...logs.map(log => 
+          [
+            log.id, 
+            `"${log.time}"`, 
+            `"${log.user}"`, 
+            `"${log.action.replace(/"/g, '""')}"`, 
+            log.type, 
+            log.status
+          ].join(',')
+        )
+      ].join('\n');
+      
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `audit_logs_backup_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch(e) {
+      console.error(e);
+    } finally {
       setIsBackingUp(false);
-    }, 2000);
+    }
+  };
+
+  const handleClearLogs = async (mode: 'old' | 'all') => {
+    if (!confirm('តើអ្នកពិតជាចង់លុបកំណត់ត្រាមែនទេ?សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ។')) return;
+    
+    try {
+      const res = await fetch(`/api/admin/audit-logs?mode=${mode}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchLogs();
+        alert('កំណត់ត្រាត្រូវបានលុបដោយជោគជ័យ!');
+      } else {
+        alert('មានបញ្ហាក្នុងការលុបកំណត់ត្រា។');
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const filteredLogs = logs.filter(l => 
@@ -175,14 +218,30 @@ export default function MergedSystemPage() {
 
         {activeTab === 'logs' && (
           <div className="space-y-6 mt-4">
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-end mb-4 gap-3">
+              <button
+                onClick={() => handleClearLogs('old')}
+                className="px-5 py-3 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                title="លុបកំណត់ត្រាចាស់ៗជាង ៣០ ថ្ងៃ"
+              >
+                <Trash2 className="w-5 h-5" />
+                <span>សម្អាតចាស់ៗ</span>
+              </button>
+              <button
+                onClick={() => handleClearLogs('all')}
+                className="px-5 py-3 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                title="លុបកំណត់ត្រាទាំងអស់"
+              >
+                <ShieldAlert className="w-5 h-5" />
+                <span>លុបទាំងអស់</span>
+              </button>
               <button
                 onClick={handleBackup}
                 disabled={isBackingUp}
                 className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-70 shadow-sm cursor-pointer"
               >
                 {isBackingUp ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Database className="w-5 h-5" />}
-                <span>{isBackingUp ? 'កំពុងបម្រុងទុក...' : 'បម្រុងទុកទិន្នន័យ (Backup Now)'}</span>
+                <span>{isBackingUp ? 'កំពុងបម្រុងទុក...' : 'បម្រុងទុកទិន្នន័យ (Backup)'}</span>
               </button>
             </div>
 

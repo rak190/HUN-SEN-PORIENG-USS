@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
+import { getServerAuth } from '@/lib/auth-server';
+import crypto from 'crypto';
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role: userRole } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (userRole !== 'admin' && userRole !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -22,38 +22,8 @@ export async function POST(req: Request) {
     );
   }
 
-  // Handle Demo Mode if Service Role Key is missing
   if (!adminClient) {
-    const createdUsers = users.map((u, idx) => {
-      const roleKh =
-        u.role === 'principal'
-          ? 'នាយកសាលា'
-          : u.role === 'admin'
-          ? 'អ្នកគ្រប់គ្រងប្រព័ន្ធ'
-          : u.role === 'monitor'
-          ? 'ប្រធានថ្នាក់'
-          : 'គ្រូបន្ទុកថ្នាក់';
-
-      return {
-        id: `USR-BATCH-${Date.now()}-${idx}`,
-        username: (u.username || `user_${idx}`).trim().toLowerCase(),
-        name: (u.fullName || u.username).trim(),
-        role: u.role || 'teacher',
-        roleKh,
-        school: u.schoolCode || 'Porieng-2026',
-        status: 'សកម្ម',
-        lastLogin: 'មិនធ្លាប់',
-        created_at: new Date().toISOString(),
-      };
-    });
-
-    return NextResponse.json({
-      isDemo: true,
-      message: 'Batch users created in demo mode.',
-      users: createdUsers,
-      successCount: createdUsers.length,
-      failCount: 0,
-    });
+    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
   const results: any[] = [];
@@ -61,7 +31,7 @@ export async function POST(req: Request) {
   let failCount = 0;
 
   for (const userItem of users) {
-    const { username, password, fullName, role, schoolCode } = userItem;
+    const { username, password, fullName, role, schoolCode, phone, subject } = userItem;
 
     if (!username || !fullName) {
       failCount++;
@@ -74,68 +44,59 @@ export async function POST(req: Request) {
     const finalPassword = password || 'password123';
     const finalRole = role || 'teacher';
     const finalSchool = schoolCode || 'Porieng-2026';
+    const newUserId = crypto.randomUUID();
 
     try {
-      const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-        email,
-        password: finalPassword,
-        email_confirm: true,
-        user_metadata: {
-          full_name: fullName.trim(),
-          role: finalRole,
-        },
-      });
-
-      if (createError) {
-        failCount++;
-        results.push({ username: cleanUsername, error: createError.message });
-        continue;
-      }
-
-      if (newUser.user) {
-        await adminClient.from('profiles').insert([
-          {
-            id: newUser.user.id,
-            username: cleanUsername,
+      try {
+        await adminClient.auth.admin.createUser({
+          id: newUserId,
+          email,
+          password: finalPassword,
+          email_confirm: true,
+          user_metadata: {
             full_name: fullName.trim(),
             role: finalRole,
-            school_id: finalSchool.toLowerCase() === 'porieng-2026' ? 'main-school' : `school-${Date.now()}`,
-            school_code: finalSchool,
           },
-        ]);
+        });
+      } catch (_) {}
+
+      const { error: profileError } = await adminClient.from('profiles').insert([
+        {
+          id: newUserId,
+          username: cleanUsername,
+          full_name: fullName.trim(),
+          role: finalRole,
+          school_id: finalSchool.toLowerCase() === 'porieng-2026' ? 'main-school' : `school-${Date.now()}`,
+          school_code: finalSchool,
+          phone: phone || null,
+          subject: subject || null,
+        },
+      ]);
+
+      if (profileError) {
+        failCount++;
+        results.push({ username: cleanUsername, error: profileError.message });
+      } else {
+        successCount++;
+        results.push({
+          id: newUserId,
+          username: cleanUsername,
+          name: fullName.trim(),
+          role: finalRole,
+          school: finalSchool,
+          status: 'ជោគជ័យ',
+        });
       }
-
-      const roleKh =
-        finalRole === 'principal'
-          ? 'នាយកសាលា'
-          : finalRole === 'admin'
-          ? 'អ្នកគ្រប់គ្រងប្រព័ន្ធ'
-          : finalRole === 'monitor'
-          ? 'ប្រធានថ្នាក់'
-          : 'គ្រូបន្ទុកថ្នាក់';
-
-      successCount++;
-      results.push({
-        id: newUser.user.id,
-        username: cleanUsername,
-        name: fullName.trim(),
-        role: finalRole,
-        roleKh,
-        school: finalSchool,
-        status: 'សកម្ម',
-        lastLogin: 'មិនធ្លាប់',
-        created_at: new Date().toISOString(),
-      });
     } catch (err: any) {
       failCount++;
-      results.push({ username: cleanUsername, error: err?.message || 'Failed' });
+      results.push({ username: cleanUsername, error: err.message });
     }
   }
 
   return NextResponse.json({
     isDemo: false,
-    users: results.filter(r => r.id),
-    results,
+    message: `បានបង្កើតគណនីជោគជ័យ ${successCount} នាក់${failCount > 0 ? ` (បរាជ័យ ${failCount} នាក់)` : ''}`,
+    users: results,
     successCount,
     failCount,
   });

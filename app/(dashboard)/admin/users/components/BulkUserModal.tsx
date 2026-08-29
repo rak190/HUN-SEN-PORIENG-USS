@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, FileSpreadsheet, Sparkles, Loader2, CheckCircle2, AlertCircle, UploadCloud } from 'lucide-react';
 
 interface BulkUserModalProps {
@@ -16,6 +17,20 @@ export default function BulkUserModal({ isOpen, onClose, onSuccess }: BulkUserMo
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<'drag' | 'paste'>('drag');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const orig = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = orig;
+    };
+  }, [isOpen]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -153,9 +168,11 @@ export default function BulkUserModal({ isOpen, onClose, onSuccess }: BulkUserMo
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-start justify-center pt-10 sm:pt-16 pb-10 px-4 overflow-y-auto animate-in fade-in duration-300 select-none">
-      <div className="bg-white rounded-[32px] p-6 sm:p-8 max-w-3xl w-full shadow-2xl relative animate-in zoom-in-95 duration-300 border border-slate-100/50 max-h-fit flex flex-col">
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-md z-[9999] flex items-start justify-center pt-10 sm:pt-16 pb-10 px-4 overflow-y-auto animate-overlayFade select-none">
+      <div className="bg-white rounded-[32px] p-6 sm:p-8 max-w-3xl w-full shadow-2xl relative animate-modalScale border border-slate-100/80 max-h-fit flex flex-col">
         {/* Header */}
         <button
           onClick={onClose}
@@ -322,6 +339,7 @@ export default function BulkUserModal({ isOpen, onClose, onSuccess }: BulkUserMo
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

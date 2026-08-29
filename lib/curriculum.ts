@@ -14,7 +14,7 @@ export interface CurriculumSchema {
 export const CURRICULUM_SCHEMAS: Record<string, CurriculumSchema> = {
   'lower-sec': {
     id: 'lower-sec',
-    label: 'អនុវិទ្យាល័យ',
+    label: 'អនុវិទ្យាល័យ (ថ្នាក់ទី ៧-៩)',
     subjects: [
       { 
         id: 'khmer', 
@@ -40,7 +40,7 @@ export const CURRICULUM_SCHEMAS: Record<string, CurriculumSchema> = {
   },
   'upper-sec-sci': {
     id: 'upper-sec-sci',
-    label: 'វិទ្យាសាស្ត្រពិត',
+    label: 'វិទ្យាសាស្ត្រពិត (ថ្នាក់ទី ១០-១២)',
     subjects: [
       { 
         id: 'khmer', 
@@ -67,7 +67,7 @@ export const CURRICULUM_SCHEMAS: Record<string, CurriculumSchema> = {
   },
   'upper-sec-art': {
     id: 'upper-sec-art',
-    label: 'វិទ្យាសាស្ត្រសង្គម',
+    label: 'វិទ្យាសាស្ត្រសង្គម (ថ្នាក់ទី ១០-១២)',
     subjects: [
       { 
         id: 'khmer', 
@@ -92,3 +92,20 @@ export const CURRICULUM_SCHEMAS: Record<string, CurriculumSchema> = {
     ],
   }
 };
+
+/**
+ * Dynamically resolves the MoEYS curriculum schema according to class grade and track
+ */
+export function getCurriculumSchemaForClass(grade?: string | number | null, track?: string | null): CurriculumSchema {
+  const g = String(grade || '12').trim();
+  if (['7', '8', '9'].includes(g)) {
+    return CURRICULUM_SCHEMAS['lower-sec'];
+  }
+  
+  const t = String(track || '').toLowerCase();
+  if (t.includes('សង្គម') || t.includes('art') || t.includes('soc')) {
+    return CURRICULUM_SCHEMAS['upper-sec-art'];
+  }
+  
+  return CURRICULUM_SCHEMAS['upper-sec-sci'];
+}

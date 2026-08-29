@@ -1,15 +1,27 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getServerAuth } from '@/lib/auth-server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
-export async function GET() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const supabase = createClient(url, key);
+export async function POST(req: Request) {
+  const { user, role } = await getServerAuth();
   
-  const { error } = await supabase.from('system_settings').delete().eq('key', 'certificate_templates');
+  if (!user || role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized: Administrator access required.' }, { status: 403 });
+  }
+
+  const adminClient = createAdminClient();
+  if (!adminClient) {
+    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+  }
+  
+  const { error } = await adminClient.from('system_settings').delete().eq('key', 'certificate_templates');
   
   if (error) {
-    return NextResponse.json({ success: false, error });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, message: 'Certificate templates reset.' });
+}
+
+export async function GET() {
+  return NextResponse.json({ error: 'Method Not Allowed. Use POST with Admin Authorization.' }, { status: 405 });
 }

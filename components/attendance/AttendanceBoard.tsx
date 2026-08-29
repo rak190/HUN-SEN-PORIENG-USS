@@ -33,20 +33,11 @@ const ROOT_CAUSE_OPTIONS: { value: RootCauseAbsence; label: string }[] = [
   { value: 'other', label: '❓ មូលហេតុផ្សេងៗ' },
 ];
 
-const DEMO_STUDENTS_ATT: Student[] = [
-  { id: 'std-1', class_id: 'demo-class-1', student_id_number: 'ID-001', full_name: 'កែវ ច័ន្ទធីតា', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-2', class_id: 'demo-class-1', student_id_number: 'ID-002', full_name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-3', class_id: 'demo-class-1', student_id_number: 'ID-003', full_name: 'ចាន់ សុភាព', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-4', class_id: 'demo-class-1', student_id_number: 'ID-004', full_name: 'ដួង រដ្ឋា', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-5', class_id: 'demo-class-1', student_id_number: 'ID-005', full_name: 'ទិត្យ វិសាល', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-6', class_id: 'demo-class-1', student_id_number: 'ID-006', full_name: 'ប៊ុន រស្មី', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-];
-
 export default function AttendanceBoard() {
-  const { activeClass, user, isDemoMode } = useAuth();
-  const [students, setStudents] = useState<Student[]>(DEMO_STUDENTS_ATT);
+  const { activeClass, user } = useAuth();
+  const [students, setStudents] = useState<Student[]>([]);
   const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
-  const [rootCauses, setRootCauses] = useState<Record<string, RootCauseAbsence>>({ 'std-5': 'farming', 'std-3': 'illness' });
+  const [rootCauses, setRootCauses] = useState<Record<string, RootCauseAbsence>>({});
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -55,9 +46,9 @@ export default function AttendanceBoard() {
   const supabase = createClient();
 
   useEffect(() => {
-    if (isDemoMode || !activeClass) {
-      setStudents(DEMO_STUDENTS_ATT);
-      setRecords({ 'std-1': 'present', 'std-2': 'present', 'std-3': 'permission', 'std-4': 'present', 'std-5': 'absent', 'std-6': 'present' });
+    if (!activeClass) {
+      setStudents([]);
+      setRecords({});
       return;
     }
 
@@ -73,7 +64,7 @@ export default function AttendanceBoard() {
         if (stdData && stdData.length > 0) {
           setStudents(stdData as Student[]);
         } else {
-          setStudents(DEMO_STUDENTS_ATT);
+          setStudents([]);
         }
 
         const { data: attData } = await supabase
@@ -100,13 +91,13 @@ export default function AttendanceBoard() {
     }
 
     loadData();
-  }, [activeClass, selectedDate, isDemoMode]);
+  }, [activeClass, selectedDate]);
 
   async function handleMarkStatus(studentId: string, status: AttendanceStatus) {
     setRecords((prev) => ({ ...prev, [studentId]: status }));
     setSyncStatus('syncing');
 
-    if (isDemoMode || !activeClass) {
+    if (!activeClass) {
       setTimeout(() => setSyncStatus('synced'), 400);
       return;
     }
@@ -141,7 +132,7 @@ export default function AttendanceBoard() {
     setRecords(newMap);
     setSyncStatus('syncing');
 
-    if (isDemoMode || !activeClass) {
+    if (!activeClass) {
       setTimeout(() => setSyncStatus('synced'), 400);
       return;
     }

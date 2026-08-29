@@ -3,6 +3,7 @@ import { Upload, X, Loader2, Check, AlertTriangle, FileSpreadsheet, Save } from 
 import * as XLSX from 'xlsx';
 import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
+import Modal from '@/components/ui/Modal';
 
 type ParsedRow = {
   originalRow: number;
@@ -224,24 +225,19 @@ export function ClassGradeImportModal({ isOpen, onClose, onImportComplete, class
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-overlayFade">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-modalScale">
-        <div className="flex items-center justify-between p-6 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
-              <Upload size={20} />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">នាំចូលពិន្ទុពី Excel</h2>
-              <p className="text-sm text-slate-500">ថ្នាក់ទី {className} • នាំចូលសម្រាប់តែថ្នាក់នេះប៉ុណ្ណោះ</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-            <X size={20} />
-          </button>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="4xl"
+      icon={
+        <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600 shadow-xs">
+          <Upload size={20} />
         </div>
-
-        <div className="p-6 flex-1 overflow-y-auto">
+      }
+      title="នាំចូលពិន្ទុពី Excel"
+      subtitle={`ថ្នាក់ទី ${className} • នាំចូលសម្រាប់តែថ្នាក់នេះប៉ុណ្ណោះ`}
+    >
+      <div className="p-6 sm:p-8 space-y-6">
           {parsedData.length === 0 ? (
             <div className="space-y-6">
               <div 
@@ -342,7 +338,6 @@ export function ClassGradeImportModal({ isOpen, onClose, onImportComplete, class
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

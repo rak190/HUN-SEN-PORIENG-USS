@@ -16,7 +16,10 @@ import {
   Percent,
   Activity,
   ShieldAlert,
-  Smartphone
+  Smartphone,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -29,18 +32,9 @@ const ROOT_CAUSE_OPTIONS: { value: RootCauseAbsence; label: string }[] = [
   { value: 'other', label: '❓ ផ្សេងៗ' },
 ];
 
-const DEMO_STUDENTS_ATT: Student[] = [
-  { id: 'std-1', class_id: 'demo-class-1', student_id_number: 'ID-001', full_name: 'កែវ ច័ន្ទធីតា', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-2', class_id: 'demo-class-1', student_id_number: 'ID-002', full_name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-3', class_id: 'demo-class-1', student_id_number: 'ID-003', full_name: 'ចាន់ សុភាព', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-4', class_id: 'demo-class-1', student_id_number: 'ID-004', full_name: 'ដួង រដ្ឋា', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-5', class_id: 'demo-class-1', student_id_number: 'ID-005', full_name: 'ទិត្យ វិសាល', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-6', class_id: 'demo-class-1', student_id_number: 'ID-006', full_name: 'ប៊ុន រស្មី', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-];
-
 export default function MonthlyAttendanceForm() {
-  const { activeClass, user, isDemoMode } = useAuth();
-  const [students, setStudents] = useState<Student[]>(DEMO_STUDENTS_ATT);
+  const { activeClass, user } = useAuth();
+  const [students, setStudents] = useState<Student[]>([]);
   
   // Format current month to YYYY-MM
   const currentMonthStr = new Date().toISOString().slice(0, 7);
@@ -81,30 +75,13 @@ export default function MonthlyAttendanceForm() {
   const supabase = createClient();
 
   useEffect(() => {
-    if (isDemoMode || !activeClass) {
-      setStudents(DEMO_STUDENTS_ATT);
-      // Demo Command Center Stats
-      setMonitorDaysSubmitted(15);
-      setTotalMonthlyAbsences(12);
-      setDropoutAlertsCount(1);
-      
-      // Demo data
-      setFormData({
-        'std-1': { absent_count: 0, permission_count: 0, late_count: 0 },
-        'std-5': { absent_count: 4, permission_count: 1, late_count: 0, root_cause: 'farming', needs_home_visit: true },
-      });
-      
-      // Demo daily records for visual testing
-      setRawDailyRecords([
-        { id: '1', student_id: 'std-5', date: `${currentMonthStr}-18`, status: 'absent', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: '2', student_id: 'std-5', date: `${currentMonthStr}-19`, status: 'absent', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: '3', student_id: 'std-5', date: `${currentMonthStr}-20`, status: 'absent', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: '4', student_id: 'std-5', date: `${currentMonthStr}-21`, status: 'absent', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: '5', student_id: 'std-5', date: `${currentMonthStr}-15`, status: 'permission', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: '6', student_id: 'std-2', date: `${currentMonthStr}-10`, status: 'late', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: '7', student_id: 'std-2', date: `${currentMonthStr}-11`, status: 'late', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-        { id: '8', student_id: 'std-1', date: `${currentMonthStr}-12`, status: 'present', class_id: 'demo-class-1', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-      ] as any[]);
+    if (!activeClass) {
+      setStudents([]);
+      setMonitorDaysSubmitted(0);
+      setTotalMonthlyAbsences(0);
+      setDropoutAlertsCount(0);
+      setFormData({});
+      setRawDailyRecords([]);
       return;
     }
 
@@ -120,7 +97,7 @@ export default function MonthlyAttendanceForm() {
         if (stdData && stdData.length > 0) {
           setStudents(stdData as Student[]);
         } else {
-          setStudents(DEMO_STUDENTS_ATT);
+          setStudents([]);
         }
 
         const { data: summaryData } = await supabase
@@ -139,7 +116,7 @@ export default function MonthlyAttendanceForm() {
           .gte('date', startDate)
           .lte('date', endDate);
 
-        const allStudents = stdData && stdData.length > 0 ? stdData : DEMO_STUDENTS_ATT;
+        const allStudents = stdData && stdData.length > 0 ? stdData : [];
         const newMap: Record<string, any> = {};
         
         let daysSubmitted = new Set<string>();
@@ -200,7 +177,7 @@ export default function MonthlyAttendanceForm() {
     }
 
     loadData();
-  }, [activeClass, selectedMonth, isDemoMode]);
+  }, [activeClass, selectedMonth]);
 
   async function handleInputChange(studentId: string, field: 'absent_count' | 'permission_count' | 'late_count', value: string) {
     const numValue = parseInt(value, 10) || 0;
@@ -239,7 +216,7 @@ export default function MonthlyAttendanceForm() {
   async function handleSaveAll() {
     setSyncStatus('syncing');
 
-    if (isDemoMode || !activeClass) {
+    if (!activeClass) {
       setTimeout(() => {
         setSyncStatus('synced');
         setHasUnsavedChanges(false);
@@ -304,10 +281,86 @@ export default function MonthlyAttendanceForm() {
     }
   };
 
-  const filteredStudents = students.filter((s) =>
-    s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (s.student_id_number && s.student_id_number.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const [sortState, setSortState] = useState<{ field: string | null; direction: 'asc' | 'desc' | null }>({
+    field: null,
+    direction: null,
+  });
+
+  const handleSort = (field: string) => {
+    setSortState(prev => {
+      if (prev.field !== field) {
+        return { field, direction: 'asc' };
+      }
+      if (prev.direction === 'asc') {
+        return { field, direction: 'desc' };
+      }
+      return { field: null, direction: null };
+    });
+  };
+
+  const filteredStudents = useMemo(() => {
+    let result = students.filter((s) =>
+      s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.student_id_number && s.student_id_number.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+
+    if (sortState.field && sortState.direction) {
+      const { field, direction } = sortState;
+      const factor = direction === 'asc' ? 1 : -1;
+
+      result = [...result].sort((a, b) => {
+        const dataA = formData[a.id] || { absent_count: 0, permission_count: 0, late_count: 0 };
+        const dataB = formData[b.id] || { absent_count: 0, permission_count: 0, late_count: 0 };
+
+        let valA: any = a[field as keyof Student];
+        let valB: any = b[field as keyof Student];
+
+        if (field === 'absent_count') {
+          valA = Number(dataA.absent_count || 0);
+          valB = Number(dataB.absent_count || 0);
+        } else if (field === 'permission_count') {
+          valA = Number(dataA.permission_count || 0);
+          valB = Number(dataB.permission_count || 0);
+        } else if (field === 'total_absent') {
+          valA = Number(dataA.absent_count || 0) + Number(dataA.permission_count || 0);
+          valB = Number(dataB.absent_count || 0) + Number(dataB.permission_count || 0);
+        }
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return (valA - valB) * factor;
+        }
+
+        return String(valA || '').localeCompare(String(valB || ''), 'km', { numeric: true }) * factor;
+      });
+    }
+
+    return result;
+  }, [students, searchQuery, sortState, formData]);
+
+  const renderSortHeader = (label: string, field: string, align: 'left' | 'center' | 'right' = 'left', className: string = '') => {
+    const isActive = sortState.field === field && sortState.direction !== null;
+    return (
+      <th 
+        onClick={() => handleSort(field)}
+        className={`sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 cursor-pointer select-none hover:bg-slate-100/80 transition-colors group ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'} ${className}`}
+      >
+        <div className={`inline-flex items-center gap-1.5 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
+          <span>{label}</span>
+          <span className="text-slate-400 group-hover:text-slate-600 transition-colors">
+            {isActive ? (
+              sortState.direction === 'asc' ? (
+                <ArrowUp className="w-3.5 h-3.5 text-[#155EEF] font-bold" />
+              ) : (
+                <ArrowDown className="w-3.5 h-3.5 text-[#155EEF] font-bold" />
+              )
+            ) : (
+              <ArrowUpDown className="w-3 h-3 text-slate-300 opacity-60 group-hover:opacity-100" />
+            )}
+          </span>
+        </div>
+      </th>
+    );
+  };
 
   // Calculate Stats
   const stats = useMemo(() => {
@@ -518,12 +571,12 @@ export default function MonthlyAttendanceForm() {
           <thead>
             <tr className="text-xs font-bold text-slate-400 uppercase tracking-wider">
               <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 pl-4 w-12 text-center rounded-l-xl">ល.រ</th>
-              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-4">អត្តលេខ</th>
-              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-5">គោត្តនាម & នាម</th>
-              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center">ភេទ</th>
-              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-rose-600">ឥតច្បាប់</th>
-              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-[#155EEF]">ច្បាប់</th>
-              <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-3 text-center text-purple-600">សរុប</th>
+              {renderSortHeader('អត្តលេខ', 'student_id_number', 'left', 'px-4')}
+              {renderSortHeader('គោត្តនាម & នាម', 'full_name', 'left', 'px-5')}
+              {renderSortHeader('ភេទ', 'gender', 'center', 'px-3')}
+              {renderSortHeader('ឥតច្បាប់', 'absent_count', 'center', 'px-3 text-rose-600')}
+              {renderSortHeader('ច្បាប់', 'permission_count', 'center', 'px-3 text-[#155EEF]')}
+              {renderSortHeader('សរុប', 'total_absent', 'center', 'px-3 text-purple-600')}
               <th className="sticky top-0 bg-slate-50/80 backdrop-blur-sm z-10 pb-3 px-4 text-center rounded-r-xl">ចុះសួរសុខទុក្ខ</th>
             </tr>
           </thead>

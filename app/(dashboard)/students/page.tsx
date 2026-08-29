@@ -1,15 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { createClient } from '@/lib/supabase/client';
 import * as XLSX from 'xlsx';
 import {
   Users, Search, UserPlus, Download, Edit, MapPin, Heart, FileSpreadsheet, Table,
-  Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp, AlertTriangle, LogOut, ChevronDown
+  Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp, AlertTriangle, LogOut, ChevronDown, Loader2, X, Check,
+  ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import StudentImportModal from '@/components/students/StudentImportModal';
 import StudentGridEntryModal from '@/components/students/StudentGridEntryModal';
+import { saveStudentAction } from './actions';
 
 interface MassiveProfilingStudent {
   id: string;
@@ -55,27 +59,6 @@ interface MassiveProfilingStudent {
   attendance_rate: number;
 }
 
-export const INITIAL_STUDENTS: MassiveProfilingStudent[] = [
-  { 
-    id: 'std-1', student_id_number: '04931', desk_number: 'A-01', full_name: 'កែវ ច័ន្ទធីតា', gender: 'F', date_of_birth: '2010-05-14', age: 15, birth_cert_no: 'B-001', student_phone: '012345678',
-    status: 'new', prev_school: 'ប. ជា ស៊ីម', scholarship: 'no', id_poor: 'none', orphan: 'no', indigenous: 'no', distance_km: 2.5,
-    weight_kg: 45, height_m: 1.53, bmi: 19.2, nutrition_status: 'ធម្មតា', disability: 'none', assistive_device: 'គ្មាន', health_issues: 'ធម្មតា',
-    father_name: 'កែវ សំណាង', father_job: 'កសិករ', father_phone: '070789217', mother_name: 'វ៉ាត សំអូន', mother_job: 'កសិករ', mother_phone: '070789217',
-    guardian_name: '', guardian_job: '', guardian_phone: '', siblings_count: 2, migrant_status: 'none', domestic_violence: 'no', housing: 'ផ្ទះឈើប្រកស័ង្កសី', income: 200,
-    address: 'ភូមិអង្គរយស ឃុំព្រែកអន្ទះ', current_status: 'active',
-    risk_level: 'high', attendance_rate: 88
-  },
-  { 
-    id: 'std-2', student_id_number: '04932', desk_number: 'A-02', full_name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', date_of_birth: '2009-11-20', age: 16, birth_cert_no: 'B-002', student_phone: '098765432',
-    status: 'repeater', prev_school: 'ប. បាក់ដោក', scholarship: 'yes', id_poor: 'level_1', orphan: 'no', indigenous: 'no', distance_km: 12.0,
-    weight_kg: 40, height_m: 1.55, bmi: 16.6, nutrition_status: 'ស្គម', disability: 'none', assistive_device: 'គ្មាន', health_issues: 'ខ្សោយគំហើញ',
-    father_name: 'ខៀវ សារ៉ុម', father_job: 'កសិករ', father_phone: '0967219931', mother_name: 'កុន ច្រិប', mother_job: 'កសិករ', mother_phone: '0967219931',
-    guardian_name: '', guardian_job: '', guardian_phone: '', siblings_count: 4, migrant_status: 'parents', domestic_violence: 'no', housing: 'ផ្ទះថ្ម', income: 250,
-    address: 'ភូមិថ្មី ឃុំព្រែកអន្ទះ', current_status: 'active',
-    risk_level: 'medium', attendance_rate: 96
-  },
-];
-
 const DEFAULT_FORM: Partial<MassiveProfilingStudent> = {
   gender: 'M', status: 'new', prev_school: '', scholarship: 'no', id_poor: 'none', orphan: 'no', indigenous: 'no', distance_km: 0,
   weight_kg: 40, height_m: 1.50, disability: 'none', assistive_device: '', health_issues: '',
@@ -93,16 +76,81 @@ const VIEW_TABS = [
 
 export default function StudentsPage() {
   const { activeClass } = useAuth();
-  const [students, setStudents] = useState<MassiveProfilingStudent[]>(INITIAL_STUDENTS);
+  const [students, setStudents] = useState<MassiveProfilingStudent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const supabase = createClient();
   const [searchQuery, setSearchQuery] = useState('');
   
   const [mainTab, setMainTab] = useState<'list' | 'at-risk' | 'transfer'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isGridModalOpen, setIsGridModalOpen] = useState(false);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [activeTableView, setActiveTableView] = useState(1);
   const [activeModalTab, setActiveModalTab] = useState(1);
   const [formData, setFormData] = useState<Partial<MassiveProfilingStudent>>({});
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('#export-geip-dropdown')) {
+        setIsExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  const handleWeightChange = (val: number) => {
+    const h = formData.height_m || 0;
+    let bmi = 0;
+    let nutrition_status = 'ធម្មតា';
+    if (val > 0 && h > 0) {
+      bmi = parseFloat((val / (h * h)).toFixed(1));
+      if (bmi < 18.5) nutrition_status = 'ស្គម';
+      else if (bmi >= 25 && bmi < 30) nutrition_status = 'លើសទម្ងន់';
+      else if (bmi >= 30) nutrition_status = 'ធាត់';
+    }
+    setFormData(prev => ({ ...prev, weight_kg: val, bmi, nutrition_status }));
+  };
+
+  const handleHeightChange = (val: number) => {
+    const w = formData.weight_kg || 0;
+    let bmi = 0;
+    let nutrition_status = 'ធម្មតា';
+    if (w > 0 && val > 0) {
+      bmi = parseFloat((w / (val * val)).toFixed(1));
+      if (bmi < 18.5) nutrition_status = 'ស្គម';
+      else if (bmi >= 25 && bmi < 30) nutrition_status = 'លើសទម្ងន់';
+      else if (bmi >= 30) nutrition_status = 'ធាត់';
+    }
+    setFormData(prev => ({ ...prev, height_m: val, bmi, nutrition_status }));
+  };
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      if (!activeClass?.id) return;
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .eq('class_id', activeClass.id)
+        .order('student_id_number', { ascending: true });
+
+      if (data) {
+        setStudents(data.map(d => ({
+          ...DEFAULT_FORM,
+          ...d,
+          current_status: d.enrollment_status || 'active',
+        } as MassiveProfilingStudent)));
+      }
+      setIsLoading(false);
+    };
+    fetchStudents();
+  }, [activeClass?.id]);
 
   // Contact Modal State
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
@@ -118,30 +166,42 @@ export default function StudentsPage() {
   });
   const [transferRecords, setTransferRecords] = useState<any[]>([]);
 
-  const handleStatusSubmit = (e: React.FormEvent) => {
+  const handleStatusSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!statusForm.studentId) return;
     
+    setIsSaving(true);
     const student = students.find(s => s.id === statusForm.studentId);
     if (student) {
-       // update student status
        let newStatus = 'dropout';
        if (statusForm.actionType === 'ផ្ទេរចេញ') newStatus = 'transfer';
        else if (statusForm.actionType === 'មរណភាព') newStatus = 'deceased';
        
-       setStudents(students.map(s => s.id === student.id ? { ...s, current_status: newStatus as any } : s));
-       
-       // add to records
-       setTransferRecords([{
-          id: Date.now().toString(),
-          student_id_number: student.student_id_number,
-          full_name: student.full_name,
-          status: statusForm.actionType,
-          date: statusForm.actionDate,
-          reason: statusForm.reason
-       }, ...transferRecords]);
+       const { error } = await supabase
+         .from('students')
+         .update({ 
+            enrollment_status: newStatus,
+            is_active: newStatus === 'active'
+         })
+         .eq('id', student.id);
+
+       if (!error) {
+         setStudents(students.map(s => s.id === student.id ? { ...s, current_status: newStatus as any } : s));
+         setTransferRecords([{
+            id: Date.now().toString(),
+            student_id_number: student.student_id_number,
+            full_name: student.full_name,
+            status: statusForm.actionType,
+            date: statusForm.actionDate,
+            reason: statusForm.reason
+         }, ...transferRecords]);
+       } else {
+         console.error('Error updating status:', error);
+         alert('មានបញ្ហាក្នុងការកែប្រែស្ថានភាពសិស្ស');
+       }
     }
     
+    setIsSaving(false);
     setIsStatusModalOpen(false);
     setStatusForm({
       studentId: '',
@@ -151,7 +211,75 @@ export default function StudentsPage() {
     });
   };
 
-  const filteredStudents = students.filter(s => s.full_name.includes(searchQuery) || s.student_id_number.includes(searchQuery));
+  const [sortState, setSortState] = useState<{ field: string | null; direction: 'asc' | 'desc' | null }>({
+    field: null,
+    direction: null,
+  });
+
+  const handleSort = (field: string) => {
+    setSortState(prev => {
+      if (prev.field !== field) {
+        return { field, direction: 'asc' };
+      }
+      if (prev.direction === 'asc') {
+        return { field, direction: 'desc' };
+      }
+      return { field: null, direction: null };
+    });
+  };
+
+  const filteredStudents = useMemo<MassiveProfilingStudent[]>(() => {
+    let result = students.filter(s => 
+      s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (s.student_id_number && s.student_id_number.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+
+    if (sortState.field && sortState.direction) {
+      const { field, direction } = sortState;
+      const factor = direction === 'asc' ? 1 : -1;
+
+      result = [...result].sort((a: any, b: any) => {
+        let valA = a[field];
+        let valB = b[field];
+
+        if (valA === undefined || valA === null) valA = '';
+        if (valB === undefined || valB === null) valB = '';
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return (valA - valB) * factor;
+        }
+
+        return String(valA).localeCompare(String(valB), 'km', { numeric: true }) * factor;
+      });
+    }
+
+    return result;
+  }, [students, searchQuery, sortState]);
+
+  const renderSortHeader = (label: string, field: string, align: 'left' | 'center' | 'right' = 'left') => {
+    const isActive = sortState.field === field && sortState.direction !== null;
+    return (
+      <th 
+        onClick={() => handleSort(field)}
+        className={`p-4 cursor-pointer select-none hover:bg-slate-100/80 transition-colors group ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`}
+      >
+        <div className={`inline-flex items-center gap-1.5 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
+          <span>{label}</span>
+          <span className="text-slate-400 group-hover:text-slate-600 transition-colors">
+            {isActive ? (
+              sortState.direction === 'asc' ? (
+                <ArrowUp className="w-3.5 h-3.5 text-[#155EEF] font-bold" />
+              ) : (
+                <ArrowDown className="w-3.5 h-3.5 text-[#155EEF] font-bold" />
+              )
+            ) : (
+              <ArrowUpDown className="w-3 h-3 text-slate-300 opacity-60 group-hover:opacity-100" />
+            )}
+          </span>
+        </div>
+      </th>
+    );
+  };
 
   // Auto-calculate BMI
   useEffect(() => {
@@ -169,7 +297,7 @@ export default function StudentsPage() {
     }
   }, [formData.weight_kg, formData.height_m]);
 
-  const handleExportGEIP = () => {
+  const handleExportGEIPExcel = () => {
     const wsData = students.map((std) => ({
       'អត្តលេខ': std.student_id_number,
       'នាមត្រកូល និងនាមខ្លួន': std.full_name,
@@ -186,8 +314,8 @@ export default function StudentsPage() {
       'បណ្ណក្រីក្រ': std.id_poor === 'none' ? 'គ្មាន' : std.id_poor === 'level_1' ? 'កម្រិត ១' : 'កម្រិត ២',
       'អាហារូបករណ៍': std.scholarship === 'yes' ? 'បាទ/ចាស' : 'ទេ',
       'ចម្ងាយ (គ.ម)': std.distance_km,
-      'ទម្ងន់': std.weight_kg,
-      'កម្ពស់': std.height_m,
+      'ទម្ងន់ (kg)': std.weight_kg,
+      'កម្ពស់ (m)': std.height_m,
       'BMI': std.bmi,
       'លទ្ធផលវាយតម្លៃសុខភាព': std.nutrition_status,
       'បញ្ហាសុខភាព': std.health_issues,
@@ -209,6 +337,296 @@ export default function StudentsPage() {
     XLSX.writeFile(wb, `MoEYS_GEIP_Master_Data_${activeClass?.name || 'Class'}.xlsx`);
   };
 
+  const handleExportGEIPPDF = () => {
+    const total = students.length;
+    const female = students.filter(s => s.gender === 'F' || s.gender === 'ស្រី').length;
+    const active = students.filter(s => s.current_status === 'active').length;
+    const dropout = students.filter(s => s.current_status === 'dropout').length;
+    const idPoorCount = students.filter(s => s.id_poor && s.id_poor !== 'none').length;
+    const scholarshipCount = students.filter(s => s.scholarship === 'yes').length;
+    const disabilityCount = students.filter(s => s.disability && s.disability !== 'none').length;
+
+    const rowsHtml = students.map((std, idx) => `
+      <tr style="background-color: ${idx % 2 === 1 ? '#f8fafc' : '#ffffff'};">
+        <!-- 1. ព័ត៌មានផ្ទាល់ខ្លួន -->
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-weight: bold;">${idx + 1}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-family: monospace; font-size: 7.5px; text-align: center;">${std.student_id_number || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 4px; font-weight: bold; text-align: left; color: #0f172a; white-space: nowrap;">${std.full_name}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center;">${std.gender === 'F' || std.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px; white-space: nowrap;">${std.date_of_birth || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center;">${std.age || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.birth_cert_no || '-'}</td>
+
+        <!-- 2. ការសិក្សា & សមធម៌ -->
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.status === 'new' ? 'ថ្មី' : std.status === 'repeater' ? 'ត្រួតថ្នាក់' : 'ផ្ទេរចូល'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: left; font-size: 7.5px;">${std.prev_school || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.indigenous === 'yes' ? 'បាទ/ចាស' : 'ទេ'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.orphan === 'yes' ? 'បាទ/ចាស' : 'ទេ'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.id_poor === 'level_1' ? 'កម្រិត ១' : std.id_poor === 'level_2' ? 'កម្រិត ២' : 'គ្មាន'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.scholarship === 'yes' ? 'មាន' : 'គ្មាន'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.distance_km || 0}</td>
+
+        <!-- 3. សុខភាព & អាហារូបត្ថម្ភ -->
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.disability === 'mild' ? 'ស្រាល' : std.disability === 'severe' ? 'ធ្ងន់' : 'គ្មាន'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.assistive_device || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.weight_kg || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.height_m || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px; font-weight: bold;">${std.bmi || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px;">${std.nutrition_status || 'ធម្មតា'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: left; font-size: 7.5px;">${std.health_issues || '-'}</td>
+
+        <!-- 4. គ្រួសារ & ទីលំនៅ -->
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-size: 7.5px; text-align: left;">${std.father_name ? `${std.father_name}${std.father_job ? ` (${std.father_job})` : ''}` : '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-size: 7.5px; text-align: center; font-family: monospace;">${std.father_phone || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-size: 7.5px; text-align: left;">${std.mother_name ? `${std.mother_name}${std.mother_job ? ` (${std.mother_job})` : ''}` : '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-size: 7.5px; text-align: center; font-family: monospace;">${std.mother_phone || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-size: 7.5px; text-align: center;">${std.migrant_status === 'parents' ? 'ឪពុកម្តាយ' : std.migrant_status === 'student' ? 'សិស្ស' : 'គ្មាន'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-size: 7.5px; text-align: center;">${std.domestic_violence === 'yes' ? 'មាន' : 'គ្មាន'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-size: 7.5px; text-align: center;">${std.housing ? `${std.housing} / $${std.income || 0}` : `$${std.income || 0}`}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-size: 7.5px; text-align: center;">${std.siblings_count || 0}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-size: 7.5px; text-align: left;">${std.address || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; font-size: 7.5px; text-align: center; font-family: monospace;">${std.student_phone || '-'}</td>
+
+        <!-- 5. ស្ថានភាពចុងក្រោយ -->
+        <td style="border: 1px solid #94a3b8; padding: 3px 2px; text-align: center; font-size: 7.5px; font-weight: bold; color: ${std.current_status === 'dropout' ? '#e11d48' : '#15803d'};">
+          ${std.current_status === 'dropout' ? 'បោះបង់' : 'កំពុងរៀន'}
+        </td>
+      </tr>
+    `).join('');
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>MoEYS_GEIP_Master_Data_${activeClass?.name || 'Class'}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&family=Moul&family=Siemreap&display=swap" rel="stylesheet">
+        <style>
+          @page {
+            size: A4 landscape;
+            margin: 5mm 6mm;
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            font-family: 'Kantumruy Pro', 'Siemreap', sans-serif;
+            font-size: 8px;
+            color: #0f172a;
+            margin: 0;
+            padding: 6px;
+            background-color: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .font-muol {
+            font-family: 'Moul', serif;
+          }
+          .header-grid {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+          }
+          .header-left {
+            text-align: left;
+            line-height: 1.4;
+            font-size: 9px;
+          }
+          .header-right {
+            text-align: center;
+            line-height: 1.4;
+            font-size: 9px;
+          }
+          .main-title {
+            text-align: center;
+            margin: 2px 0 10px;
+          }
+          .main-title h1 {
+            font-family: 'Moul', serif;
+            font-size: 13px;
+            margin: 0 0 3px;
+            color: #1e3a8a;
+          }
+          .main-title p {
+            font-size: 9.5px;
+            margin: 0;
+            color: #475569;
+            font-weight: 600;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 7.8px;
+          }
+          th {
+            border: 1px solid #94a3b8;
+            padding: 3px 2px;
+            font-weight: 700;
+            text-align: center;
+            color: #1e293b;
+          }
+          .stats-box {
+            margin-top: 10px;
+            padding: 6px 12px;
+            background-color: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 8.5px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .signatures {
+            margin-top: 16px;
+            display: flex;
+            justify-content: space-between;
+            text-align: center;
+            font-size: 9.5px;
+            page-break-inside: avoid;
+          }
+          .signature-col {
+            width: 250px;
+          }
+          .signature-space {
+            height: 45px;
+          }
+          @media print {
+            body { padding: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header-grid">
+          <div class="header-left">
+            <div>ក្រសួងអប់រំ យុវជន និងកីឡា</div>
+            <div>មន្ទីរអប់រំ យុវជន និងកីឡាខេត្តព្រៃវែង</div>
+            <div style="font-weight: bold; font-size: 10.5px; color: #1e3a8a;">វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</div>
+          </div>
+          <div class="header-right">
+            <div class="font-muol" style="font-size: 10.5px;">ព្រះរាជាណាចក្រកម្ពុជា</div>
+            <div class="font-muol" style="font-size: 9.5px;">ជាតិ សាសនា ព្រះមហាក្សត្រ</div>
+            <div style="font-size: 11px; letter-spacing: 2px;">***</div>
+          </div>
+        </div>
+
+        <div class="main-title">
+          <h1>បញ្ជីឈ្មោះ និងស្ថិតិព័ត៌មានលម្អិតសិស្ស GEIP គ្រប់ទិន្នន័យ (Master Profiling)</h1>
+          <p>គម្រោងកែលម្អការអប់រំចំណេះទូទៅ (GEIP - IDA.No.7024-KH) • ថ្នាក់ទី៖ <strong>${activeClass?.name || '...'}</strong> • ឆ្នាំសិក្សា៖ <strong>២០២៥-២០២៦</strong></p>
+        </div>
+
+        <table>
+          <thead>
+            <!-- Level 1: Group Headers -->
+            <tr>
+              <th rowspan="2" style="width: 18px; background-color: #f1f5f9;">ល.រ</th>
+              <th colspan="6" style="background-color: #f1f5f9; color: #0f172a; border-bottom: 1px solid #94a3b8;">១. ព័ត៌មានផ្ទាល់ខ្លួន</th>
+              <th colspan="7" style="background-color: #eff6ff; color: #1e3a8a; border-bottom: 1px solid #94a3b8;">២. ការសិក្សា & សមធម៌</th>
+              <th colspan="7" style="background-color: #f0fdf4; color: #14532d; border-bottom: 1px solid #94a3b8;">៣. សុខភាព & អាហារូបត្ថម្ភ</th>
+              <th colspan="10" style="background-color: #fffbeb; color: #78350f; border-bottom: 1px solid #94a3b8;">៤. គ្រួសារ & ទីលំនៅ</th>
+              <th rowspan="2" style="width: 38px; background-color: #fdf2f8; color: #831843;">ស្ថានភាព</th>
+            </tr>
+            <!-- Level 2: Detail Column Headers -->
+            <tr>
+              <!-- 1. ព័ត៌មានផ្ទាល់ខ្លួន -->
+              <th style="width: 44px; background-color: #f8fafc;">អត្តលេខ</th>
+              <th style="min-width: 75px; text-align: left; padding-left: 4px; background-color: #f8fafc;">គោត្តនាម និងនាម</th>
+              <th style="width: 24px; background-color: #f8fafc;">ភេទ</th>
+              <th style="width: 48px; background-color: #f8fafc;">ថ្ងៃកំណើត</th>
+              <th style="width: 18px; background-color: #f8fafc;">អាយុ</th>
+              <th style="width: 40px; background-color: #f8fafc;">សំបុត្រកំណើត</th>
+
+              <!-- 2. ការសិក្សា & សមធម៌ -->
+              <th style="width: 36px; background-color: #f0f7ff;">ស្ថានភាព</th>
+              <th style="width: 45px; background-color: #f0f7ff;">សាលាមុន</th>
+              <th style="width: 30px; background-color: #f0f7ff;">ជនជាតិ</th>
+              <th style="width: 28px; background-color: #f0f7ff;">កំព្រា</th>
+              <th style="width: 36px; background-color: #f0f7ff;">បណ្ណក្រីក្រ</th>
+              <th style="width: 36px; background-color: #f0f7ff;">អាហារូបករណ៍</th>
+              <th style="width: 26px; background-color: #f0f7ff;">ចម្ងាយ</th>
+
+              <!-- 3. សុខភាព & អាហារូបត្ថម្ភ -->
+              <th style="width: 32px; background-color: #f5fdf8;">ពិការភាព</th>
+              <th style="width: 38px; background-color: #f5fdf8;">ឧបករណ៍</th>
+              <th style="width: 26px; background-color: #f5fdf8;">ទម្ងន់</th>
+              <th style="width: 26px; background-color: #f5fdf8;">កម្ពស់</th>
+              <th style="width: 24px; background-color: #f5fdf8;">BMI</th>
+              <th style="width: 42px; background-color: #f5fdf8;">អាហារូបត្ថម្ភ</th>
+              <th style="width: 45px; background-color: #f5fdf8;">បញ្ហាសុខភាព</th>
+
+              <!-- 4. គ្រួសារ & ទីលំនៅ -->
+              <th style="width: 60px; background-color: #fefce8;">ឪពុក (មុខរបរ)</th>
+              <th style="width: 46px; background-color: #fefce8;">ទូរស័ព្ទឪពុក</th>
+              <th style="width: 60px; background-color: #fefce8;">ម្តាយ (មុខរបរ)</th>
+              <th style="width: 46px; background-color: #fefce8;">ទូរស័ព្ទម្តាយ</th>
+              <th style="width: 32px; background-color: #fefce8;">ចំណាកស្រុក</th>
+              <th style="width: 26px; background-color: #fefce8;">ហិង្សា</th>
+              <th style="width: 46px; background-color: #fefce8;">ជម្រក/ចំណូល</th>
+              <th style="width: 24px; background-color: #fefce8;">បងប្អូន</th>
+              <th style="min-width: 65px; background-color: #fefce8;">អាសយដ្ឋាន</th>
+              <th style="width: 46px; background-color: #fefce8;">ទូរស័ព្ទសិស្ស</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="stats-box">
+          <div>
+            <span>សរុបសិស្ស៖ <strong>${total}</strong> នាក់ (ស្រី៖ <strong>${female}</strong> នាក់)</span>
+            <span style="margin: 0 8px; color: #94a3b8;">|</span>
+            <span>កំពុងរៀន៖ <strong>${active}</strong> នាក់</span>
+            <span style="margin: 0 8px; color: #94a3b8;">|</span>
+            <span>បោះបង់៖ <strong style="color: #e11d48;">${dropout}</strong> នាក់</span>
+          </div>
+          <div>
+            <span>ក្រីក្រ៖ <strong>${idPoorCount}</strong></span>
+            <span style="margin: 0 6px; color: #94a3b8;">|</span>
+            <span>អាហារូបករណ៍៖ <strong>${scholarshipCount}</strong></span>
+            <span style="margin: 0 6px; color: #94a3b8;">|</span>
+            <span>ពិការភាព៖ <strong>${disabilityCount}</strong></span>
+          </div>
+        </div>
+
+        <div class="signatures">
+          <div class="signature-col">
+            <div class="font-muol">បានឃើញ និងឯកភាព</div>
+            <div style="font-weight: bold; margin-top: 2px;">នាយកសាលា</div>
+            <div class="signature-space"></div>
+            <div style="font-weight: bold;">................................................</div>
+          </div>
+          <div class="signature-col">
+            <div style="color: #64748b; font-size: 9px;">ថ្ងៃទី......... ខែ......... ឆ្នាំ២០២...</div>
+            <div class="font-muol" style="margin-top: 2px;">គ្រូបន្ទុកថ្នាក់</div>
+            <div class="signature-space"></div>
+            <div style="font-weight: bold;">................................................</div>
+          </div>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=1200,height=850');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+    }
+  };
+
   const openAddModal = () => {
     setFormData({ ...DEFAULT_FORM, student_id_number: `ID-${Math.floor(Math.random()*10000)}` });
     setActiveModalTab(activeTableView); // Open modal to current table view
@@ -221,13 +639,67 @@ export default function StudentsPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = () => {
-    if (formData.id) {
-      setStudents(prev => prev.map(s => s.id === formData.id ? { ...s, ...formData } as MassiveProfilingStudent : s));
-    } else {
-      setStudents(prev => [...prev, { ...formData, id: `std-${Date.now()}` } as MassiveProfilingStudent]);
+  const handleSave = async () => {
+    setIsSaving(true);
+    
+    const payload = {
+      ...formData,
+      class_id: activeClass?.id,
+      current_status: formData.current_status || 'active',
+      is_active: (formData.current_status || 'active') === 'active',
+    };
+
+    try {
+      const res = await saveStudentAction(payload);
+      
+      if (res && res.success && res.student) {
+        const savedStudent = {
+          ...DEFAULT_FORM,
+          ...formData,
+          ...res.student,
+          current_status: res.student.enrollment_status || formData.current_status || 'active',
+        } as MassiveProfilingStudent;
+
+        if (formData.id) {
+          setStudents(prev => prev.map(s => s.id === formData.id ? savedStudent : s));
+        } else {
+          setStudents(prev => [savedStudent, ...prev]);
+        }
+        setIsModalOpen(false);
+      } else {
+        // Optimistic fallback update
+        const fallbackStudent = {
+          ...DEFAULT_FORM,
+          ...formData,
+          id: formData.id || `std-${Date.now()}`,
+          current_status: formData.current_status || 'active',
+        } as MassiveProfilingStudent;
+
+        if (formData.id) {
+          setStudents(prev => prev.map(s => s.id === formData.id ? fallbackStudent : s));
+        } else {
+          setStudents(prev => [fallbackStudent, ...prev]);
+        }
+        setIsModalOpen(false);
+      }
+    } catch (err: any) {
+      console.warn('handleSave error (applied local update):', err?.message);
+      const fallbackStudent = {
+        ...DEFAULT_FORM,
+        ...formData,
+        id: formData.id || `std-${Date.now()}`,
+        current_status: formData.current_status || 'active',
+      } as MassiveProfilingStudent;
+
+      if (formData.id) {
+        setStudents(prev => prev.map(s => s.id === formData.id ? fallbackStudent : s));
+      } else {
+        setStudents(prev => [fallbackStudent, ...prev]);
+      }
+      setIsModalOpen(false);
+    } finally {
+      setIsSaving(false);
     }
-    setIsModalOpen(false);
   };
 
   const handleBulkSuccess = (newStudents: any[]) => {
@@ -246,10 +718,58 @@ export default function StudentsPage() {
           </h1>
           <p className="text-xs font-bold text-[#64748B] mt-1">គ្រប់គ្រងប្រវត្តិរូបលម្អិតសិស្សសម្រាប់ការចុះឈ្មោះ GEIP រួមមាន សុខភាព គ្រួសារ និងការសិក្សា</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleExportGEIP} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs shadow-md shadow-emerald-500/20 flex items-center gap-2">
-            <Download className="w-4 h-4" /> ទាញយកទិន្នន័យ GEIP
+        <div id="export-geip-dropdown" className="relative">
+          <button 
+            type="button"
+            onClick={() => setIsExportMenuOpen(!isExportMenuOpen)} 
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs shadow-md shadow-emerald-500/20 flex items-center gap-2 transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>ទាញយកទិន្នន័យ GEIP</span>
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
           </button>
+
+          {isExportMenuOpen && (
+            <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="px-3.5 py-2 border-b border-slate-100">
+                <span className="text-[11px] font-bold text-slate-400">ទម្រង់ឯកសារនាំចេញ GEIP</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsExportMenuOpen(false);
+                  handleExportGEIPExcel();
+                }}
+                className="w-full px-3.5 py-2.5 flex items-center gap-3 hover:bg-slate-50 text-left transition-colors cursor-pointer group"
+              >
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FileSpreadsheet className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-slate-800">ទាញយកជា Excel (.xlsx)</div>
+                  <div className="text-[10px] font-bold text-slate-400">តារាងទិន្នន័យពេញលេញ ២៨ ជួរឈរ</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsExportMenuOpen(false);
+                  handleExportGEIPPDF();
+                }}
+                className="w-full px-3.5 py-2.5 flex items-center gap-3 hover:bg-slate-50 text-left transition-colors cursor-pointer group"
+              >
+                <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-slate-800">ទាញយកជា PDF / បោះពុម្ព (.pdf)</div>
+                  <div className="text-[10px] font-bold text-slate-400">ទម្រង់ក្រសួង A4 Landscape មានហត្ថលេខា</div>
+                </div>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -283,6 +803,7 @@ export default function StudentsPage() {
       <div className="bg-white p-4 rounded-[20px] border border-slate-200 shadow-2xs flex flex-wrap justify-between items-center gap-4">
         <div className="flex gap-4 items-center">
           <div className="text-sm font-extrabold text-slate-700">សិស្សសរុប៖ <span className="text-[#155EEF]">{students.length} នាក់</span></div>
+          {isLoading && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
           <div className="h-6 w-px bg-slate-200"></div>
           <div className="relative w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -320,24 +841,52 @@ export default function StudentsPage() {
           <table className="w-full text-left whitespace-nowrap">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase">
-                <th className="p-4">អត្តលេខ</th>
-                <th className="p-4">ឈ្មោះ</th>
+                {renderSortHeader('អត្តលេខ', 'student_id_number')}
+                {renderSortHeader('ឈ្មោះ', 'full_name')}
                 
                 {/* Dynamic Columns based on View Filter */}
                 {activeTableView === 1 && (
-                  <><th className="p-4 text-center">ភេទ</th><th className="p-4 text-center">ប្លង់តុ</th><th className="p-4">ថ្ងៃខែឆ្នាំកំណើត</th><th className="p-4 text-center">អាយុ</th><th className="p-4">សំបុត្រកំណើត</th><th className="p-4">ទូរស័ព្ទសិស្ស</th></>
+                  <>
+                    {renderSortHeader('ភេទ', 'gender', 'center')}
+                    {renderSortHeader('ប្លង់តុ', 'desk_number', 'center')}
+                    {renderSortHeader('ថ្ងៃខែឆ្នាំកំណើត', 'date_of_birth')}
+                    {renderSortHeader('អាយុ', 'age', 'center')}
+                    <th className="p-4">សំបុត្រកំណើត</th>
+                    <th className="p-4">ទូរស័ព្ទសិស្ស</th>
+                  </>
                 )}
                 {activeTableView === 2 && (
-                  <><th className="p-4 text-center">ស្ថានភាព</th><th className="p-4">សាលាមុន</th><th className="p-4 text-center">អាហារូបករណ៍</th><th className="p-4 text-center">ID Poor</th><th className="p-4 text-center">ចម្ងាយ(គ.ម)</th></>
+                  <>
+                    {renderSortHeader('ស្ថានភាព', 'status', 'center')}
+                    <th className="p-4">សាលាមុន</th>
+                    {renderSortHeader('អាហារូបករណ៍', 'scholarship', 'center')}
+                    {renderSortHeader('ID Poor', 'id_poor', 'center')}
+                    {renderSortHeader('ចម្ងាយ(គ.ម)', 'distance_km', 'center')}
+                  </>
                 )}
                 {activeTableView === 3 && (
-                  <><th className="p-4 text-center">កម្ពស់ / ទម្ងន់</th><th className="p-4 text-center">BMI / ស្ថានភាព</th><th className="p-4 text-center">ពិការភាព</th><th className="p-4">បញ្ហាសុខភាព</th></>
+                  <>
+                    {renderSortHeader('កម្ពស់', 'height_m', 'center')}
+                    {renderSortHeader('ទម្ងន់', 'weight_kg', 'center')}
+                    {renderSortHeader('BMI', 'bmi', 'center')}
+                    {renderSortHeader('ពិការភាព', 'disability', 'center')}
+                    <th className="p-4">បញ្ហាសុខភាព</th>
+                  </>
                 )}
                 {activeTableView === 4 && (
-                  <><th className="p-4">ឪពុក/ម្តាយ</th><th className="p-4 text-center">បងប្អូន</th><th className="p-4 text-center">ចំណូល/ខែ</th><th className="p-4">ផ្ទះសំបែង</th><th className="p-4 text-center">ចំណាកស្រុក</th></>
+                  <>
+                    <th className="p-4">ឪពុក/ម្តាយ</th>
+                    {renderSortHeader('បងប្អូន', 'siblings_count', 'center')}
+                    {renderSortHeader('ចំណូល/ខែ', 'income', 'center')}
+                    <th className="p-4">ផ្ទះសំបែង</th>
+                    {renderSortHeader('ចំណាកស្រុក', 'migrant_status', 'center')}
+                  </>
                 )}
                 {activeTableView === 5 && (
-                  <><th className="p-4">អាសយដ្ឋានបច្ចុប្បន្ន</th><th className="p-4 text-center">ស្ថានភាពចុងក្រោយ</th></>
+                  <>
+                    {renderSortHeader('អាសយដ្ឋានបច្ចុប្បន្ន', 'address')}
+                    {renderSortHeader('ស្ថានភាពចុងក្រោយ', 'current_status', 'center')}
+                  </>
                 )}
 
                 <th className="p-4 text-right">សកម្មភាព</th>
@@ -573,86 +1122,259 @@ export default function StudentsPage() {
       )}
 
       {/* Massive Modal (Synchronized with activeModalTab) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-              <h2 className="text-lg font-black text-slate-800">{formData.id ? 'កែប្រែប្រវត្តិរូបសិស្ស' : 'បង្កើតប្រវត្តិរូបសិស្សថ្មី'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 text-2xl font-bold hover:text-slate-700">&times;</button>
+      {mounted && isModalOpen && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fadeIn"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 border border-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-white border-b border-slate-100 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#155EEF] flex items-center justify-center font-black">
+                  <UserSquare2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-black text-slate-800">
+                    {formData.id ? 'កែប្រែប្រវត្តិរូបសិស្ស' : 'បង្កើតប្រវត្តិរូបសិស្សថ្មី'}
+                  </h2>
+                  <p className="text-xs font-bold text-[#64748B]">
+                    {formData.full_name ? `${formData.full_name} (${formData.student_id_number || 'គ្មានអត្តលេខ'})` : 'បញ្ចូលព័ត៌មានលម្អិតសិស្ស'}
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsModalOpen(false)} 
+                className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
             
-            <div className="flex px-6 border-b border-slate-200 bg-slate-50 overflow-x-auto hide-scrollbar">
+            {/* Tabs Navigation */}
+            <div className="flex px-6 border-b border-slate-100 bg-slate-50/70 overflow-x-auto hide-scrollbar shrink-0 gap-1.5 py-1.5">
               {VIEW_TABS.map(tab => (
                 <button 
-                  key={tab.id} onClick={() => setActiveModalTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 border-b-2 font-bold text-sm whitespace-nowrap transition-colors ${activeModalTab === tab.id ? 'border-[#155EEF] text-[#155EEF] bg-white' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                  key={tab.id} 
+                  type="button"
+                  onClick={() => setActiveModalTab(tab.id)}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-extrabold text-xs whitespace-nowrap transition-all cursor-pointer ${
+                    activeModalTab === tab.id 
+                      ? 'bg-white text-[#155EEF] shadow-xs border border-slate-200/60 font-black' 
+                      : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+                  }`}
                 >
-                  <tab.icon className="w-4 h-4" /> {tab.label}
+                  <tab.icon className="w-3.5 h-3.5" /> 
+                  <span>{tab.label}</span>
                 </button>
               ))}
             </div>
 
-            <div className="p-6 overflow-y-auto flex-1 bg-slate-50/30">
+            {/* Form Body */}
+            <div className="p-6 sm:p-8 overflow-y-auto flex-1 bg-slate-50/30 custom-scrollbar">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {activeModalTab === 1 && (
                   <>
-                    <label className="block text-xs font-bold text-slate-700">អត្តលេខ <input type="text" value={formData.student_id_number || ''} onChange={e=>setFormData({...formData, student_id_number:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">ឈ្មោះពេញ <input type="text" value={formData.full_name || ''} onChange={e=>setFormData({...formData, full_name:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">ភេទ <select value={formData.gender || 'M'} onChange={e=>setFormData({...formData, gender:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl"><option value="M">ប្រុស</option><option value="F">ស្រី</option></select></label>
-                    <label className="block text-xs font-bold text-slate-700">ថ្ងៃខែឆ្នាំកំណើត <input type="date" value={formData.date_of_birth || ''} onChange={e=>setFormData({...formData, date_of_birth:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">អាយុ <input type="number" value={formData.age || ''} onChange={e=>setFormData({...formData, age:Number(e.target.value)})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">លេខសំបុត្រកំណើត <input type="text" value={formData.birth_cert_no || ''} onChange={e=>setFormData({...formData, birth_cert_no:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      អត្តលេខ
+                      <input type="text" value={formData.student_id_number || ''} onChange={e=>setFormData({...formData, student_id_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ឈ្មោះពេញ
+                      <input type="text" value={formData.full_name || ''} onChange={e=>setFormData({...formData, full_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ភេទ
+                      <select value={formData.gender || 'M'} onChange={e=>setFormData({...formData, gender:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
+                        <option value="M">ប្រុស</option>
+                        <option value="F">ស្រី</option>
+                      </select>
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ថ្ងៃខែឆ្នាំកំណើត
+                      <input type="date" value={formData.date_of_birth || ''} onChange={e=>setFormData({...formData, date_of_birth:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      អាយុ
+                      <input type="number" value={formData.age || ''} onChange={e=>setFormData({...formData, age:Number(e.target.value)})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      លេខសំបុត្រកំណើត
+                      <input type="text" value={formData.birth_cert_no || ''} onChange={e=>setFormData({...formData, birth_cert_no:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
                   </>
                 )}
                 {activeModalTab === 2 && (
                   <>
-                    <label className="block text-xs font-bold text-slate-700">ស្ថានភាព <select value={formData.status||'new'} onChange={e=>setFormData({...formData, status:e.target.value as any})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl"><option value="new">ថ្មី</option><option value="repeater">ត្រួត</option></select></label>
-                    <label className="block text-xs font-bold text-slate-700">សាលាមុន (បើមាន) <input type="text" value={formData.prev_school||''} onChange={e=>setFormData({...formData, prev_school:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">បណ្ណក្រីក្រ <select value={formData.id_poor||'none'} onChange={e=>setFormData({...formData, id_poor:e.target.value as any})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl"><option value="none">គ្មាន</option><option value="level_1">ក្រីក្រ ១</option><option value="level_2">ក្រីក្រ ២</option></select></label>
-                    <label className="block text-xs font-bold text-slate-700">អាហារូបករណ៍ <select value={formData.scholarship||'no'} onChange={e=>setFormData({...formData, scholarship:e.target.value as any})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl"><option value="no">គ្មាន</option><option value="yes">មាន</option></select></label>
-                    <label className="block text-xs font-bold text-slate-700">ចម្ងាយពីផ្ទះ (គ.ម) <input type="number" value={formData.distance_km||0} onChange={e=>setFormData({...formData, distance_km:Number(e.target.value)})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">កុមារកំព្រា <select value={formData.orphan||'no'} onChange={e=>setFormData({...formData, orphan:e.target.value as any})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl"><option value="no">ទេ</option><option value="yes">បាទ/ចាស</option></select></label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ស្ថានភាព
+                      <select value={formData.status||'new'} onChange={e=>setFormData({...formData, status:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
+                        <option value="new">ថ្មី</option>
+                        <option value="repeater">ត្រួត</option>
+                      </select>
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      សាលាមុន (បើមាន)
+                      <input type="text" value={formData.prev_school||''} onChange={e=>setFormData({...formData, prev_school:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      បណ្ណក្រីក្រ
+                      <select value={formData.id_poor||'none'} onChange={e=>setFormData({...formData, id_poor:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
+                        <option value="none">គ្មាន</option>
+                        <option value="level_1">ក្រីក្រ ១</option>
+                        <option value="level_2">ក្រីក្រ ២</option>
+                      </select>
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      អាហារូបករណ៍
+                      <select value={formData.scholarship||'no'} onChange={e=>setFormData({...formData, scholarship:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
+                        <option value="no">គ្មាន</option>
+                        <option value="yes">មាន</option>
+                      </select>
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ចម្ងាយពីផ្ទះ (គ.ម)
+                      <input type="number" value={formData.distance_km||0} onChange={e=>setFormData({...formData, distance_km:Number(e.target.value)})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      កុមារកំព្រា
+                      <select value={formData.orphan||'no'} onChange={e=>setFormData({...formData, orphan:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
+                        <option value="no">ទេ</option>
+                        <option value="yes">បាទ/ចាស</option>
+                      </select>
+                    </label>
                   </>
                 )}
                 {activeModalTab === 3 && (
                   <>
-                    <label className="block text-xs font-bold text-slate-700">ទម្ងន់ <input type="number" value={formData.weight_kg||0} onChange={e=>setFormData({...formData, weight_kg:Number(e.target.value)})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">កម្ពស់ <input type="number" step="0.01" value={formData.height_m||0} onChange={e=>setFormData({...formData, height_m:Number(e.target.value)})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <div className="sm:col-span-2 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex justify-between items-center shadow-inner">
-                      <span className="text-sm font-black text-emerald-900">BMI លទ្ធផល៖ {formData.bmi}</span>
-                      <span className={`px-4 py-1.5 rounded-full text-xs font-black ${formData.nutrition_status==='ធម្មតា'?'bg-emerald-600 text-white':'bg-rose-500 text-white'}`}>{formData.nutrition_status}</span>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ទម្ងន់ (គ.ក្រ)
+                      <input type="number" value={formData.weight_kg||0} onChange={e=>handleWeightChange(Number(e.target.value))} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      កម្ពស់ (ម៉ែត្រ ឧ. 1.55)
+                      <input type="number" step="0.01" value={formData.height_m||0} onChange={e=>handleHeightChange(Number(e.target.value))} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <div className="sm:col-span-2 p-4 bg-emerald-50 border border-emerald-200/80 rounded-2xl flex justify-between items-center shadow-xs">
+                      <div>
+                        <span className="text-xs font-bold text-emerald-800">សន្ទស្សន៍ម៉ាសរាងកាយ (BMI)</span>
+                        <div className="text-lg font-black text-emerald-950">{formData.bmi || 0}</div>
+                      </div>
+                      <span className={`px-4 py-1.5 rounded-full text-xs font-black shadow-xs ${formData.nutrition_status==='ធម្មតា'?'bg-emerald-600 text-white':'bg-rose-500 text-white'}`}>
+                        {formData.nutrition_status || 'ធម្មតា'}
+                      </span>
                     </div>
-                    <label className="block text-xs font-bold text-slate-700">ពិការភាព <select value={formData.disability||'none'} onChange={e=>setFormData({...formData, disability:e.target.value as any})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl"><option value="none">គ្មាន</option><option value="mild">ស្រាល</option><option value="severe">ធ្ងន់</option></select></label>
-                    <label className="block text-xs font-bold text-slate-700">បញ្ហាសុខភាព <input type="text" value={formData.health_issues||''} onChange={e=>setFormData({...formData, health_issues:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ពិការភាព
+                      <select value={formData.disability||'none'} onChange={e=>setFormData({...formData, disability:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
+                        <option value="none">គ្មាន</option>
+                        <option value="mild">ស្រាល</option>
+                        <option value="severe">ធ្ងន់</option>
+                      </select>
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      បញ្ហាសុខភាព
+                      <input type="text" value={formData.health_issues||''} onChange={e=>setFormData({...formData, health_issues:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
                   </>
                 )}
                 {activeModalTab === 4 && (
                   <>
-                    <label className="block text-xs font-bold text-slate-700">ឈ្មោះឪពុក <input type="text" value={formData.father_name||''} onChange={e=>setFormData({...formData, father_name:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">មុខរបរឪពុក <input type="text" value={formData.father_job||''} onChange={e=>setFormData({...formData, father_job:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">ឈ្មោះម្តាយ <input type="text" value={formData.mother_name||''} onChange={e=>setFormData({...formData, mother_name:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">មុខរបរម្តាយ <input type="text" value={formData.mother_job||''} onChange={e=>setFormData({...formData, mother_job:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">ចំណូលគ្រួសារ ($) <input type="number" value={formData.income||0} onChange={e=>setFormData({...formData, income:Number(e.target.value)})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">ចំណាកស្រុក <select value={formData.migrant_status||'none'} onChange={e=>setFormData({...formData, migrant_status:e.target.value as any})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl"><option value="none">គ្មាន</option><option value="parents">ឪពុកម្តាយ</option></select></label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ឈ្មោះឪពុក
+                      <input type="text" value={formData.father_name||''} onChange={e=>setFormData({...formData, father_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      មុខរបរឪពុក
+                      <input type="text" value={formData.father_job||''} onChange={e=>setFormData({...formData, father_job:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ឈ្មោះម្តាយ
+                      <input type="text" value={formData.mother_name||''} onChange={e=>setFormData({...formData, mother_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      មុខរបរម្តាយ
+                      <input type="text" value={formData.mother_job||''} onChange={e=>setFormData({...formData, mother_job:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ចំណូលគ្រួសារ ($)
+                      <input type="number" value={formData.income||0} onChange={e=>setFormData({...formData, income:Number(e.target.value)})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ចំណាកស្រុក
+                      <select value={formData.migrant_status||'none'} onChange={e=>setFormData({...formData, migrant_status:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
+                        <option value="none">គ្មាន</option>
+                        <option value="parents">ឪពុកម្តាយ</option>
+                      </select>
+                    </label>
                   </>
                 )}
                 {activeModalTab === 5 && (
                   <>
-                    <label className="block text-xs font-bold text-slate-700 sm:col-span-2">អាសយដ្ឋានបច្ចុប្បន្ន <input type="text" value={formData.address||''} onChange={e=>setFormData({...formData, address:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">ទូរស័ព្ទឪពុកម្តាយ <input type="text" value={formData.father_phone||''} onChange={e=>setFormData({...formData, father_phone:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">ទូរស័ព្ទសិស្ស <input type="text" value={formData.student_phone||''} onChange={e=>setFormData({...formData, student_phone:e.target.value})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl" /></label>
-                    <label className="block text-xs font-bold text-slate-700">ស្ថានភាពចុងក្រោយ <select value={formData.current_status||'active'} onChange={e=>setFormData({...formData, current_status:e.target.value as any})} className="mt-1 w-full p-2 border border-slate-200 rounded-xl"><option value="active">កំពុងរៀន</option><option value="dropout">បោះបង់</option></select></label>
+                    <label className="block text-xs font-bold text-slate-700 sm:col-span-2">
+                      អាសយដ្ឋានបច្ចុប្បន្ន
+                      <input type="text" value={formData.address||''} onChange={e=>setFormData({...formData, address:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ទូរស័ព្ទឪពុកម្តាយ
+                      <input type="text" value={formData.father_phone||''} onChange={e=>setFormData({...formData, father_phone:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ទូរស័ព្ទសិស្ស
+                      <input type="text" value={formData.student_phone||''} onChange={e=>setFormData({...formData, student_phone:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ស្ថានភាពចុងក្រោយ
+                      <select value={formData.current_status||'active'} onChange={e=>setFormData({...formData, current_status:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
+                        <option value="active">កំពុងរៀន</option>
+                        <option value="dropout">បោះបង់</option>
+                      </select>
+                    </label>
                   </>
                 )}
               </div>
             </div>
 
-            <div className="px-6 py-4 bg-white border-t border-slate-200 flex justify-end gap-3">
-              <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100">បោះបង់</button>
-              <button onClick={handleSave} className="px-6 py-2 rounded-xl bg-[#155EEF] hover:bg-blue-700 text-white font-black shadow-lg shadow-blue-500/20">រក្សាទុកទិន្នន័យ</button>
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-between gap-3 shrink-0 rounded-b-3xl">
+              <span className="text-xs font-bold text-slate-400 hidden sm:inline">
+                * រាល់ការកែប្រែនឹងត្រូវធ្វើសមកាលកម្មទៅប្រព័ន្ធកណ្តាលភ្លាមៗ
+              </span>
+              <div className="flex gap-2.5 ml-auto">
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(false)} 
+                  className="px-5 py-2.5 rounded-xl font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  បោះបង់
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleSave} 
+                  disabled={isSaving}
+                  className="px-6 py-2.5 rounded-xl bg-[#155EEF] hover:bg-blue-700 text-white font-black text-xs shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>កំពុងរក្សាទុក...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>រក្សាទុកទិន្នន័យ</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Import Modal */}
@@ -663,20 +1385,32 @@ export default function StudentsPage() {
       />
 
       {/* Contact Modal */}
-      {isContactModalOpen && contactStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
-            <div className="px-6 pt-6 pb-4 flex justify-between items-start border-b border-slate-100">
+      {mounted && isContactModalOpen && contactStudent && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fadeIn"
+          onClick={() => setIsContactModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-6 pb-4 flex justify-between items-start border-b border-slate-100 bg-slate-50/50">
               <div>
                 <h2 className="text-lg font-black text-slate-800">ព័ត៌មានទំនាក់ទំនង</h2>
                 <p className="text-xs font-bold text-slate-500 mt-1">អាណាព្យាបាលសិស្ស៖ {contactStudent.full_name}</p>
               </div>
-              <button onClick={() => setIsContactModalOpen(false)} className="text-slate-400 text-2xl font-bold hover:text-slate-700">&times;</button>
+              <button 
+                type="button"
+                onClick={() => setIsContactModalOpen(false)} 
+                className="p-2 hover:bg-slate-200/60 text-slate-400 hover:text-slate-700 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
             
-            <div className="p-6 space-y-4 bg-slate-50">
+            <div className="p-6 space-y-4 bg-slate-50/30">
               {contactStudent.father_phone && (
-                <div className="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 flex justify-between items-center shadow-xs">
                   <div>
                     <p className="text-xs font-bold text-slate-500">ឪពុក ({contactStudent.father_name})</p>
                     <p className="text-sm font-black text-slate-800 mt-0.5">{contactStudent.father_phone}</p>
@@ -688,7 +1422,7 @@ export default function StudentsPage() {
               )}
 
               {contactStudent.mother_phone && contactStudent.mother_phone !== contactStudent.father_phone && (
-                <div className="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 flex justify-between items-center shadow-xs">
                   <div>
                     <p className="text-xs font-bold text-slate-500">ម្តាយ ({contactStudent.mother_name})</p>
                     <p className="text-sm font-black text-slate-800 mt-0.5">{contactStudent.mother_phone}</p>
@@ -700,7 +1434,7 @@ export default function StudentsPage() {
               )}
 
               {contactStudent.guardian_phone && (
-                <div className="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 flex justify-between items-center shadow-xs">
                   <div>
                     <p className="text-xs font-bold text-slate-500">អាណាព្យាបាលផ្សេងទៀត</p>
                     <p className="text-sm font-black text-slate-800 mt-0.5">{contactStudent.guardian_phone}</p>
@@ -712,38 +1446,55 @@ export default function StudentsPage() {
               )}
               
               {!contactStudent.father_phone && !contactStudent.mother_phone && !contactStudent.guardian_phone && (
-                 <div className="text-center py-6 text-slate-500 font-bold text-sm">មិនមានលេខទូរស័ព្ទអាណាព្យាបាលទេ</div>
+                 <div className="text-center py-6 text-slate-400 font-bold text-sm">មិនមានលេខទូរស័ព្ទអាណាព្យាបាលទេ</div>
               )}
             </div>
             
             <div className="p-4 bg-white border-t border-slate-100">
-               <button onClick={() => setIsContactModalOpen(false)} className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition-colors">
+               <button 
+                 type="button"
+                 onClick={() => setIsContactModalOpen(false)} 
+                 className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-2xl text-xs transition-colors cursor-pointer"
+               >
                  បិទ
                </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Status Change Modal */}
-      {isStatusModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
-            <div className="px-6 pt-6 pb-4 flex justify-between items-start">
+      {mounted && isStatusModalOpen && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fadeIn"
+          onClick={() => setIsStatusModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border border-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 pt-6 pb-4 flex justify-between items-start border-b border-slate-100 bg-slate-50/50">
               <div>
                 <h2 className="text-lg font-black text-slate-800">កត់ត្រាការផ្លាស់ប្តូរស្ថានភាព</h2>
                 <p className="text-xs font-bold text-slate-500 mt-1">រក្សាទុកក្នុងប្រវត្តិបញ្ជីឈ្មោះសិក្សា</p>
               </div>
-              <button onClick={() => setIsStatusModalOpen(false)} className="text-slate-400 text-2xl font-bold hover:text-slate-700">&times;</button>
+              <button 
+                type="button"
+                onClick={() => setIsStatusModalOpen(false)} 
+                className="p-2 hover:bg-slate-200/60 text-slate-400 hover:text-slate-700 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
             
-            <form onSubmit={handleStatusSubmit} className="p-6 pt-2 space-y-4">
+            <form onSubmit={handleStatusSubmit} className="p-6 space-y-4">
               <div className="relative">
                 <select 
                   required
                   value={statusForm.studentId}
                   onChange={e => setStatusForm({...statusForm, studentId: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] appearance-none"
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] appearance-none bg-slate-50"
                 >
                   <option value="" disabled>ជ្រើសរើសសិស្ស...</option>
                   {students.filter(s => s.current_status === 'active').map(s => (
@@ -758,7 +1509,7 @@ export default function StudentsPage() {
                   <select 
                     value={statusForm.actionType}
                     onChange={e => setStatusForm({...statusForm, actionType: e.target.value})}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] appearance-none"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] appearance-none bg-slate-50"
                   >
                     <option value="ផ្ទេរចេញ">ផ្ទេរចេញ</option>
                     <option value="បោះបង់ការសិក្សា">បោះបង់ការសិក្សា</option>
@@ -772,7 +1523,7 @@ export default function StudentsPage() {
                   type="date"
                   value={statusForm.actionDate}
                   onChange={e => setStatusForm({...statusForm, actionDate: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF]"
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] bg-slate-50"
                 />
               </div>
 
@@ -780,18 +1531,19 @@ export default function StudentsPage() {
                 placeholder="មូលហេតុ..."
                 value={statusForm.reason}
                 onChange={e => setStatusForm({...statusForm, reason: e.target.value})}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] min-h-[100px] resize-none"
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] min-h-[100px] resize-none bg-slate-50"
               ></textarea>
 
               <button 
                 type="submit"
-                className="w-full py-4 mt-2 bg-[#E3163A] hover:bg-rose-700 text-white font-black rounded-[14px] text-sm transition-colors"
+                className="w-full py-3.5 bg-[#E3163A] hover:bg-rose-700 text-white font-black rounded-2xl text-sm transition-colors shadow-md shadow-rose-500/20 cursor-pointer"
               >
                 រក្សាទុកការផ្លាស់ប្តូរ
               </button>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Grid Entry Modal */}

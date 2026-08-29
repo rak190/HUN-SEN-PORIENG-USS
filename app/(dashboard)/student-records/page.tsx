@@ -7,15 +7,6 @@ import StudentRecordBook from './StudentRecordBook';
 import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
 
-const DEMO_STUDENTS: Student[] = [
-  { id: 'std-1', class_id: 'demo-class-1', student_id_number: 'ID-001', full_name: 'កែវ ច័ន្ទធីតា', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-2', class_id: 'demo-class-1', student_id_number: 'ID-002', full_name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-3', class_id: 'demo-class-1', student_id_number: 'ID-003', full_name: 'ចាន់ សុភាព', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-4', class_id: 'demo-class-1', student_id_number: 'ID-004', full_name: 'ដួង រដ្ឋា', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-5', class_id: 'demo-class-1', student_id_number: 'ID-005', full_name: 'ទិត្យ វិសាល', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-6', class_id: 'demo-class-1', student_id_number: 'ID-006', full_name: 'ប៊ុន រស្មី', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-];
-
 export default function StudentRecordsPage() {
   const { activeClass } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
@@ -37,15 +28,13 @@ export default function StudentRecordsPage() {
           supabase.from('grades').select('*').eq('class_id', activeClass.id)
         ]);
         
-        let fetchedStudents = studentsRes.data;
-
-        if (studentsRes.error || !fetchedStudents || fetchedStudents.length === 0) {
-          if (studentsRes.error) console.warn("Could not fetch real students, falling back to demo data:", studentsRes.error);
-          fetchedStudents = DEMO_STUDENTS;
-        }
-
+        const fetchedStudents = studentsRes.data || [];
         setStudents(fetchedStudents);
-        setSelectedStudentId(fetchedStudents[0].id);
+        if (fetchedStudents.length > 0) {
+          setSelectedStudentId(fetchedStudents[0].id);
+        } else {
+          setSelectedStudentId('');
+        }
 
         if (gradesRes.data) {
           setGradesData(gradesRes.data);
@@ -53,23 +42,19 @@ export default function StudentRecordsPage() {
 
         // Fetch homeroom teacher name
         if (activeClass.teacher_id) {
-          if (activeClass.teacher_id === 'demo-teacher-id') {
-             setTeacherName('លោកគ្រូ/អ្នកគ្រូ សុខា');
-          } else {
-             const { data: profileData } = await supabase
-               .from('profiles')
-               .select('full_name')
-               .eq('id', activeClass.teacher_id)
-               .single();
-             if (profileData && profileData.full_name) {
-               setTeacherName(profileData.full_name);
-             }
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', activeClass.teacher_id)
+            .single();
+          if (profileData && profileData.full_name) {
+            setTeacherName(profileData.full_name);
           }
         }
       } catch (err) {
-        console.warn("Failed to load students, using demo data");
-        setStudents(DEMO_STUDENTS);
-        setSelectedStudentId(DEMO_STUDENTS[0].id);
+        console.warn("Failed to load students:", err);
+        setStudents([]);
+        setSelectedStudentId('');
       } finally {
         setIsLoading(false);
       }

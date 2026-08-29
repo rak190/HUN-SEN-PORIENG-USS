@@ -6,15 +6,11 @@ import {
   Download, Upload, AlertTriangle, Search, Users, Building, 
   CalendarDays, Server, ChevronDown, CalendarCheck, ClipboardList
 } from 'lucide-react';
-
-const MOCK_YEARS = [
-  { id: '1', name: '2025-2026', startDate: '01 វិច្ឆិកា 2025', endDate: '30 កញ្ញា 2026', isActive: true },
-  { id: '2', name: '2024-2025', startDate: '01 វិច្ឆិកា 2024', endDate: '30 កញ្ញា 2025', isActive: false },
-];
+import Modal from '@/components/ui/Modal';
 
 export default function PremiumMoEYSAcademicSetupPage() {
   const [loading, setLoading] = useState(true);
-  const [academicYears, setAcademicYears] = useState<any[]>(MOCK_YEARS);
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<string | null>(null);
   const [showYearModal, setShowYearModal] = useState(false);
 
@@ -28,13 +24,55 @@ export default function PremiumMoEYSAcademicSetupPage() {
       const data = await res.json();
       if (data.academicYears && data.academicYears.length > 0) {
         setAcademicYears(data.academicYears);
-        const activeYear = data.academicYears.find((y: any) => y.is_active);
+        const activeYear = data.academicYears.find((y: any) => y.is_active || y.is_current);
         if (activeYear) setSelectedYearId(activeYear.id);
         else setSelectedYearId(data.academicYears[0].id);
       }
     } catch (e) {
       console.error(e);
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateYear = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    const formData = new FormData(e.currentTarget);
+    const name = formData.get('name') as string;
+    const start_date = formData.get('start_date') as string;
+    const end_date = formData.get('end_date') as string;
+
+    try {
+      const res = await fetch('/api/admin/academic-years', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, start_date, end_date }),
+      });
+      if (res.ok) {
+        fetchAcademicYears();
+        setShowYearModal(false);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleActive = async (id: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/academic-years', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, is_active: true }),
+      });
+      if (res.ok) {
+        fetchAcademicYears();
+      }
+    } catch (e) {
+      console.error(e);
       setLoading(false);
     }
   };
@@ -150,7 +188,10 @@ export default function PremiumMoEYSAcademicSetupPage() {
                 </div>
                 <div className="flex flex-col items-end justify-between shrink-0 h-full">
                   {!(y.is_active || y.isActive) && (
-                    <button className="text-[11px] font-extrabold text-[#155EEF] hover:underline cursor-pointer">
+                    <button 
+                      onClick={() => handleToggleActive(y.id)}
+                      className="text-[11px] font-extrabold text-[#155EEF] hover:underline cursor-pointer"
+                    >
                       ដាក់ជាសកម្ម
                     </button>
                   )}
@@ -164,38 +205,74 @@ export default function PremiumMoEYSAcademicSetupPage() {
         </div>
       </div>
 
-      {/* MODALS */}
-      {showYearModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowYearModal(false)} />
-          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-xl font-black text-slate-800">បង្កើតឆ្នាំសិក្សាថ្មី</h3>
-              <button onClick={() => setShowYearModal(false)} className="p-2 hover:bg-slate-50 rounded-full transition-colors cursor-pointer"><X className="w-5 h-5 text-slate-400" /></button>
+      {/* MODALS (Full-Screen Frosted Glass Portal) */}
+      <Modal
+        isOpen={showYearModal}
+        onClose={() => setShowYearModal(false)}
+        size="md"
+        icon={
+          <div className="w-10 h-10 bg-[#155EEF]/10 text-[#155EEF] rounded-2xl flex items-center justify-center shadow-xs">
+            <Calendar className="w-5 h-5" />
+          </div>
+        }
+        title="បង្កើតឆ្នាំសិក្សាថ្មី"
+      >
+        <form onSubmit={handleCreateYear}>
+          <div className="p-6 sm:p-8 space-y-4">
+            <div>
+              <label className="block text-xs font-extrabold text-[#64748B] mb-1.5 uppercase tracking-wider">
+                ឈ្មោះឆ្នាំសិក្សា
+              </label>
+              <input
+                name="name"
+                required
+                type="text"
+                placeholder="2025-2026"
+                className="w-full bg-slate-50 border border-slate-200/90 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none transition-all"
+              />
             </div>
-            <div className="p-6 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-[#64748B] mb-1">ឈ្មោះឆ្នាំសិក្សា</label>
-                <input type="text" placeholder="2025-2026" className="w-full bg-slate-50 border border-slate-200/60 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#155EEF] outline-none transition-all" />
+                <label className="block text-xs font-extrabold text-[#64748B] mb-1.5 uppercase tracking-wider">
+                  ថ្ងៃចាប់ផ្តើម
+                </label>
+                <input
+                  name="start_date"
+                  required
+                  type="date"
+                  className="w-full bg-slate-50 border border-slate-200/90 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none transition-all cursor-pointer"
+                />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-[#64748B] mb-1">ថ្ងៃចាប់ផ្តើម</label>
-                  <input type="date" className="w-full bg-slate-50 border border-slate-200/60 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-[#155EEF] outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#64748B] mb-1">ថ្ងៃបញ្ចប់</label>
-                  <input type="date" className="w-full bg-slate-50 border border-slate-200/60 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-[#155EEF] outline-none transition-all" />
-                </div>
+              <div>
+                <label className="block text-xs font-extrabold text-[#64748B] mb-1.5 uppercase tracking-wider">
+                  ថ្ងៃបញ្ចប់
+                </label>
+                <input
+                  name="end_date"
+                  type="date"
+                  className="w-full bg-slate-50 border border-slate-200/90 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none transition-all cursor-pointer"
+                />
               </div>
-            </div>
-            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3 justify-end">
-              <button onClick={() => setShowYearModal(false)} className="px-6 py-2.5 font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-full transition-colors shadow-xs cursor-pointer">បោះបង់</button>
-              <button onClick={() => setShowYearModal(false)} className="px-6 py-2.5 font-bold text-white bg-[#155EEF] hover:bg-blue-700 rounded-full transition-colors shadow-md shadow-blue-500/20 cursor-pointer">បង្កើត</button>
             </div>
           </div>
-        </div>
-      )}
+          <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3 justify-end rounded-b-[32px]">
+            <button
+              type="button"
+              onClick={() => setShowYearModal(false)}
+              className="px-6 py-2.5 font-extrabold text-xs text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-all shadow-xs cursor-pointer"
+            >
+              បោះបង់
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-6 py-2.5 font-extrabold text-xs text-white bg-[#155EEF] hover:bg-blue-700 rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50 active:scale-98"
+            >
+              {loading ? 'កំពុងបង្កើត...' : 'បង្កើត'}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
     </div>
   );

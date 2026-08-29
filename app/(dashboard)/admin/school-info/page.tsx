@@ -1,21 +1,22 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Save, RefreshCcw, CheckCircle2, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Save, RefreshCcw, CheckCircle2, Download, Building2, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 
 export default function AdminSchoolInfoPage() {
+  const [loading, setLoading] = useState(true);
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [schoolSaved, setSchoolSaved] = useState(false);
   
   // Basic Info
   const [schoolName, setSchoolName] = useState('វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង');
-  const [schoolNameEn, setSchoolNameEn] = useState('Hun Sen Peam Ro High School');
+  const [schoolNameEn, setSchoolNameEn] = useState('Hun Sen Porieng High School');
   const [schoolType, setSchoolType] = useState('វិទ្យាល័យ (ទី៧-១២)');
   const [schoolCode, setSchoolCode] = useState('14110401901');
   const [academicYear, setAcademicYear] = useState('២០២៥-២០២៦');
-  const [abbreviation, setAbbreviation] = useState('');
-  const [department, setDepartment] = useState('');
+  const [abbreviation, setAbbreviation] = useState('វិ.ហ.ស.ពោធិ៍រៀង');
+  const [department, setDepartment] = useState('មន្ទីរអប់រំ យុវជន និងកីឡាខេត្តព្រៃវែង');
   
   // Address
   const [village, setVillage] = useState('ពោធិ៍រៀងត្បូង');
@@ -40,13 +41,99 @@ export default function AdminSchoolInfoPage() {
   const [electricity, setElectricity] = useState('អគ្គិសនីរដ្ឋ');
   const [internet, setInternet] = useState('Wi-Fi');
 
-  const handleSaveSchool = () => {
+  // Load from API on mount
+  useEffect(() => {
+    async function loadSchoolInfo() {
+      try {
+        const res = await fetch('/api/admin/school-info');
+        if (res.ok) {
+          const { schoolInfo } = await res.json();
+          if (schoolInfo) {
+            if (schoolInfo.schoolName) setSchoolName(schoolInfo.schoolName);
+            if (schoolInfo.schoolNameEn) setSchoolNameEn(schoolInfo.schoolNameEn);
+            if (schoolInfo.schoolType) setSchoolType(schoolInfo.schoolType);
+            if (schoolInfo.schoolCode) setSchoolCode(schoolInfo.schoolCode);
+            if (schoolInfo.academicYear) setAcademicYear(schoolInfo.academicYear);
+            if (schoolInfo.abbreviation) setAbbreviation(schoolInfo.abbreviation);
+            if (schoolInfo.department) setDepartment(schoolInfo.department);
+
+            if (schoolInfo.village) setVillage(schoolInfo.village);
+            if (schoolInfo.commune) setCommune(schoolInfo.commune);
+            if (schoolInfo.district) setDistrict(schoolInfo.district);
+            if (schoolInfo.province) setProvince(schoolInfo.province);
+
+            if (schoolInfo.principalName) setPrincipalName(schoolInfo.principalName);
+            if (schoolInfo.principalTitle) setPrincipalTitle(schoolInfo.principalTitle);
+            if (schoolInfo.principalPhone) setPrincipalPhone(schoolInfo.principalPhone);
+
+            if (schoolInfo.ictLeadName) setIctLeadName(schoolInfo.ictLeadName);
+            if (schoolInfo.ictLeadPhone) setIctLeadPhone(schoolInfo.ictLeadPhone);
+            if (schoolInfo.ictLeadEmail) setIctLeadEmail(schoolInfo.ictLeadEmail);
+
+            if (schoolInfo.smcHeadName) setSmcHeadName(schoolInfo.smcHeadName);
+            if (schoolInfo.smcHeadPhone) setSmcHeadPhone(schoolInfo.smcHeadPhone);
+
+            if (schoolInfo.waterSupply) setWaterSupply(schoolInfo.waterSupply);
+            if (schoolInfo.electricity) setElectricity(schoolInfo.electricity);
+            if (schoolInfo.internet) setInternet(schoolInfo.internet);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load school info:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadSchoolInfo();
+  }, []);
+
+  const handleSaveSchool = async () => {
     setIsSavingSchool(true);
-    setTimeout(() => {
-      setIsSavingSchool(false);
+    try {
+      const payload = {
+        schoolName,
+        schoolNameEn,
+        schoolType,
+        schoolCode,
+        academicYear,
+        abbreviation,
+        department,
+        village,
+        commune,
+        district,
+        province,
+        principalName,
+        principalTitle,
+        principalPhone,
+        ictLeadName,
+        ictLeadPhone,
+        ictLeadEmail,
+        smcHeadName,
+        smcHeadPhone,
+        waterSupply,
+        electricity,
+        internet,
+      };
+
+      const res = await fetch('/api/admin/school-info', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schoolInfo: payload })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to save school info');
+      }
+
       setSchoolSaved(true);
       setTimeout(() => setSchoolSaved(false), 3000);
-    }, 1500);
+    } catch (err: any) {
+      alert('កំហុសក្នុងការរក្សាទុក៖ ' + err.message);
+    } finally {
+      setIsSavingSchool(false);
+    }
   };
 
   const ClassicInput = ({ label, value, onChange, required = false, type = 'text', placeholder = '' }: any) => (
@@ -82,178 +169,150 @@ export default function AdminSchoolInfoPage() {
   );
 
   return (
-    <div className="space-y-6 animate-fadeIn select-none p-4 md:p-8 bg-slate-50 min-h-screen">
+    <div className="space-y-6 animate-fadeIn select-none">
       
-      {/* ព័ត៌មានសាលា (School Info) Card */}
-      <div className="bg-white rounded-[24px] shadow-sm hover:shadow-md border border-slate-100 p-6 md:p-8 transition-all">
+      {/* Top Header */}
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2.5">
+            <Building2 className="w-8 h-8 text-[#155EEF]" />
+            ព័ត៌មានគ្រឹះស្ថានសិក្សា
+          </h1>
+          <p className="text-xs font-semibold text-[#64748B] mt-0.5">
+            កំណត់ព័ត៌មានទូទៅ ទីតាំង និងគណៈគ្រប់គ្រងសាលារៀន (GEIP MoEYS Standard)
+          </p>
+        </div>
         
-        {/* Card Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <h2 className="text-xl font-extrabold text-slate-800 tracking-tight">ព័ត៌មានសាលា</h2>
-          <button
-            onClick={handleSaveSchool}
-            disabled={isSavingSchool || schoolSaved}
-            className={`px-6 py-2.5 rounded shadow-sm text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${
-              schoolSaved 
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
-                : isSavingSchool 
-                  ? 'bg-[#155EEF]/70 text-white cursor-wait' 
-                  : 'bg-[#155EEF] hover:bg-blue-700 text-white'
-            }`}
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+          <button 
+            onClick={handleSaveSchool} 
+            disabled={isSavingSchool || loading}
+            className="px-6 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-full text-sm transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap cursor-pointer disabled:opacity-50"
           >
-            {schoolSaved ? <CheckCircle2 className="w-4 h-4" /> : isSavingSchool ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            {schoolSaved ? 'បានរក្សាទុក' : isSavingSchool ? 'កំពុងរក្សាទុក...' : 'រក្សាទុក'}
+            {isSavingSchool ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span>{isSavingSchool ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកការកែប្រែ'}</span>
           </button>
         </div>
+      </header>
 
-        <div className="flex flex-col md:flex-row gap-8 lg:gap-12 items-start">
-          {/* Logo Section */}
-          <div className="flex flex-col items-center gap-4 shrink-0 mx-auto md:mx-0">
-            <div className="w-48 h-48 rounded-full border border-slate-100 shadow-sm flex items-center justify-center overflow-hidden bg-white relative">
-              <Image 
-                src="/school_logo.png" 
-                alt="School Logo" 
-                fill
-                className="object-contain p-2"
-              />
-            </div>
-          </div>
+      {/* Success Alert */}
+      {schoolSaved && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center gap-2 text-sm font-bold animate-fadeIn">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+          <span>ព័ត៌មានសាលារៀនត្រូវបានរក្សាទុកជោគជ័យទៅក្នុងប្រព័ន្ធ Database!</span>
+        </div>
+      )}
 
-          {/* Form Fields Section */}
-          <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
-            <ClassicInput 
-              label="ឈ្មោះសាលា (ខ្មែរ)" 
-              value={schoolName} 
-              onChange={setSchoolName} 
-              required 
-            />
-            <ClassicInput 
-              label="ឈ្មោះសាលា (ភាសាអង់គ្លេស)" 
-              value={schoolNameEn} 
-              onChange={setSchoolNameEn} 
-              required 
-            />
-            <ClassicSelect 
-              label="ប្រភេទសាលា" 
-              value={schoolType} 
-              onChange={setSchoolType} 
-              required 
-              options={['វិទ្យាល័យ (ទី៧-១២)', 'អនុវិទ្យាល័យ', 'បឋមសិក្សា']}
-            />
-            <ClassicInput 
-              label="អក្សរកាត់" 
-              value={abbreviation} 
-              onChange={setAbbreviation} 
-              placeholder="បញ្ចូលឈ្មោះ..." 
-            />
-            <ClassicInput 
-              label="មន្ទីរ/ការិយាល័យ" 
-              value={department} 
-              onChange={setDepartment} 
-              placeholder="បញ្ចូលឈ្មោះ..." 
-            />
-            <ClassicInput 
-              label="លេខសម្គាល់សាលា" 
-              value={schoolCode} 
-              onChange={setSchoolCode} 
-              required 
-            />
-            <ClassicInput 
-              label="ឆ្នាំសិក្សា" 
-              value={academicYear} 
-              onChange={setAcademicYear} 
-              required 
-            />
+      {loading ? (
+        <div className="py-20 text-center text-slate-400 flex flex-col items-center gap-2 font-bold">
+          <Loader2 className="w-6 h-6 animate-spin text-[#155EEF]" />
+          <span>កំពុងទាញយកព័ត៌មានសាលារៀន...</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Column */}
+          <div className="lg:col-span-2 space-y-6">
             
-            {/* Level Checkboxes matching the image */}
-            <div className="col-span-1 sm:col-span-2 space-y-3 mt-2">
-              <label className="text-[13px] font-bold text-slate-700 block">
-                កម្រិតភូមិសិក្សា <span className="text-red-500">*</span>
-              </label>
-              <div className="flex flex-wrap items-center gap-6">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500" disabled />
-                  <span className="text-sm text-slate-500">បឋមសិក្សា</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500" defaultChecked />
-                  <span className="text-sm text-slate-700">អនុវិទ្យាល័យ</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500" defaultChecked />
-                  <span className="text-sm text-slate-700">វិទ្យាល័យ</span>
-                </label>
+            {/* General Info Card */}
+            <div className="bg-white p-6 rounded-[24px] border border-slate-100/80 shadow-xs space-y-5">
+              <h3 className="text-base font-extrabold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#155EEF]"></span>
+                ព័ត៌មានទូទៅ
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ClassicInput label="ឈ្មោះសាលា (ភាសាខ្មែរ)" value={schoolName} onChange={setSchoolName} required />
+                <ClassicInput label="ឈ្មោះសាលា (អក្សរឡាតាំង)" value={schoolNameEn} onChange={setSchoolNameEn} />
+                <ClassicInput label="អក្សរកាត់" value={abbreviation} onChange={setAbbreviation} />
+                <ClassicInput label="លេខកូដសាលា (EMIS Code)" value={schoolCode} onChange={setSchoolCode} required />
+                <ClassicInput label="មន្ទីរអប់រំ យុវជន និងកីឡា" value={department} onChange={setDepartment} />
+                <ClassicSelect 
+                  label="កម្រិតសាលា" 
+                  value={schoolType} 
+                  onChange={setSchoolType} 
+                  options={['វិទ្យាល័យ (ទី៧-១២)', 'អនុវិទ្យាល័យ (ទី៧-៩)', 'បឋមសិក្សា (ទី១-៦)']} 
+                />
+              </div>
+            </div>
+
+            {/* Location Card */}
+            <div className="bg-white p-6 rounded-[24px] border border-slate-100/80 shadow-xs space-y-5">
+              <h3 className="text-base font-extrabold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#FFCF59]"></span>
+                ទីតាំងភូមិសាស្ត្រ
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ClassicInput label="ភូមិ" value={village} onChange={setVillage} />
+                <ClassicInput label="ឃុំ / សង្កាត់" value={commune} onChange={setCommune} />
+                <ClassicInput label="ស្រុក / ខណ្ឌ" value={district} onChange={setDistrict} />
+                <ClassicInput label="ខេត្ត / រាជធានី" value={province} onChange={setProvince} />
+              </div>
+            </div>
+
+            {/* Infrastructure Card */}
+            <div className="bg-white p-6 rounded-[24px] border border-slate-100/80 shadow-xs space-y-5">
+              <h3 className="text-base font-extrabold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                ហេដ្ឋារចនាសម្ព័ន្ធ និងប្រភពថាមពល
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <ClassicSelect 
+                  label="ប្រភពទឹកស្អាត" 
+                  value={waterSupply} 
+                  onChange={setWaterSupply} 
+                  options={['ទឹកអណ្តូង / ម៉ាស៊ីនចម្រោះ', 'ទឹកម៉ាស៊ីនរដ្ឋ', 'ទឹកភ្លៀង', 'គ្មានប្រភពទឹក']} 
+                />
+                <ClassicSelect 
+                  label="ប្រភពអគ្គិសនី" 
+                  value={electricity} 
+                  onChange={setElectricity} 
+                  options={['អគ្គិសនីរដ្ឋ', 'សូឡា (Solar)', 'ម៉ាស៊ីនភ្លើង', 'គ្មានអគ្គិសនី']} 
+                />
+                <ClassicSelect 
+                  label="ប្រព័ន្ធអ៊ីនធឺណិត" 
+                  value={internet} 
+                  onChange={setInternet} 
+                  options={['Wi-Fi', 'ខ្សែអុបទិក (Fiber)', '4G/5G Router', 'គ្មាន']} 
+                />
               </div>
             </div>
 
           </div>
-        </div>
-      </div>
 
-      {/* ព័ត៌មានទំនាក់ទំនង និងបុគ្គលិក (Contact & Personnel) Card */}
-      <div className="bg-white rounded-[24px] shadow-sm hover:shadow-md border border-slate-100 p-6 md:p-8 transition-all">
-        <h2 className="text-xl font-extrabold text-slate-800 tracking-tight mb-8">ព័ត៌មានទំនាក់ទំនង និងបុគ្គលិក</h2>
-        
-        <div className="space-y-8">
-          {/* Principal */}
-          <div>
-            <h3 className="text-sm font-bold text-slate-500 mb-4 pb-2 border-b border-slate-100">នាយកសាលា</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-5">
-              <ClassicInput label="នាយកសាលា" value={principalName} onChange={setPrincipalName} />
-              <ClassicSelect label="គោរមងារ" value={principalTitle} onChange={setPrincipalTitle} options={['នាយកសាលា', 'នាយិកាសាលា', 'Professor']} />
-              <ClassicInput label="លេខទូរស័ព្ទ" value={principalPhone} onChange={setPrincipalPhone} required />
-            </div>
-          </div>
+          {/* Right Column: Key Personnel */}
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-[24px] border border-slate-100/80 shadow-xs space-y-5">
+              <h3 className="text-base font-extrabold text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                គណៈគ្រប់គ្រង និងទំនាក់ទំនង
+              </h3>
+              
+              <div className="space-y-4">
+                <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-100 space-y-3">
+                  <span className="text-xs font-black text-[#155EEF] uppercase block">នាយកសាលា</span>
+                  <ClassicInput label="គោត្តនាម & នាម" value={principalName} onChange={setPrincipalName} />
+                  <ClassicInput label="លេខទូរស័ព្ទ" value={principalPhone} onChange={setPrincipalPhone} />
+                </div>
 
-          {/* ICT Lead */}
-          <div>
-            <h3 className="text-sm font-bold text-slate-500 mb-4 pb-2 border-b border-slate-100">គ្រូបង្គោល ICT</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-5">
-              <ClassicInput label="ឈ្មោះ" value={ictLeadName} onChange={setIctLeadName} />
-              <ClassicInput label="លេខទូរស័ព្ទ" value={ictLeadPhone} onChange={setIctLeadPhone} required />
-              <ClassicInput label="អ៊ីមែល" value={ictLeadEmail} onChange={setIctLeadEmail} required />
-            </div>
-          </div>
+                <div className="p-3.5 bg-yellow-50/50 rounded-xl border border-yellow-100 space-y-3">
+                  <span className="text-xs font-black text-amber-700 uppercase block">គ្រូទទួលបន្ទុក ICT / Admin</span>
+                  <ClassicInput label="គោត្តនាម & នាម" value={ictLeadName} onChange={setIctLeadName} />
+                  <ClassicInput label="លេខទូរស័ព្ទ" value={ictLeadPhone} onChange={setIctLeadPhone} />
+                  <ClassicInput label="អ៊ីមែល" value={ictLeadEmail} onChange={setIctLeadEmail} />
+                </div>
 
-          {/* SMC Head */}
-          <div>
-            <h3 className="text-sm font-bold text-slate-500 mb-4 pb-2 border-b border-slate-100">ប្រធាន គ.គ.ស</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-5">
-              <ClassicInput label="ឈ្មោះ" value={smcHeadName} onChange={setSmcHeadName} />
-              <ClassicInput label="លេខទូរស័ព្ទ" value={smcHeadPhone} onChange={setSmcHeadPhone} required />
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <span className="text-xs font-black text-slate-700 uppercase block">គណៈកម្មការទ្រទ្រង់សាលា (SMC)</span>
+                  <ClassicInput label="ប្រធាន SMC" value={smcHeadName} onChange={setSmcHeadName} />
+                  <ClassicInput label="លេខទូរស័ព្ទ" value={smcHeadPhone} onChange={setSmcHeadPhone} />
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* ទីតាំងភូមិសាស្ត្រ និងហេដ្ឋារចនាសម្ព័ន្ធ (Location & Infrastructure) Card */}
-      <div className="bg-white rounded-[24px] shadow-sm hover:shadow-md border border-slate-100 p-6 md:p-8 transition-all">
-        <h2 className="text-xl font-extrabold text-slate-800 tracking-tight mb-8">ទីតាំង និងហេដ្ឋារចនាសម្ព័ន្ធ</h2>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
-          {/* Address */}
-          <div className="space-y-5">
-            <h3 className="text-sm font-bold text-slate-500 pb-2 border-b border-slate-100">ទីតាំងភូមិសាស្ត្រ</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
-              <ClassicInput label="ខេត្ត/ក្រុង" value={province} onChange={setProvince} />
-              <ClassicInput label="ស្រុក/ខណ្ឌ" value={district} onChange={setDistrict} />
-              <ClassicInput label="ឃុំ/សង្កាត់" value={commune} onChange={setCommune} />
-              <ClassicInput label="ភូមិ" value={village} onChange={setVillage} />
-            </div>
-          </div>
-
-          {/* Infrastructure */}
-          <div className="space-y-5">
-            <h3 className="text-sm font-bold text-slate-500 pb-2 border-b border-slate-100">ហេដ្ឋារចនាសម្ព័ន្ធ</h3>
-            <div className="grid grid-cols-1 gap-x-6 gap-y-5">
-              <ClassicInput label="ប្រព័ន្ធទឹកស្អាត" value={waterSupply} onChange={setWaterSupply} />
-              <ClassicInput label="ប្រព័ន្ធអគ្គិសនី" value={electricity} onChange={setElectricity} />
-              <ClassicInput label="ប្រព័ន្ធអ៊ីនធឺណិត" value={internet} onChange={setInternet} />
-            </div>
-          </div>
-        </div>
-      </div>
-
+      )}
     </div>
   );
 }

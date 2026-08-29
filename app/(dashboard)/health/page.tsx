@@ -1,35 +1,17 @@
 import React from 'react';
 import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
 import HealthBoardClient from './HealthBoardClient';
 import { Student, StudentHealthRecord } from '@/types';
 
-interface PageProps {
-  searchParams: Promise<{ classId?: string }>;
-}
-
-export default async function HealthPage({ searchParams }: PageProps) {
+export default async function HealthPage() {
   const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  
-  if (!userData?.user) {
-    // Demo Mode: Allow access without redirecting
-    // redirect('/');
-  }
-
-  const { classId = 'all' } = await searchParams;
 
   // 1. Fetch Students
-  let studentsQuery = supabase
+  const { data: studentsData } = await supabase
     .from('students')
     .select('*')
     .order('full_name', { ascending: true });
     
-  if (classId !== 'all') {
-    studentsQuery = studentsQuery.eq('class_id', classId);
-  }
-  
-  const { data: studentsData } = await studentsQuery;
   const students: Student[] = studentsData || [];
 
   // 2. Fetch Health Records for these students
@@ -47,9 +29,8 @@ export default async function HealthPage({ searchParams }: PageProps) {
   return (
     <div className="w-full h-full max-w-7xl mx-auto">
       <HealthBoardClient 
-        students={students} 
-        healthRecords={healthRecords} 
-        classId={classId} 
+        allStudents={students} 
+        initialHealthRecords={healthRecords} 
       />
     </div>
   );

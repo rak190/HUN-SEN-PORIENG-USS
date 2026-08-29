@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Student } from '@/types';
-import { CURRICULUM_SCHEMAS } from '@/lib/curriculum';
+import { CURRICULUM_SCHEMAS, getCurriculumSchemaForClass } from '@/lib/curriculum';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { createClient } from '@/lib/supabase/client';
@@ -18,29 +18,32 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-const DEMO_STUDENTS: Student[] = [
-  { id: 'std-1', class_id: 'demo-class-1', student_id_number: 'ID-001', full_name: 'កែវ ច័ន្ទធីតា', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-2', class_id: 'demo-class-1', student_id_number: 'ID-002', full_name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-3', class_id: 'demo-class-1', student_id_number: 'ID-003', full_name: 'ចាន់ សុភាព', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-4', class_id: 'demo-class-1', student_id_number: 'ID-004', full_name: 'ដួង រដ្ឋា', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-5', class_id: 'demo-class-1', student_id_number: 'ID-005', full_name: 'ទិត្យ វិសាល', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-6', class_id: 'demo-class-1', student_id_number: 'ID-006', full_name: 'ប៊ុន រស្មី', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-];
-
 export default function ReportCardsPage() {
   const { activeClass } = useAuth();
-  const [students, setStudents] = useState<Student[]>(DEMO_STUDENTS);
+  const [students, setStudents] = useState<Student[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedPeriod, setSelectedPeriod] = useState('dec');
   const [dbScores, setDbScores] = useState<Record<string, Record<string, number>>>({});
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [teacherName, setTeacherName] = useState<string>('');
   const supabase = createClient();
   
   useEffect(() => {
     if (!activeClass?.id) return;
-    
-    const fetchData = async () => {
+        const fetchData = async () => {
       setIsLoadingData(true);
+      
+      // Fetch teacher info
+      const { data: classData } = await supabase
+        .from('classes')
+        .select('name, teacher_id, profiles:teacher_id(full_name)')
+        .eq('id', activeClass.id)
+        .single();
+      
+      if (classData) {
+        setTeacherName((classData.profiles as any)?.full_name || '');
+      }
+
       // Fetch students for this class
       const { data: stdData } = await supabase
         .from('students')
@@ -50,6 +53,11 @@ export default function ReportCardsPage() {
         
       if (stdData && stdData.length > 0) {
         setStudents(stdData);
+      } else {
+        setStudents([]);
+        setDbScores({});
+        setIsLoadingData(false);
+        return;
       }
       
       // Define which periods we need to fetch based on selected period
@@ -70,7 +78,7 @@ export default function ReportCardsPage() {
         
       if (gradeData && stdData) {
         // Collect all subject IDs from the schema
-        const schema = CURRICULUM_SCHEMAS['upper-sec-sci']; // Or dynamically get it based on activeClass
+        const schema = getCurriculumSchemaForClass(activeClass?.grade, (activeClass as any)?.track);
         const subjectIds: string[] = [];
         schema.subjects.forEach(sub => {
           subjectIds.push(sub.id);
@@ -89,33 +97,16 @@ export default function ReportCardsPage() {
     };
     
     fetchData();
-  }, [activeClass?.id, selectedPeriod]);
+  }, [activeClass?.id, activeClass?.grade, (activeClass as any)?.track, selectedPeriod]);
   
-  const activeSchema = CURRICULUM_SCHEMAS['upper-sec-sci'];
+  const activeSchema = useMemo(() => {
+    return getCurriculumSchemaForClass(activeClass?.grade, (activeClass as any)?.track);
+  }, [activeClass?.grade, (activeClass as any)?.track]);
   const maxTotalScore = activeSchema.subjects.reduce((sum, sub) => sum + sub.maxScore, 0);
 
-  // Generate consistent demo scores for ALL students for batch printing and export
   const matrixData = useMemo(() => {
-    if (Object.keys(dbScores).length > 0) {
-      return dbScores;
-    }
-    const data: Record<string, Record<string, number>> = {};
-    students.forEach((std, i) => {
-      data[std.id] = {};
-      const isTopStudent = i === 0 || i === 2; // Fake top students
-      const basePercent = isTopStudent ? 0.85 : 0.55 + (Math.random() * 0.1);
-      
-      // GEIP Sub-metrics
-      data[std.id]['khmer_dictation'] = Math.floor(40 * basePercent) + Math.floor(Math.random() * 4);
-      data[std.id]['khmer_composition'] = Math.floor(60 * basePercent) + Math.floor(Math.random() * 8);
-      data[std.id]['khmer_reading_speed'] = 80 + Math.floor(Math.random() * 30); 
-
-      activeSchema.subjects.forEach(sub => {
-         data[std.id][sub.id] = Math.min(sub.maxScore, Math.floor(sub.maxScore * basePercent) + Math.floor(Math.random() * (sub.maxScore * 0.1)));
-      });
-    });
-    return data;
-  }, [students, activeSchema, dbScores]);
+    return dbScores; // Ensure we strictly use the real DB scores
+  }, [dbScores]);
 
   // Calculate ranks
   const rankedStudents = useMemo(() => {
@@ -278,7 +269,37 @@ export default function ReportCardsPage() {
     if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
   };
 
-  if (!currentStudent) return <div>កំពុងផ្ទុក...</div>;
+  if (isLoadingData) {
+    return <div className="p-12 text-center text-slate-500 font-bold animate-pulse">កំពុងផ្ទុកទិន្នន័យ...</div>;
+  }
+
+  if (students.length === 0 || Object.keys(dbScores).length === 0) {
+    return (
+      <div className="space-y-6 animate-fadeIn p-4 md:p-8 bg-slate-50 min-h-screen flex flex-col items-center justify-center">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center max-w-md w-full">
+          <Award className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h2 className="text-xl font-black text-slate-800 mb-2">មិនទាន់មានទិន្នន័យ</h2>
+          <p className="text-sm font-semibold text-slate-500 mb-6">
+            មិនមានទិន្នន័យសិស្ស ឬពិន្ទុសម្រាប់ថ្នាក់នេះក្នុង {ACADEMIC_PERIODS.find(p => p.id === selectedPeriod)?.label} ទេ។
+          </p>
+          <div className="flex items-center justify-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl shadow-sm border border-slate-200 w-fit mx-auto">
+            <span className="text-xs font-bold text-slate-500">ជ្រើសរើសខែផ្សេង៖</span>
+            <select 
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+              className="appearance-none bg-transparent text-slate-700 py-1 pr-6 focus:outline-none font-bold text-sm cursor-pointer"
+            >
+              {ACADEMIC_PERIODS.map(p => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentStudent) return <div className="p-12 text-center text-slate-500 font-bold">កំពុងរៀបចំទិន្នន័យ...</div>;
 
   // Reusable Report Card Component for Print Rendering
   const StudentReportCard = ({ studentInfo }: { studentInfo: any }) => {
@@ -322,7 +343,7 @@ export default function ReportCardsPage() {
           </div>
           <div className="flex gap-2 text-sm">
             <span className="font-bold text-slate-500">ថ្នាក់ទី៖</span>
-            <span className="font-black text-slate-900">{activeClass?.name || '10A'}</span>
+            <span className="font-black text-slate-900">{activeClass?.name || ''}</span>
           </div>
           <div className="flex gap-2 text-sm">
             <span className="font-bold text-slate-500">សិស្សសរុប៖</span>
@@ -448,6 +469,7 @@ export default function ReportCardsPage() {
             </div>
             
             <div className="mt-auto">
+              <span className="block text-sm font-black text-[#155EEF] mb-1">{teacherName}</span>
               <div className="w-40 h-[1px] border-b border-dashed border-slate-400 mx-auto mb-2"></div>
               <span className="text-xs font-bold text-slate-500">ហត្ថលេខា / ឈ្មោះ</span>
             </div>
@@ -498,6 +520,14 @@ export default function ReportCardsPage() {
             display: flex !important;
             flex-direction: column !important;
             justify-content: space-between !important;
+          }
+          .report-card-table {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .report-card-signatures {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
           .report-card-print .mb-8 {
             margin-bottom: 12px !important;

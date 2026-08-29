@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import QRCode from 'react-qr-code';
 import { useAuth } from '@/lib/auth-context';
+import Modal from '@/components/ui/Modal';
 import {
   LayoutDashboard,
   GraduationCap,
@@ -317,48 +318,46 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
         </button>
       </div>
 
-      {/* Support Telegram Modal */}
-      {showSupportModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 animate-overlayFade" onClick={() => setShowSupportModal(false)}>
-          <div className="bg-white rounded-[32px] w-full max-w-sm p-8 text-center shadow-2xl relative animate-modalScale" onClick={(e) => e.stopPropagation()}>
-            <button 
-              onClick={() => setShowSupportModal(false)}
-              className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-            
-            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100/50">
-              <MessageCircle className="w-8 h-8 text-[#155EEF]" />
-            </div>
-            
-            <h2 className="text-xl font-black text-slate-900 mb-2">មជ្ឈមណ្ឌលជំនួយគាំទ្រ</h2>
-            <p className="text-sm font-bold text-slate-500 mb-6">
-              ស្កេនកូដ QR ឬចុចប៊ូតុងខាងក្រោម ដើម្បីភ្ជាប់ទៅកាន់ Telegram Bot ជំនួយការរបស់សាលា។
-            </p>
-
-            <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-sm inline-block mx-auto mb-6">
-              <QRCode 
-                value="https://t.me/HSPR_Support_Bot" 
-                size={180}
-                className="w-full h-auto"
-                fgColor="#0f172a" 
-              />
-            </div>
-
-            <a 
-              href="https://t.me/HSPR_Support_Bot" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              onClick={() => setShowSupportModal(false)}
-              className="w-full py-3.5 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl shadow-md transition-all text-sm cursor-pointer flex items-center justify-center gap-2"
-            >
-              <MessageSquare className="w-4 h-4" />
-              បើកក្នុង Telegram
-            </a>
+      {/* Support Telegram Modal (Full-Screen Frosted Glass Portal) */}
+      <Modal
+        isOpen={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
+        size="sm"
+        showCloseButton={true}
+      >
+        <div className="p-8 text-center flex flex-col items-center">
+          <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mb-4 border border-blue-100/50 shadow-xs">
+            <MessageCircle className="w-8 h-8 text-[#155EEF]" />
           </div>
+
+          <h2 className="text-xl font-extrabold text-slate-900 mb-2 tracking-tight">
+            មជ្ឈមណ្ឌលជំនួយគាំទ្រ
+          </h2>
+          <p className="text-xs font-semibold text-slate-500 mb-6 leading-relaxed">
+            ស្កេនកូដ QR ឬចុចប៊ូតុងខាងក្រោម ដើម្បីភ្ជាប់ទៅកាន់ Telegram Bot ជំនួយការរបស់សាលា។
+          </p>
+
+          <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-xs inline-block mb-6">
+            <QRCode
+              value="https://t.me/HSPR_Support_Bot"
+              size={180}
+              className="w-full h-auto"
+              fgColor="#0f172a"
+            />
+          </div>
+
+          <a
+            href="https://t.me/HSPR_Support_Bot"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setShowSupportModal(false)}
+            className="w-full py-3.5 bg-[#155EEF] hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-md transition-all text-sm cursor-pointer flex items-center justify-center gap-2 active:scale-98"
+          >
+            <MessageSquare className="w-4 h-4" />
+            បើកក្នុង Telegram
+          </a>
         </div>
-      )}
+      </Modal>
     </aside>
   );
 }

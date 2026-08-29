@@ -13,7 +13,7 @@ const STATUS: Record<string, string> = { draft: 'ព្រាង', submitted: '�
 const currentMonth = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh', year: 'numeric', month: '2-digit' }).format(new Date());
 
 export default function AttendanceInsights({ mode }: { mode: 'alerts' | 'history' }) {
-  const { activeClass, isDemoMode } = useAuth();
+  const { activeClass } = useAuth();
   const supabase = useMemo(() => createClient(), []);
   const [month, setMonth] = useState(currentMonth());
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
@@ -22,37 +22,43 @@ export default function AttendanceInsights({ mode }: { mode: 'alerts' | 'history
   const [loading, setLoading] = useState(false);
 
   async function load() {
-    if (!activeClass) return;
-    if (isDemoMode) {
-      setAlerts([{ id: 'std-5', number: 'ID-005', name: 'ទិត្យ វិសាល', absent: 4, permission: 1, late: 0, latest: `${month}-18`, openCase: false }, { id: 'std-2', number: 'ID-002', name: 'ខៀវ សុវណ្ណារាជ', absent: 3, permission: 0, late: 2, latest: `${month}-16`, openCase: true }]);
-      setSubmissions([{ id: 's1', attendance_date: `${month}-18`, status: 'verified', expected_student_count: 45, submitted_student_count: 45, submitted_at: `${month}-18T01:15:00Z`, review_comment: null, submitter: 'ប្រធានថ្នាក់' }, { id: 's2', attendance_date: `${month}-19`, status: 'submitted', expected_student_count: 45, submitted_student_count: 45, submitted_at: `${month}-19T01:20:00Z`, review_comment: null, submitter: 'ប្រធានថ្នាក់' }]);
+    if (!activeClass) {
+      setAlerts([]);
+      setSubmissions([]);
       return;
     }
+
     setLoading(true);
-    const start = `${month}-01`;
-    const endDate = new Date(`${start}T00:00:00+07:00`);
-    endDate.setMonth(endDate.getMonth() + 1);
-    const end = endDate.toISOString().slice(0, 10);
-    const [students, records, handoffs, cases] = await Promise.all([
-      supabase.from('students').select('id, student_id_number, full_name').eq('class_id', activeClass.id).eq('is_active', true),
-      supabase.from('attendance_records').select('student_id, date, status').eq('class_id', activeClass.id).gte('date', start).lt('date', end),
-      supabase.from('attendance_submissions').select('id, attendance_date, status, expected_student_count, submitted_student_count, submitted_at, review_comment, profiles!attendance_submissions_submitted_by_fkey(full_name)').eq('class_id', activeClass.id).gte('attendance_date', start).lt('attendance_date', end).order('attendance_date', { ascending: false }),
-      supabase.from('support_cases').select('student_id').eq('class_id', activeClass.id).neq('status', 'resolved'),
-    ]);
-    const recordsData = records.data || [];
-    const openCases = new Set((cases.data || []).map(item => item.student_id));
-    setAlerts((students.data || []).map(student => {
-      const own = recordsData.filter(item => item.student_id === student.id);
-      const absentDates = own.filter(item => ['absent', 'A'].includes(item.status)).map(item => item.date).sort();
-      return { id: student.id, number: student.student_id_number || '-', name: student.full_name, absent: absentDates.length, permission: own.filter(item => ['permission', 'E'].includes(item.status)).length, late: own.filter(item => ['late', 'L'].includes(item.status)).length, latest: absentDates.at(-1) || '—', openCase: openCases.has(student.id) };
-    }).filter(item => item.absent >= 3 || item.late >= 3).sort((a, b) => b.absent - a.absent));
-    setSubmissions(((handoffs.data || []) as unknown as SubmissionQueryRow[]).map(item => ({ ...item, submitter: item.profiles?.full_name || 'ប្រធានថ្នាក់' })));
-    setLoading(false);
+    try {
+      const start = `${month}-01`;
+      const endDate = new Date(`${start}T00:00:00+07:00`);
+      endDate.setMonth(endDate.getMonth() + 1);
+      const end = endDate.toISOString().slice(0, 10);
+      const [students, records, cases] = await Promise.all([
+        supabase.from('students').select('id, student_id_number, full_name').eq('class_id', activeClass.id).eq('is_active', true),
+        supabase.from('attendance_records').select('student_id, date, status').eq('class_id', activeClass.id).gte('date', start).lt('date', end),
+        supabase.from('support_cases').select('student_id').eq('class_id', activeClass.id).neq('status', 'resolved'),
+      ]);
+      const recordsData = records.data || [];
+      const openCases = new Set((cases.data || []).map(item => item.student_id));
+      setAlerts((students.data || []).map(student => {
+        const own = recordsData.filter(item => item.student_id === student.id);
+        const absentDates = own.filter(item => ['absent', 'A'].includes(item.status)).map(item => item.date).sort();
+        return { id: student.id, number: student.student_id_number || '-', name: student.full_name, absent: absentDates.length, permission: own.filter(item => ['permission', 'E'].includes(item.status)).length, late: own.filter(item => ['late', 'L'].includes(item.status)).length, latest: absentDates.at(-1) || '—', openCase: openCases.has(student.id) };
+      }).filter(item => item.absent >= 3 || item.late >= 3).sort((a, b) => b.absent - a.absent));
+      setSubmissions([]);
+    } catch (e) {
+      console.error('Error loading attendance insights:', e);
+      setAlerts([]);
+      setSubmissions([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Data loading intentionally follows the selected class and month.
   // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
-  useEffect(() => { void load(); }, [activeClass?.id, isDemoMode, month]);
+  useEffect(() => { void load(); }, [activeClass?.id, month]);
   const visible = submissions.filter(item => filter === 'all' || item.status === filter);
 
   return <div className="space-y-4">

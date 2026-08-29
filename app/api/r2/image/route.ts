@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { r2Client, R2_BUCKET_NAME } from '@/lib/cloudflare-r2';
+import { getServerAuth } from '@/lib/auth-server';
 
 export async function GET(req: NextRequest) {
+  const { user } = await getServerAuth();
+  const isDemo = !process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  if (!isDemo && !user) {
+    return new NextResponse('Unauthorized: Session required to access media', { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const key = searchParams.get('key');
 
@@ -28,8 +36,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(stream, {
       headers: {
         'Content-Type': response.ContentType || 'application/octet-stream',
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'private, max-age=3600',
       },
     });
   } catch (error: any) {

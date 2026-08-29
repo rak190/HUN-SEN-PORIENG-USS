@@ -1,24 +1,22 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
+import { getServerAuth } from '@/lib/auth-server';
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    // Demo fallback
     return NextResponse.json({
-      isDemo: true,
+      isDemo: false,
       settings: {
         maintenance_mode: false,
-        environment: 'production',
+        environment: 'local',
         rls_enabled: true
       }
     });
@@ -31,7 +29,6 @@ export async function GET() {
 
     if (error) throw error;
 
-    // Convert array of {key, value} to object
     const settings: Record<string, any> = {};
     if (settingsArray) {
       settingsArray.forEach(row => {
@@ -46,10 +43,9 @@ export async function GET() {
 }
 
 export async function PATCH(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -59,7 +55,7 @@ export async function PATCH(req: Request) {
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({ isDemo: true, success: true });
+    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
   try {

@@ -9,14 +9,21 @@ export async function fetchPrincipalDashboardData() {
     // 1. Fetch Students
     const { data: studentsData, error: studentsError } = await supabase
       .from('students')
-      .select('id, gender, risk_level, full_name, class_id, behavior_history, classes(grade)');
+      .select('id, gender, dropout_risk, is_slow_learner, full_name, class_id, is_active')
+      .eq('is_active', true);
 
     if (studentsError) throw studentsError;
+
+    // 1.5 Fetch Classes
+    const { data: classesData, error: classesError } = await supabase
+      .from('classes')
+      .select('id, name, grade, track')
+      .eq('is_archived', false);
 
     // 2. Fetch Grades
     const { data: gradesData } = await supabase
       .from('grades')
-      .select('period, total_score, class_id');
+      .select('period, total_score, class_id, scores');
 
     // 3. Fetch Attendance
     const { data: attendanceData } = await supabase
@@ -29,26 +36,28 @@ export async function fetchPrincipalDashboardData() {
     const boysCount = totalStudents - girlsCount;
 
     // Compute At Risk
-    const atRiskStudentsRaw = studentsData?.filter(s => s.risk_level === 'high' || s.risk_level === 'medium') || [];
+    const atRiskStudentsRaw = studentsData?.filter(s => s.dropout_risk || s.is_slow_learner) || [];
     const atRiskCount = atRiskStudentsRaw.length;
     
     const atRiskList = atRiskStudentsRaw.map(s => {
       let reasons: string[] = [];
-      if (Array.isArray(s.behavior_history)) {
-        reasons = s.behavior_history;
+      if (s.dropout_risk) {
+        reasons.push('ហានិភ័យបោះបង់ការសិក្សា (អវត្តមានច្រើន / ពិន្ទុធ្លាក់ចុះ)');
+      }
+      if (s.is_slow_learner) {
+        reasons.push('សិស្សរៀនយឺត (ត្រូវការការជួយបំប៉ន)');
       }
       if (reasons.length === 0) {
-        reasons = [s.risk_level === 'high' ? 'អវត្តមានច្រើន / ពិន្ទុធ្លាក់ចុះខ្លាំង' : 'ត្រូវការការតាមដានបន្ថែម'];
+        reasons = ['ស្ថិតក្នុងការតាមដានពិសេស'];
       }
       return {
         id: s.id,
         name: s.full_name,
         reasons: reasons,
-        severity: s.risk_level as 'high' | 'medium'
+        severity: (s.dropout_risk ? 'high' : 'medium') as 'high' | 'medium'
       };
     });
 
-    // We will map these to standard months:
     const monthMapping: Record<string, string> = {
       'dec': 'ធ្នូ', 'jan': 'មករា', 'feb': 'កុម្ភៈ', 'mar': 'មីនា',
       'apr': 'មេសា', 'may': 'ឧសភា', 'jun': 'មិថុនា', 'jul': 'កក្កដា',
@@ -56,22 +65,33 @@ export async function fetchPrincipalDashboardData() {
 
     // Calculate Grade Pct per period and overall GPA
     const gradeByPeriod: Record<string, { sum: number; count: number }> = {};
-    let totalGradeSum = 0;
-    let totalGradeCount = 0;
+    let totalGradePctSum = 0;
+    let totalGradePctCount = 0;
 
     if (gradesData) {
       gradesData.forEach(g => {
         if (!gradeByPeriod[g.period]) gradeByPeriod[g.period] = { sum: 0, count: 0 };
-        const s = (g.total_score || 0); 
-        gradeByPeriod[g.period].sum += s; 
-        gradeByPeriod[g.period].count++;
-        totalGradeSum += s;
-        totalGradeCount++;
+        
+        let scoreVal = g.total_score;
+        if (!scoreVal && g.scores && typeof g.scores === 'object') {
+          const vals = Object.values(g.scores).filter(v => typeof v === 'number') as number[];
+          if (vals.length > 0) scoreVal = vals.reduce((a, b) => a + b, 0);
+        }
+
+        if (typeof scoreVal === 'number' && scoreVal > 0) {
+          // Normalize score to percentage (assuming ~500 for upper, 400 for lower, max 100 per metric)
+          const maxApprox = 500;
+          const pct = Math.min(100, (scoreVal / maxApprox) * 100);
+          gradeByPeriod[g.period].sum += pct;
+          gradeByPeriod[g.period].count++;
+          totalGradePctSum += pct;
+          totalGradePctCount++;
+        }
       });
     }
     
-    const avgScore = totalGradeCount > 0 ? (totalGradeSum / totalGradeCount) : 0;
-    const overallGpa = ((avgScore / 100) * 4.0).toFixed(2);
+    const avgPct = totalGradePctCount > 0 ? (totalGradePctSum / totalGradePctCount) : 0;
+    const overallGpa = avgPct > 0 ? Math.min(4.0, (avgPct / 100) * 4.0).toFixed(2) : '0.00';
 
     // Calculate Attendance Pct per month and overall
     const attByMonth: Record<string, { present: number; total: number }> = {};
@@ -81,10 +101,10 @@ export async function fetchPrincipalDashboardData() {
     if (attendanceData) {
       attendanceData.forEach(a => {
         const d = new Date(a.date);
-        const m = d.toLocaleString('en-US', { month: 'short' }).toLowerCase();
+        const m = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][d.getMonth()];
         if (!attByMonth[m]) attByMonth[m] = { present: 0, total: 0 };
         
-        if (a.status === 'present' || a.status === 'late') {
+        if (a.status === 'present' || a.status === 'late' || a.status === 'permission' || a.status === 'P') {
           attByMonth[m].present++;
           totalPresent++;
         }
@@ -109,14 +129,56 @@ export async function fetchPrincipalDashboardData() {
       };
     });
     
-    const tableData = [
-      { grade: 'ថ្នាក់ទី 12', classes: 5, students: 245, att: 98.2, gpa: '3.65', ab: 72.4, eval: 'ល្អប្រសើរ' },
-      { grade: 'ថ្នាក់ទី 11', classes: 6, students: 260, att: 96.5, gpa: '3.40', ab: 64.0, eval: 'ល្អ' },
-      { grade: 'ថ្នាក់ទី 10', classes: 6, students: 285, att: 95.8, gpa: '3.35', ab: 58.5, eval: 'ល្អ' },
-      { grade: 'ថ្នាក់ទី 9', classes: 6, students: 290, att: 96.0, gpa: '3.28', ab: 55.0, eval: 'មធ្យមល្អ' },
-      { grade: 'ថ្នាក់ទី 8', classes: 5, students: 130, att: 94.5, gpa: '3.10', ab: 48.0, eval: 'មធ្យម' },
-      { grade: 'ថ្នាក់ទី 7', classes: 5, students: 135, att: 97.0, gpa: '3.50', ab: 68.0, eval: 'ល្អ' },
-    ];
+    const gradesSet = ['12', '11', '10', '9', '8', '7'];
+    const tableData = gradesSet.map(gr => {
+       const classesInGrade = classesData?.filter(c => String(c.grade) === String(gr)) || [];
+       const classIds = classesInGrade.map(c => c.id);
+       
+       const studentsInGrade = studentsData?.filter(s => classIds.includes(s.class_id)) || [];
+       const numStudents = studentsInGrade.length;
+       
+       // Calculate Attendance for this grade
+       const attInGrade = attendanceData?.filter(a => classIds.includes(a.class_id)) || [];
+       let attPresent = 0;
+       attInGrade.forEach(a => { 
+         if (a.status === 'present' || a.status === 'late' || a.status === 'permission' || a.status === 'P') attPresent++; 
+       });
+       const attPct = attInGrade.length > 0 ? (attPresent / attInGrade.length) * 100 : 0;
+       
+       // Calculate GPA for this grade
+       const gradesInGrade = gradesData?.filter(g => classIds.includes(g.class_id)) || [];
+       const maxApprox = parseInt(gr) >= 10 ? 500 : 400;
+       let totalScoreSum = 0;
+       let validScoreCount = 0;
+
+       gradesInGrade.forEach(g => {
+         let val = g.total_score;
+         if (!val && g.scores && typeof g.scores === 'object') {
+           const scoresList = Object.values(g.scores).filter(v => typeof v === 'number') as number[];
+           if (scoresList.length > 0) val = scoresList.reduce((a, b) => a + b, 0);
+         }
+         if (typeof val === 'number' && val > 0) {
+           totalScoreSum += val;
+           validScoreCount++;
+         }
+       });
+
+       const avgScore = validScoreCount > 0 ? (totalScoreSum / validScoreCount) : 0;
+       const percentage = avgScore > 0 ? Math.min(100, (avgScore / maxApprox) * 100) : 0;
+       const gpa = percentage > 0 ? Math.min(4.0, (percentage / 100) * 4.0).toFixed(2) : '0.00';
+       
+       const evalLabel = parseFloat(gpa) >= 3.5 ? 'ល្អប្រសើរ' : parseFloat(gpa) >= 3.0 ? 'ល្អ' : parseFloat(gpa) >= 2.5 ? 'មធ្យមល្អ' : 'មធ្យម';
+       
+       return {
+         grade: `ថ្នាក់ទី ${gr}`,
+         classes: classesInGrade.length,
+         students: numStudents,
+         att: attPct,
+         gpa: parseFloat(gpa) > 0 ? gpa : '0.00',
+         ab: attPct > 0 ? (100 - attPct).toFixed(1) : '0.0', 
+         eval: parseFloat(gpa) > 0 ? evalLabel : 'មិនមានទិន្នន័យ'
+       };
+    });
 
     return { 
       trendData,

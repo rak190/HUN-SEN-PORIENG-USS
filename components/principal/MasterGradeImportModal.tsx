@@ -3,6 +3,7 @@ import { Upload, X, Loader2, Check, AlertTriangle, FileSpreadsheet, Download, Sa
 import * as XLSX from 'xlsx';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
+import Modal from '@/components/ui/Modal';
 
 type ParsedRow = {
   originalRow: number;
@@ -175,7 +176,7 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
       // Upsert grades (using the unique index on student_id and period)
       const { error } = await supabase
         .from('grades')
-        .upsert(inserts, { onConflict: 'student_id, period' });
+        .upsert(inserts, { onConflict: 'student_id,period' });
 
       if (error) throw error;
 
@@ -191,24 +192,19 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#155EEF]/10 flex items-center justify-center text-[#155EEF]">
-              <Upload size={20} />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">Master Grade Import</h2>
-              <p className="text-sm text-slate-500">Upload master Excel file to distribute grades to all classes.</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-            <X size={20} />
-          </button>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="4xl"
+      icon={
+        <div className="w-10 h-10 rounded-2xl bg-[#155EEF]/10 flex items-center justify-center text-[#155EEF] shadow-xs">
+          <Upload size={20} />
         </div>
-
-        <div className="p-6 flex-1 overflow-y-auto">
+      }
+      title="Master Grade Import"
+      subtitle="Upload master Excel file to distribute grades to all classes."
+    >
+      <div className="p-6 sm:p-8 flex flex-col gap-6">
           {parsedData.length === 0 ? (
             <div className="space-y-6">
               <div>
@@ -321,8 +317,7 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
               Import {parsedData.length > 0 ? parsedData.filter(r => r.status === 'valid').length : ''} Grades
             </button>
           </div>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

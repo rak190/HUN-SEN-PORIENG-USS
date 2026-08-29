@@ -1,5 +1,5 @@
 /**
- * System Roles (strictly 3 roles):
+ * System Roles:
  * - 'teacher': គ្រូបន្ទុកថ្នាក់ (Homeroom Teacher)
  * - 'principal': នាយកសាលា (Principal)
  * - 'admin': អ្នកគ្រប់គ្រងប្រព័ន្ធ (System Administrator)
@@ -25,7 +25,7 @@ export interface Document {
   type: 'excel' | 'word' | 'pdf' | 'archive' | 'image' | 'other';
   file_url: string;
   size: string;
-  category: 'upload' | 'export' | 'template';
+  category: 'upload' | 'export' | 'template' | 'geip' | 'giep';
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
 }
@@ -37,6 +37,12 @@ export interface Profile {
   role: UserRole;
   school_id: string;
   school_code: string;
+  phone?: string | null;
+  subject?: string | null;
+  subject_specialty?: string | null;
+  qualification_level?: string | null;
+  ministry_id?: string | null;
+  is_giep_trained?: boolean;
   created_at: string;
 }
 
@@ -59,19 +65,31 @@ export interface Classroom {
   teacher_id?: string | null;
   name: string;
   grade: string;
+  room?: string | null;
+  academic_year_id?: string | null;
   subjects: Subject[];
+  is_archived?: boolean;
+  shift?: string;
+  room_number?: string | null;
+  track?: string;
+  student_count?: number;
+  female_count?: number;
   created_at: string;
 }
 
 export interface HomeVisit {
   id: string;
   student_id: string;
-  date: string;
+  visit_date?: string;
+  date?: string;
   reason: string;
-  parent_name: string;
-  contract_notes: string;
+  observations?: string;
+  parent_name?: string;
+  contract_notes?: string;
   photo_url?: string;
-  status: 'pending' | 'submitted';
+  status: 'completed' | 'pending' | 'submitted';
+  conducted_by?: string | null;
+  created_at?: string;
 }
 
 export interface Student {
@@ -89,6 +107,15 @@ export interface Student {
   health_info?: string | null;
   is_active: boolean | null;
   is_slow_learner?: boolean;
+  scholarship?: 'yes' | 'no' | null;
+  orphan?: 'yes' | 'no' | null;
+  indigenous?: 'yes' | 'no' | null;
+  weight_kg?: number | null;
+  height_m?: number | null;
+  bmi?: number | null;
+  nutrition_status?: string | null;
+  enrollment_status?: string | null;
+  current_status?: string | null;
   created_at?: string;
   updated_at?: string;
   // GEIP specific fields
@@ -98,6 +125,10 @@ export interface Student {
   dropout_risk?: boolean;
   home_visits?: HomeVisit[];
   desk_number?: string | null;
+  scholarship_status?: string | null;
+  special_needs_status?: string | null;
+  transfer_history?: any[];
+  giep_device_received?: boolean;
 }
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'permission' | 'P' | 'A' | 'L' | 'E';
@@ -116,18 +147,34 @@ export interface AttendanceRecord {
   updated_at: string;
 }
 
+export interface Grade {
+  id: string;
+  class_id: string;
+  student_id: string;
+  period: string;
+  scores: Record<string, number>;
+  total_score?: number;
+  average?: number;
+  rank?: number;
+  status?: 'draft' | 'published';
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface GradeRecord {
   id: string;
   class_id: string;
   student_id: string;
-  subject_id: string;
-  period_id: string;
-  score_knowledge: number;
-  score_skill: number;
-  score_attitude: number;
-  total_score: number;
-  updated_at: string;
-  // Remedial tracking for GEIP
+  subject_id?: string;
+  period?: string;
+  period_id?: string;
+  scores?: Record<string, number>;
+  score_knowledge?: number;
+  score_skill?: number;
+  score_attitude?: number;
+  total_score?: number;
+  status?: 'draft' | 'published';
+  updated_at?: string;
   pre_test_score?: number;
   post_test_score?: number;
 }
@@ -171,7 +218,7 @@ export interface DocumentRecord {
   r2_object_key: string;
   file_type: string;
   file_size_bytes: number;
-  uploaded_by: string; // user ID
+  uploaded_by: string;
   class_id?: string;
   created_at: string;
 }
@@ -180,7 +227,7 @@ export interface MonthlyReportCard {
   id: string;
   class_id: string;
   student_id: string;
-  month: string; // Format: 'YYYY-MM'
+  month: string;
   total_score: number;
   average_score: number;
   rank: number;
@@ -194,16 +241,77 @@ export interface StudentHealthRecord {
   student_id: string;
   class_id: string;
   recorded_date: string;
-  weight_kg: number;
-  height_cm: number;
+  weight_kg?: number;
+  height_cm?: number;
   bmi?: number;
   vision_left?: string;
   vision_right?: string;
   hearing?: string;
   dental?: string;
   notes?: string;
+  created_at?: string;
 }
 
-export type SupportCaseStatus = 'open' | 'monitoring' | 'resolved';
-export type RiskLevel = 'low' | 'medium' | 'high';
+export type SupportCaseStatus = 'open' | 'in_progress' | 'monitoring' | 'resolved' | 'closed';
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
+export interface SupportCase {
+  id: string;
+  student_id: string;
+  class_id?: string | null;
+  teacher_id?: string | null;
+  risk_type: 'attendance' | 'academic' | 'behavior' | 'health' | 'financial';
+  risk_level: RiskLevel;
+  status: SupportCaseStatus;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SupportIntervention {
+  id: string;
+  case_id: string;
+  student_id: string;
+  intervention_type: 'counseling' | 'tutoring' | 'home_visit' | 'parent_meeting' | 'financial_aid';
+  description?: string | null;
+  action_date: string;
+  outcome?: string | null;
+  conducted_by?: string | null;
+  created_at?: string;
+}
+
+export interface ParentContact {
+  id: string;
+  student_id: string;
+  parent_name: string;
+  relationship: string;
+  phone_number: string;
+  notes?: string | null;
+  last_contact_date?: string | null;
+  created_at?: string;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  target_role: 'all' | 'teacher' | 'student' | 'principal';
+  author_id?: string | null;
+  status: 'draft' | 'published' | 'archived';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface GradeSnapshot {
+  id: string;
+  period: string;
+  class_id?: string | null;
+  created_by?: string | null;
+  snapshot_label: string;
+  records_count: number;
+  grades_payload: any[];
+  created_at: string;
+  profiles?: {
+    full_name?: string | null;
+  } | null;
+}

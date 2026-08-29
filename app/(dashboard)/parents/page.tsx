@@ -5,11 +5,12 @@ import { Phone, Plus, Copy, FileText } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { useSearchParams } from 'next/navigation';
+import Modal from '@/components/ui/Modal';
 
 interface ContactRow { id: string; student_id: string; contact_type: string; contacted_at: string; outcome: string; agreement?: string | null; follow_up_at?: string | null; students?: { full_name: string; guardian_phone?: string | null; alternative_phone?: string | null } | null }
 
 export default function ParentsPage() {
-  const { activeClass, user, isDemoMode } = useAuth();
+  const { activeClass, user } = useAuth();
   const supabase = createClient();
   const searchParams = useSearchParams();
   const requestedStudent = searchParams.get('student');
@@ -27,16 +28,29 @@ export default function ParentsPage() {
   ];
 
   useEffect(() => {
-    if (isDemoMode || !activeClass) {
-      setStudents([{ id: 'std-1', full_name: 'កែវ ច័ន្ទធីតា' }, { id: 'std-5', full_name: 'ទិត្យ វិសាល' }]);
-      setContacts([{ id: 'contact-1', student_id: 'std-5', contact_type: 'call', contacted_at: new Date().toISOString(), outcome: 'បានណាត់ជួបអាណាព្យាបាល', agreement: 'តាមដានវត្តមានប្រចាំថ្ងៃ', students: { full_name: 'ទិត្យ វិសាល', guardian_phone: '012 345 678' } }]);
+    if (!activeClass) {
+      setStudents([]);
+      setContacts([]);
       return;
     }
-    Promise.all([
-      supabase.from('students').select('id, full_name').eq('class_id', activeClass.id).eq('is_active', true).order('full_name'),
-      supabase.from('parent_contacts').select('*, students!inner(full_name, guardian_phone, alternative_phone, class_id)').eq('students.class_id', activeClass.id).order('contacted_at', { ascending: false }),
-    ]).then(([studentResult, contactResult]) => { if (studentResult.data) setStudents(studentResult.data); if (contactResult.data) setContacts(contactResult.data as unknown as ContactRow[]); });
-  }, [activeClass?.id, isDemoMode]);
+    
+    async function loadData() {
+      try {
+        const [studentResult, contactResult] = await Promise.all([
+          supabase.from('students').select('id, full_name').eq('class_id', activeClass!.id).eq('is_active', true).order('full_name'),
+          supabase.from('parent_contacts').select('*, students!inner(full_name, parent_phone, class_id)').eq('students.class_id', activeClass!.id).order('created_at', { ascending: false }),
+        ]);
+        if (studentResult.data) setStudents(studentResult.data);
+        if (contactResult.data) setContacts(contactResult.data as unknown as ContactRow[]);
+        else setContacts([]);
+      } catch (err) {
+        console.error('Error loading parent contacts:', err);
+        setContacts([]);
+      }
+    }
+    
+    loadData();
+  }, [activeClass?.id]);
 
   useEffect(() => {
     if (requestedStudent && students.some(student => student.id === requestedStudent)) {
@@ -57,15 +71,35 @@ export default function ParentsPage() {
 
   const saveContact = async () => {
     if (!form.studentId || !form.outcome.trim()) return alert('សូមជ្រើសសិស្ស និងបំពេញលទ្ធផលទំនាក់ទំនង។');
-    const student = students.find((item) => item.id === form.studentId);
-    const optimistic: ContactRow = { id: `contact-${Date.now()}`, student_id: form.studentId, contact_type: form.type, contacted_at: new Date().toISOString(), outcome: form.outcome, agreement: form.agreement, follow_up_at: form.followUp || null, students: { full_name: student?.full_name || 'សិស្ស' } };
-    if (isDemoMode || !user) setContacts((current) => [optimistic, ...current]);
-    else {
-      const { data, error } = await supabase.from('parent_contacts').insert({ student_id: form.studentId, contact_type: form.type, outcome: form.outcome.trim(), agreement: form.agreement.trim() || null, follow_up_at: form.followUp || null, created_by: user.id }).select('*, students(full_name, guardian_phone, alternative_phone)').single();
-      if (error) return alert(error.message);
-      setContacts((current) => [data as unknown as ContactRow, ...current]);
+    if (!user) return alert('សូមចូលប្រើប្រាស់ជាមុនសិន។');
+    
+    try {
+      const { data, error } = await supabase.from('parent_contacts').insert({
+        student_id: form.studentId,
+        contact_type: form.type,
+        outcome: form.outcome.trim(),
+        agreement: form.agreement.trim() || null,
+        follow_up_at: form.followUp || null,
+        created_by: user.id
+      }).select('*, students(full_name, parent_phone, emergency_phone)').single();
+      
+      if (error) {
+        console.error('Error saving parent contact:', error);
+        alert(`មានបញ្ហាក្នុងការរក្សាទុក (Error): ${error.message}`);
+        return;
+      }
+      
+      if (data) {
+        setContacts((current) => [data as unknown as ContactRow, ...current]);
+      }
+      
+      setShowForm(false);
+      setForm({ studentId: '', type: 'call', outcome: '', agreement: '', followUp: '' });
+      showToast('បានរក្សាទុកកំណត់ត្រាទំនាក់ទំនងជោគជ័យ');
+    } catch (err: any) {
+      console.error(err);
+      alert(`មានបញ្ហាក្នុងការរក្សាទុក: ${err?.message || 'Error'}`);
     }
-    setShowForm(false); setForm({ studentId: '', type: 'call', outcome: '', agreement: '', followUp: '' }); showToast('បានរក្សាទុកកំណត់ត្រាទំនាក់ទំនង');
   };
 
   return (
@@ -183,65 +217,103 @@ export default function ParentsPage() {
         )}
       </div>
 
-      {/* New Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-lg p-8 space-y-6 shadow-2xl scale-100 animate-slideUp" onClick={(event) => event.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                <div className="p-2 bg-blue-50 text-[#155EEF] rounded-lg">
-                  <Plus className="w-5 h-5" />
-                </div>
-                កំណត់ត្រាទំនាក់ទំនង
-              </h2>
-              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-slate-600 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 font-bold text-xl">
-                ×
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">សិស្ស</label>
-                <select value={form.studentId} onChange={(event) => setForm({ ...form, studentId: event.target.value })} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer">
-                  <option value="">ជ្រើសសិស្ស...</option>
-                  {students.map((student) => <option key={student.id} value={student.id}>{student.full_name}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">វិធីសាស្រ្ត</label>
-                <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer">
-                  <option value="call">ទូរស័ព្ទ</option>
-                  <option value="message">សារ</option>
-                  <option value="meeting">ប្រជុំ</option>
-                  <option value="home_visit">ចុះផ្ទះ</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">លទ្ធផលទំនាក់ទំនង</label>
-                <textarea value={form.outcome} onChange={(event) => setForm({ ...form, outcome: event.target.value })} rows={3} placeholder="ពណ៌នាអំពីការសន្ទនា..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold resize-none focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all placeholder:text-slate-400" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">កិច្ចព្រមព្រៀង / ចំណាត់ការបន្ត</label>
-                <textarea value={form.agreement} onChange={(event) => setForm({ ...form, agreement: event.target.value })} rows={2} placeholder="សកម្មភាពបន្ទាប់ពីការសន្ទនា..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold resize-none focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all placeholder:text-slate-400" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">កាលបរិច្ឆេទតាមដានបន្ទាប់ (បើមាន)</label>
-                <input type="date" value={form.followUp} onChange={(event) => setForm({ ...form, followUp: event.target.value })} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer" />
-              </div>
+      {/* New Form Modal (Full-Screen Frosted Glass Portal) */}
+      <Modal
+        isOpen={showForm}
+        onClose={() => setShowForm(false)}
+        size="lg"
+        icon={
+          <div className="w-10 h-10 bg-blue-50 text-[#155EEF] rounded-xl flex items-center justify-center shadow-xs">
+            <Plus className="w-5 h-5" />
+          </div>
+        }
+        title="កំណត់ត្រាទំនាក់ទំនង"
+      >
+        <div className="p-6 sm:p-8 space-y-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                សិស្ស
+              </label>
+              <select
+                value={form.studentId}
+                onChange={(event) => setForm({ ...form, studentId: event.target.value })}
+                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer"
+              >
+                <option value="">ជ្រើសសិស្ស...</option>
+                {students.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.full_name}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="pt-2">
-              <button onClick={saveContact} className="w-full py-4 bg-gradient-to-r from-[#155EEF] to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-black text-sm shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5">
-                រក្សាទុក
-              </button>
+            <div>
+              <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                វិធីសាស្រ្ត
+              </label>
+              <select
+                value={form.type}
+                onChange={(event) => setForm({ ...form, type: event.target.value })}
+                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer"
+              >
+                <option value="call">ទូរស័ព្ទ</option>
+                <option value="message">សារ</option>
+                <option value="meeting">ប្រជុំ</option>
+                <option value="home_visit">ចុះផ្ទះ</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                លទ្ធផលទំនាក់ទំនង
+              </label>
+              <textarea
+                value={form.outcome}
+                onChange={(event) => setForm({ ...form, outcome: event.target.value })}
+                rows={3}
+                placeholder="ពណ៌នាអំពីការសន្ទនា..."
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold resize-none focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all placeholder:text-slate-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                កិច្ចព្រមព្រៀង / ចំណាត់ការបន្ត
+              </label>
+              <textarea
+                value={form.agreement}
+                onChange={(event) => setForm({ ...form, agreement: event.target.value })}
+                rows={2}
+                placeholder="សកម្មភាពបន្ទាប់ពីការសន្ទនា..."
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold resize-none focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all placeholder:text-slate-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                កាលបរិច្ឆេទតាមដានបន្ទាប់ (បើមាន)
+              </label>
+              <input
+                type="date"
+                value={form.followUp}
+                onChange={(event) => setForm({ ...form, followUp: event.target.value })}
+                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer"
+              />
             </div>
           </div>
+
+          <div className="pt-2">
+            <button
+              onClick={saveContact}
+              className="w-full py-4 bg-gradient-to-r from-[#155EEF] to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-extrabold text-sm shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 cursor-pointer active:scale-98"
+            >
+              រក្សាទុក
+            </button>
+          </div>
         </div>
-      )}
+      </Modal>
 
       {toastMessage && (
         <div className="fixed bottom-6 right-6 bg-slate-900/90 backdrop-blur-sm text-white px-6 py-3.5 rounded-2xl shadow-2xl z-50 text-sm font-bold border border-white/10 animate-slideUp flex items-center gap-3">

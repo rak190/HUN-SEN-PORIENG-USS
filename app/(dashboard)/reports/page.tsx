@@ -28,18 +28,20 @@ interface ReportData {
   giepEvidence: string;
 }
 
+const KHMER_MONTHS = ['មករា', 'កុម្ភៈ', 'មីនា', 'មេសា', 'ឧសភា', 'មិថុនា', 'កក្កដា', 'សីហា', 'កញ្ញា', 'តុលា', 'វិច្ឆិកា', 'ធ្នូ'];
+
 const DEFAULT_REPORT: ReportData = {
-  month: 'ខែកក្កដា 2026',
-  totalStudents: 45,
-  totalGirls: 23,
-  attendanceRate: 96.8,
-  absentManyTimes: ['កែវ ច័ន្ទធីតា', 'សុខ មករា'],
-  weakStudents: ['សៅ សុភាព (គណិត)', 'ម៉ៅ រស្មី (រូបវិទ្យា)'],
-  topStudents: ['ខៀវ សុវណ្ណារាជ', 'ចាន់ សុភាព'],
+  month: `ខែ${KHMER_MONTHS[new Date().getMonth()]} ${new Date().getFullYear()}`,
+  totalStudents: 0,
+  totalGirls: 0,
+  attendanceRate: 0,
+  absentManyTimes: [],
+  weakStudents: [],
+  topStudents: [],
   disciplineCases: 0,
-  parentMeetings: 3,
-  homeVisits: 4,
-  studentsNeedingSupport: 3,
+  parentMeetings: 0,
+  homeVisits: 0,
+  studentsNeedingSupport: 0,
   teacherComments: '',
   requestToPrincipal: '',
   giepEvidence: ''
@@ -50,7 +52,7 @@ export default function ReportsPage() {
   const [step, setStep] = useState<WizardStep>('IDLE');
   const [report, setReport] = useState<ReportData>(DEFAULT_REPORT);
   const [sending, setSending] = useState(false);
-  const [submittedReports, setSubmittedReports] = useState([{ month: 'ខែមិថុនា 2026', date: '30-Jun-2026', status: 'Approved' }]);
+  const [submittedReports, setSubmittedReports] = useState<Array<{ month: string; date: string; status: string }>>([]);
 
   const supabase = createClient();
 
@@ -68,10 +70,9 @@ export default function ReportsPage() {
       const totalStudents = students ? students.length : 0;
       const totalGirls = students ? students.filter(s => s.gender === 'F' || s.gender === 'ស្រី').length : 0;
       
-      // 2. Fetch Attendance (Mock logic for attendance, assuming monthly_attendance_summary or just using fake for now if table missing)
-      // Since attendance table might not have easy rate, we'll try to fetch monthly_attendance_summary
+      // 2. Fetch Attendance
       const { data: attendance } = await supabase
-        .from('monthly_attendance_summary')
+        .from('monthly_attendance_summaries')
         .select('*')
         .eq('class_id', activeClass?.id)
         .eq('month', monthPrefix);
@@ -88,24 +89,23 @@ export default function ReportsPage() {
         if (manyAbsencesIds.length > 0 && students) {
            absentManyTimes = students.filter(s => manyAbsencesIds.includes(s.id)).map(s => s.full_name);
         }
+      } else {
+        attendanceRate = 0;
       }
 
-      // 3. Fetch Grades / Report Cards
-      const { data: reportCards } = await supabase
-        .from('monthly_report_cards')
-        .select('*')
-        .eq('class_id', activeClass?.id)
-        .eq('month', monthPrefix);
+      // 3. Fetch Grades
+      const { data: gradesData } = await supabase
+        .from('grades')
+        .select('student_id, total_score')
+        .eq('class_id', activeClass?.id);
 
       let weakStudents: string[] = [];
       let topStudents: string[] = [];
-      if (reportCards && reportCards.length > 0 && students) {
-        // Weak students (average < 25)
-        const weakIds = reportCards.filter(r => r.average_score < 25).map(r => r.student_id);
+      if (gradesData && gradesData.length > 0 && students) {
+        const weakIds = gradesData.filter(r => (r.total_score || 0) < 25).map(r => r.student_id);
         weakStudents = students.filter(s => weakIds.includes(s.id)).map(s => s.full_name);
 
-        // Top students (rank 1, 2, 3)
-        const sorted = [...reportCards].sort((a, b) => (a.rank || 999) - (b.rank || 999));
+        const sorted = [...gradesData].sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
         const topIds = sorted.slice(0, 3).map(r => r.student_id);
         topStudents = students.filter(s => topIds.includes(s.id)).map(s => s.full_name);
       }
@@ -115,17 +115,17 @@ export default function ReportsPage() {
         .from('home_visits')
         .select('*')
         .gte('date', `${monthPrefix}-01`)
-        .lte('date', `${monthPrefix}-31`); // crude date filter
+        .lte('date', `${monthPrefix}-31`);
 
       let homeVisits = 0;
-      let parentMeetings = 0; // if we want to simulate or fetch this too
+      let parentMeetings = 0;
       if (homeVisitsData && students) {
         const studentIds = students.map(s => s.id);
         homeVisits = homeVisitsData.filter(v => studentIds.includes(v.student_id)).length;
       }
 
       setReport({
-        month: `ខែ${new Date().getMonth() + 1} ${new Date().getFullYear()}`, // Need a real khmer month mapping
+        month: `ខែ${KHMER_MONTHS[new Date().getMonth()]} ${new Date().getFullYear()}`,
         totalStudents,
         totalGirls,
         attendanceRate,
@@ -136,7 +136,7 @@ export default function ReportsPage() {
         parentMeetings,
         homeVisits,
         studentsNeedingSupport: weakStudents.length,
-        teacherComments: 'ជារួមក្នុងខែនេះ អត្រាវត្តមាន និងការសិក្សារបស់សិស្សមានភាពល្អប្រសើរ។',
+        teacherComments: totalStudents > 0 ? 'ជារួមក្នុងខែនេះ អត្រាវត្តមាន និងការសិក្សារបស់សិស្សមានភាពល្អប្រសើរ។' : 'មិនទាន់មានទិន្នន័យ',
         giepEvidence: homeVisits > 0 ? `- បានចុះដល់ផ្ទះសិស្ស ${homeVisits} គ្រួសារ` : '- មិនមានទិន្នន័យចុះផ្ទះសិស្សទេ',
         requestToPrincipal: ''
       });

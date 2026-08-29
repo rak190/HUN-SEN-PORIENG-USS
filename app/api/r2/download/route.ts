@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { r2Client, R2_BUCKET_NAME } from '@/lib/cloudflare-r2';
+import { getServerAuth } from '@/lib/auth-server';
 import { createClient } from '@/lib/supabase/server';
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createClient();
+    const { user, role } = await getServerAuth();
     const searchParams = req.nextUrl.searchParams;
     const objectKey = searchParams.get('key');
 
@@ -15,18 +16,34 @@ export async function GET(req: NextRequest) {
     }
 
     // 1. Verify User Session
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    // Demo mode fallback
     const isDemo = !process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!isDemo && (authError || !user)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!isDemo && !user) {
+      return NextResponse.json({ error: 'Unauthorized: Log in required' }, { status: 401 });
     }
 
-    // 2. Security Check (Analog to RLS)
-    // Normally, you would query Supabase here to ensure the user has access to this objectKey.
-    // For example: const { data } = await supabase.from('documents').select('id').eq('r2_object_key', objectKey).single();
-    // If no data, return 403 Forbidden.
+    // 2. Object-level access verification (Admins/Principals have full access; Teachers have school access)
+    if (!isDemo && user && role !== 'admin' && role !== 'principal') {
+      const supabase = await createClient();
+      const { data: doc } = await supabase
+        .from('documents')
+        .select('id, class_id, uploader_id')
+        .eq('file_url', objectKey)
+        .maybeSingle();
+
+      // If document is indexed in DB and uploader is different, verify class access
+      if (doc && doc.uploader_id !== user.id) {
+        const { data: teacherClass } = await supabase
+          .from('classes')
+          .select('id')
+          .eq('teacher_id', user.id)
+          .eq('id', doc.class_id)
+          .maybeSingle();
+
+        if (!teacherClass) {
+          return NextResponse.json({ error: 'Forbidden: Access to this document is restricted' }, { status: 403 });
+        }
+      }
+    }
 
     // 3. Create GetObjectCommand
     const command = new GetObjectCommand({

@@ -4,18 +4,17 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import {
-  BookOpen,
-  Shield,
-  Users,
+  GraduationCap,
+  ShieldCheck,
+  MessagesSquare,
   ArrowRight,
   Loader2,
   Globe,
-  Menu,
-  Sparkles,
-  X,
   Eye,
-  EyeOff
+  EyeOff,
+  X
 } from 'lucide-react';
+import Modal from '@/components/ui/Modal';
 
 export default function LoginPage() {
   const [role, setRole] = useState<'teacher' | 'principal' | 'admin' | 'monitor'>('teacher');
@@ -24,7 +23,6 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [lang, setLang] = useState<'KM' | 'EN'>('KM');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
@@ -48,30 +46,20 @@ export default function LoginPage() {
       if (res.error) {
         setErrorMsg(res.error);
       } else {
-        if (res.role === 'admin') router.push('/admin');
-        else if (res.role === 'principal') router.push('/principal');
-        else if (res.role === 'monitor') router.push('/monitor/attendance');
-        else router.push('/homeroom');
+        const dest = res.role === 'admin' 
+          ? '/admin' 
+          : res.role === 'principal' 
+          ? '/principal' 
+          : res.role === 'monitor' 
+          ? '/monitor/attendance' 
+          : '/homeroom';
+        window.location.href = dest;
       }
     } catch (err: any) {
       setErrorMsg(err?.message || 'មានកំហុសបច្ចេកទេស។');
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleQuickDemo(demoRole: 'teacher' | 'principal' | 'admin' | 'monitor') {
-    setLoading(true);
-    let demoUser = 'teacher';
-    if (demoRole === 'admin') demoUser = 'admin';
-    if (demoRole === 'principal') demoUser = 'kruadmin041030';
-    if (demoRole === 'monitor') demoUser = 'monitor';
-    
-    await login(demoUser, 'password123');
-    if (demoRole === 'admin') router.push('/admin');
-    else if (demoRole === 'principal') router.push('/principal');
-    else if (demoRole === 'monitor') router.push('/monitor/attendance');
-    else router.push('/homeroom');
   }
 
   return (
@@ -91,45 +79,6 @@ export default function LoginPage() {
         </div>
 
         <div className="flex items-center gap-2 md:gap-3 text-sm font-bold text-slate-600 relative">
-          <div className="hidden sm:flex items-center gap-1.5">
-            <button
-              onClick={() => handleQuickDemo('teacher')}
-              disabled={loading}
-              className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-2.5 py-1.5 rounded-lg border border-emerald-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
-              title="ចូលសាកល្បងជា គ្រូបន្ទុកថ្នាក់"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-[#FFCF59]" />
-              <span>គ្រូបន្ទុកថ្នាក់</span>
-            </button>
-            <button
-              onClick={() => handleQuickDemo('principal')}
-              disabled={loading}
-              className="flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-[#155EEF] px-2.5 py-1.5 rounded-lg border border-blue-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
-              title="ចូលសាកល្បងជា នាយកសាលា"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-[#155EEF]" />
-              <span>នាយកសាលា</span>
-            </button>
-            <button
-              onClick={() => handleQuickDemo('admin')}
-              disabled={loading}
-              className="flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 px-2.5 py-1.5 rounded-lg border border-purple-200 text-xs font-bold transition-all cursor-pointer shadow-2xs hidden sm:flex"
-              title="ចូលសាកល្បងជា អ្នកគ្រប់គ្រងប្រព័ន្ធ"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-              <span>អ្នកគ្រប់គ្រង</span>
-            </button>
-            <button
-              onClick={() => handleQuickDemo('monitor')}
-              disabled={loading}
-              className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 px-2.5 py-1.5 rounded-lg border border-amber-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
-              title="ចូលសាកល្បងជា ប្រធានថ្នាក់"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              <span>ប្រធានថ្នាក់</span>
-            </button>
-          </div>
-
           <div className="relative">
             <button 
               onClick={() => setLang(prev => prev === 'KM' ? 'EN' : 'KM')}
@@ -140,33 +89,8 @@ export default function LoginPage() {
               <span className="w-5 text-center font-extrabold">{lang}</span>
             </button>
           </div>
-          <button 
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-1.5 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer block sm:hidden"
-          >
-            {mobileMenuOpen ? <X className="w-6 h-6 text-slate-700" /> : <Menu className="w-6 h-6 text-slate-700" />}
-          </button>
         </div>
       </nav>
-
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="absolute top-[73px] left-0 right-0 bg-white border-b border-slate-200 shadow-xl z-30 p-4 flex flex-col gap-3 sm:hidden animate-in slide-in-from-top-2">
-          <p className="text-xs font-extrabold text-slate-400 mb-1">ចូលសាកល្បងរហ័ស (Quick Demo)</p>
-          <button onClick={() => { setMobileMenuOpen(false); handleQuickDemo('teacher'); }} className="flex items-center gap-3 bg-emerald-50 text-emerald-800 p-3 rounded-xl font-bold cursor-pointer">
-            <Sparkles className="w-4 h-4 text-[#FFCF59]" /> គ្រូបន្ទុកថ្នាក់ (Teacher)
-          </button>
-          <button onClick={() => { setMobileMenuOpen(false); handleQuickDemo('principal'); }} className="flex items-center gap-3 bg-blue-50 text-[#155EEF] p-3 rounded-xl font-bold cursor-pointer">
-            <Sparkles className="w-4 h-4 text-[#155EEF]" /> នាយកសាលា (Principal)
-          </button>
-          <button onClick={() => { setMobileMenuOpen(false); handleQuickDemo('admin'); }} className="flex items-center gap-3 bg-purple-50 text-purple-800 p-3 rounded-xl font-bold cursor-pointer">
-            <Sparkles className="w-4 h-4 text-purple-600" /> អ្នកគ្រប់គ្រង (Admin)
-          </button>
-          <button onClick={() => { setMobileMenuOpen(false); handleQuickDemo('monitor'); }} className="flex items-center gap-3 bg-amber-50 text-amber-800 p-3 rounded-xl font-bold cursor-pointer">
-            <Sparkles className="w-4 h-4 text-amber-600" /> ប្រធានថ្នាក់ (Monitor)
-          </button>
-        </div>
-      )}
 
       {/* Hero Main Content */}
       <main className="flex-1 flex flex-col lg:flex-row items-center justify-center p-6 lg:p-12 gap-12 max-w-7xl mx-auto w-full relative min-h-[calc(100vh-80px)]">
@@ -362,32 +286,41 @@ export default function LoginPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="bg-[#F4F7FE] rounded-[32px] p-8 text-center transition-all hover:-translate-y-2 hover:shadow-xl duration-300">
-              <div className="w-16 h-16 bg-blue-100 text-[#155EEF] rounded-2xl flex items-center justify-center mx-auto mb-6">
-                <BookOpen className="w-8 h-8" />
+            <div className="group relative bg-[#F8FAFC] hover:bg-white rounded-3xl p-8 text-center border border-slate-200/80 hover:border-blue-200/90 shadow-2xs hover:shadow-[0_16px_36px_rgba(21,94,239,0.08)] hover:-translate-y-2 transition-all duration-300">
+              <div className="relative w-16 h-16 mx-auto mb-6 flex items-center justify-center">
+                <div className="absolute inset-0 bg-blue-500/10 rounded-2xl blur-md group-hover:bg-blue-500/20 transition-all duration-300" />
+                <div className="relative w-16 h-16 bg-white border border-blue-100/90 rounded-2xl shadow-[0_4px_16px_rgba(21,94,239,0.08)] flex items-center justify-center text-[#155EEF] group-hover:border-blue-300 group-hover:shadow-[0_8px_24px_rgba(21,94,239,0.16)] group-hover:scale-105 transition-all duration-300">
+                  <GraduationCap className="w-8 h-8 stroke-[1.8]" />
+                </div>
               </div>
-              <h3 className="text-xl font-bold text-slate-800 mb-3">ងាយស្រួលគ្រប់គ្រងការសិក្សា</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
+              <h3 className="text-lg sm:text-xl font-black text-slate-800 mb-2.5 group-hover:text-[#155EEF] transition-colors">ងាយស្រួលគ្រប់គ្រងការសិក្សា</h3>
+              <p className="text-slate-500 text-xs sm:text-sm font-semibold leading-relaxed">
                 តាមដានពិន្ទុ កាលវិភាគ និងអវត្តមានសិស្សដោយស្វ័យប្រវត្តិ។
               </p>
             </div>
 
-            <div className="bg-[#F4F7FE] rounded-[32px] p-8 text-center transition-all hover:-translate-y-2 hover:shadow-xl duration-300">
-              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                <Shield className="w-8 h-8" />
+            <div className="group relative bg-[#F8FAFC] hover:bg-white rounded-3xl p-8 text-center border border-slate-200/80 hover:border-blue-200/90 shadow-2xs hover:shadow-[0_16px_36px_rgba(21,94,239,0.08)] hover:-translate-y-2 transition-all duration-300">
+              <div className="relative w-16 h-16 mx-auto mb-6 flex items-center justify-center">
+                <div className="absolute inset-0 bg-blue-500/10 rounded-2xl blur-md group-hover:bg-blue-500/20 transition-all duration-300" />
+                <div className="relative w-16 h-16 bg-white border border-blue-100/90 rounded-2xl shadow-[0_4px_16px_rgba(21,94,239,0.08)] flex items-center justify-center text-[#155EEF] group-hover:border-blue-300 group-hover:shadow-[0_8px_24px_rgba(21,94,239,0.16)] group-hover:scale-105 transition-all duration-300">
+                  <ShieldCheck className="w-8 h-8 stroke-[1.8]" />
+                </div>
               </div>
-              <h3 className="text-xl font-bold text-slate-800 mb-3">សុវត្ថិភាពទិន្នន័យកម្រិតខ្ពស់</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
+              <h3 className="text-lg sm:text-xl font-black text-slate-800 mb-2.5 group-hover:text-[#155EEF] transition-colors">សុវត្ថិភាពទិន្នន័យកម្រិតខ្ពស់</h3>
+              <p className="text-slate-500 text-xs sm:text-sm font-semibold leading-relaxed">
                 ទិន្នន័យសាលាត្រូវបានរក្សាទុកដោយសុវត្ថិភាពបំផុតលើម៉ាស៊ីនមេទំនើប។
               </p>
             </div>
 
-            <div className="bg-[#F4F7FE] rounded-[32px] p-8 text-center transition-all hover:-translate-y-2 hover:shadow-xl duration-300">
-              <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                <Users className="w-8 h-8" />
+            <div className="group relative bg-[#F8FAFC] hover:bg-white rounded-3xl p-8 text-center border border-slate-200/80 hover:border-blue-200/90 shadow-2xs hover:shadow-[0_16px_36px_rgba(21,94,239,0.08)] hover:-translate-y-2 transition-all duration-300">
+              <div className="relative w-16 h-16 mx-auto mb-6 flex items-center justify-center">
+                <div className="absolute inset-0 bg-blue-500/10 rounded-2xl blur-md group-hover:bg-blue-500/20 transition-all duration-300" />
+                <div className="relative w-16 h-16 bg-white border border-blue-100/90 rounded-2xl shadow-[0_4px_16px_rgba(21,94,239,0.08)] flex items-center justify-center text-[#155EEF] group-hover:border-blue-300 group-hover:shadow-[0_8px_24px_rgba(21,94,239,0.16)] group-hover:scale-105 transition-all duration-300">
+                  <MessagesSquare className="w-8 h-8 stroke-[1.8]" />
+                </div>
               </div>
-              <h3 className="text-xl font-bold text-slate-800 mb-3">ទំនាក់ទំនងរហ័ស</h3>
-              <p className="text-slate-600 text-sm font-medium leading-relaxed">
+              <h3 className="text-lg sm:text-xl font-black text-slate-800 mb-2.5 group-hover:text-[#155EEF] transition-colors">ទំនាក់ទំនងរហ័ស</h3>
+              <p className="text-slate-500 text-xs sm:text-sm font-semibold leading-relaxed">
                 ភ្ជាប់ទំនាក់ទំនងរវាងនាយកសាលា គ្រូបង្រៀន និងអាណាព្យាបាលសិស្ស។
               </p>
             </div>
@@ -400,40 +333,39 @@ export default function LoginPage() {
         <p>© 2026 វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង. រក្សាសិទ្ធិគ្រប់យ៉ាង។</p>
       </footer>
 
-      {/* Support / Forgot Password Modal */}
-      {showSupportModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl relative animate-in zoom-in-95">
-            <button 
-              onClick={() => setShowSupportModal(false)} 
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="w-16 h-16 bg-blue-50 text-[#155EEF] rounded-2xl flex items-center justify-center mb-6 mx-auto">
-              <Shield className="w-8 h-8" />
-            </div>
-            <h3 className="text-xl font-black text-slate-800 mb-2 text-center">
-              {lang === 'KM' ? 'ត្រូវការជំនួយ?' : 'Need Help?'}
-            </h3>
-            <p className="text-sm text-slate-600 text-center mb-6 leading-relaxed">
-              {lang === 'KM' 
-                ? 'សូមទាក់ទងទៅកាន់អ្នកគ្រប់គ្រងប្រព័ន្ធ (Admin) ឬនាយកសាលារបស់អ្នក ដើម្បីធ្វើការប្តូរពាក្យសម្ងាត់ថ្មី ឬដោះស្រាយបញ្ហាគណនីរបស់អ្នក។'
-                : 'Please contact your system Administrator or Principal to reset your password or resolve account issues.'}
-            </p>
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6">
-              <p className="text-xs font-bold text-slate-500 mb-1">{lang === 'KM' ? 'លេខទូរស័ព្ទទំនាក់ទំនង:' : 'Support Contact:'}</p>
-              <p className="text-sm font-black text-slate-800">012 345 678</p>
-            </div>
-            <button 
-              onClick={() => setShowSupportModal(false)} 
-              className="w-full bg-[#155EEF] hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-md hover:shadow-lg"
-            >
-              {lang === 'KM' ? 'យល់ព្រម' : 'Got it'}
-            </button>
+      {/* Support / Forgot Password Modal (Full-Screen Frosted Glass Portal) */}
+      <Modal
+        isOpen={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
+        size="sm"
+        showCloseButton={true}
+      >
+        <div className="p-6 sm:p-8 text-center flex flex-col items-center">
+          <div className="w-16 h-16 bg-blue-50 text-[#155EEF] rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-xs">
+            <ShieldCheck className="w-8 h-8" />
           </div>
+          <h3 className="text-xl font-extrabold text-slate-800 mb-2 tracking-tight">
+            {lang === 'KM' ? 'ត្រូវការជំនួយ?' : 'Need Help?'}
+          </h3>
+          <p className="text-xs font-medium text-slate-600 mb-6 leading-relaxed">
+            {lang === 'KM'
+              ? 'សូមទាក់ទងទៅកាន់អ្នកគ្រប់គ្រងប្រព័ន្ធ (Admin) ឬនាយកសាលារបស់អ្នក ដើម្បីធ្វើការប្តូរពាក្យសម្ងាត់ថ្មី ឬដោះស្រាយបញ្ហាគណនីរបស់អ្នក។'
+              : 'Please contact your system Administrator or Principal to reset your password or resolve account issues.'}
+          </p>
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100/90 mb-6 w-full text-left">
+            <p className="text-xs font-bold text-slate-500 mb-1">
+              {lang === 'KM' ? 'លេខទូរស័ព្ទទំនាក់ទំនង:' : 'Support Contact:'}
+            </p>
+            <p className="text-sm font-black text-slate-800 font-mono">012 345 678</p>
+          </div>
+          <button
+            onClick={() => setShowSupportModal(false)}
+            className="w-full bg-[#155EEF] hover:bg-blue-700 text-white font-extrabold py-3.5 px-4 rounded-xl transition-all shadow-md active:scale-98 text-xs cursor-pointer"
+          >
+            {lang === 'KM' ? 'យល់ព្រម' : 'Got it'}
+          </button>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

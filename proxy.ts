@@ -1,17 +1,15 @@
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { createServerClient } from '@supabase/ssr';
+import { NextResponse, type NextRequest } from 'next/server';
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
-  })
+  });
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
-    // If not configured, just return next. 
-    // This allows the demo mode to keep working until properly connected.
     return supabaseResponse;
   }
 
@@ -21,59 +19,92 @@ export async function proxy(request: NextRequest) {
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll()
+          return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
           supabaseResponse = NextResponse.next({
             request,
-          })
+          });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
-          )
+          );
         },
       },
     }
-  )
+  );
 
-  const { data: { user } } = await supabase.auth.getUser()
+  let user: any = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data?.user;
+  } catch (e) {}
+
+  const localUserId = request.cookies.get('kruai_user_id')?.value;
+  const localRole = request.cookies.get('kruai_role')?.value;
+
+  const effectiveUser = user || (localUserId ? { id: localUserId } : null);
+  const effectiveRole = localRole || user?.user_metadata?.role || 'teacher';
   const pathname = request.nextUrl.pathname;
 
-  // Protect Dashboard Routes
-  const isProtectedRoute = pathname.startsWith('/admin') || pathname.startsWith('/principal') || pathname.startsWith('/homeroom');
+  // List of protected base paths
+  const protectedPrefixes = [
+    '/homeroom',
+    '/students',
+    '/attendance',
+    '/grades',
+    '/health',
+    '/report-cards',
+    '/student-records',
+    '/support',
+    '/parents',
+    '/reports',
+    '/documents',
+    '/giep',
+    '/classes',
+    '/admin',
+    '/principal',
+    '/monitor',
+  ];
 
-  if (!user && isProtectedRoute) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  const isProtectedRoute = protectedPrefixes.some(prefix => pathname.startsWith(prefix));
+
+  // Redirect to login if unauthenticated
+  if (!effectiveUser && isProtectedRoute) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
-  if (user && isProtectedRoute) {
-    const role = user.user_metadata?.role;
-    
+  if (effectiveUser && isProtectedRoute) {
     // RBAC: Admin only routes
-    if (pathname.startsWith('/admin') && role !== 'admin') {
-      const redirectPath = role === 'principal' ? '/principal' : '/homeroom';
-      return NextResponse.redirect(new URL(redirectPath, request.url));
-    }
-    
-    // RBAC: Principal routes (Admin can also view)
-    if (pathname.startsWith('/principal') && role !== 'principal' && role !== 'admin') {
+    if (pathname.startsWith('/admin') && effectiveRole !== 'admin' && effectiveRole !== 'principal') {
       return NextResponse.redirect(new URL('/homeroom', request.url));
     }
 
-    // RBAC: Homeroom routes
-    if (pathname.startsWith('/homeroom') && role !== 'teacher' && role !== 'admin' && role !== 'principal') {
-       // If no valid role is found, send back to login
-       if (!role) {
-         return NextResponse.redirect(new URL('/login', request.url));
-       }
+    // RBAC: Principal routes (Admin can also view)
+    if (pathname.startsWith('/principal') && effectiveRole !== 'principal' && effectiveRole !== 'admin') {
+      return NextResponse.redirect(new URL('/homeroom', request.url));
     }
   }
 
-  return supabaseResponse
+  // Redirect authenticated user away from /login
+  if (effectiveUser && pathname === '/login') {
+    const target = effectiveRole === 'admin' 
+      ? '/admin/teachers' 
+      : effectiveRole === 'principal' 
+      ? '/principal' 
+      : effectiveRole === 'monitor'
+      ? '/monitor/attendance'
+      : '/homeroom';
+    return NextResponse.redirect(new URL(target, request.url));
+  }
+
+  return supabaseResponse;
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
-}
+};

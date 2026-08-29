@@ -1,8 +1,8 @@
 -- 05_expand_giep_fields.sql
 -- Description: Expand schemas to support GIEP Google Sheet data format
 
--- 1. Extend Users (Teachers/Staff) table
-ALTER TABLE users 
+-- 1. Extend Profiles (Teachers/Staff) table
+ALTER TABLE profiles 
 ADD COLUMN IF NOT EXISTS subject_specialty text,
 ADD COLUMN IF NOT EXISTS qualification_level text,
 ADD COLUMN IF NOT EXISTS ministry_id text,
@@ -17,8 +17,8 @@ ADD COLUMN IF NOT EXISTS giep_device_received boolean DEFAULT false;
 
 -- 3. Create School Infrastructure table
 CREATE TABLE IF NOT EXISTS school_infrastructure (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  school_id text NOT NULL, -- Logical ID if supporting multiple schools, or just 'default'
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id text NOT NULL,
   name_kh text NOT NULL,
   name_en text,
   province_code text,
@@ -37,14 +37,16 @@ CREATE TABLE IF NOT EXISTS school_infrastructure (
 ALTER TABLE school_infrastructure ENABLE ROW LEVEL SECURITY;
 
 -- Policies for school_infrastructure
+DROP POLICY IF EXISTS "Admins have full access to school infrastructure" ON school_infrastructure;
 CREATE POLICY "Admins have full access to school infrastructure"
 ON school_infrastructure FOR ALL
 USING (
   EXISTS (
-    SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'
+    SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND (profiles.role = 'admin' OR profiles.role = 'principal')
   )
 );
 
+DROP POLICY IF EXISTS "All authenticated users can view school infrastructure" ON school_infrastructure;
 CREATE POLICY "All authenticated users can view school infrastructure"
 ON school_infrastructure FOR SELECT
 USING (auth.role() = 'authenticated');

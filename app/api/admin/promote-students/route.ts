@@ -1,17 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
+import { getServerAuth } from '@/lib/auth-server';
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
   const body = await req.json();
-  const { sourceClassId, targetClassId, targetYearId } = body;
+  const { sourceClassId, targetClassId } = body;
 
   if (!sourceClassId || !targetClassId) {
     return NextResponse.json({ error: 'Source and Target Class IDs are required.' }, { status: 400 });
@@ -24,12 +23,7 @@ export async function POST(req: Request) {
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({
-      isDemo: true,
-      success: true,
-      count: 42,
-      message: 'Demo promotion: 42 students promoted successfully.'
-    });
+    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
   try {
@@ -48,8 +42,7 @@ export async function POST(req: Request) {
 
     const studentIds = students.map((s: any) => s.id);
 
-    // 2. Update their class_id and (if your schema supports it) academic_year_id.
-    // The students table typically tracks class_id.
+    // 2. Update their class_id
     const { error: updateErr } = await adminClient
       .from('students')
       .update({ class_id: targetClassId })
@@ -58,10 +51,10 @@ export async function POST(req: Request) {
     if (updateErr) throw updateErr;
 
     return NextResponse.json({ 
-      isDemo: false, 
+      isDemo: false,
       success: true, 
       count: studentIds.length,
-      message: `ឡើងថ្នាក់សិស្សបានជោគជ័យចំនួន ${studentIds.length} នាក់!` 
+      message: `បានផ្ទេរ ឬឡើងថ្នាក់សិស្សចំនួន ${studentIds.length} នាក់ជោគជ័យ!`
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

@@ -1,15 +1,16 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search, Mic, ArrowUpRight, Award, Globe, Share2,
   MessageCircle, Mail, CalendarCheck, ClipboardList,
-  Plus, Trash2, ChevronDown, AlertTriangle, X
+  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall
 } from 'lucide-react';
 import { ActivityLog, Profile, AtRiskStudent } from '@/types';
 import { createActivityLog, deleteActivityLog } from './actions';
+import Modal from '@/components/ui/Modal';
 
 interface DashboardStats {
   students: string;
@@ -42,21 +43,34 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
   const [newDesc, setNewDesc] = useState('');
   const [newType, setNewType] = useState<'report' | 'attendance' | 'award' | 'student'>('award');
   const [isPending, startTransition] = useTransition();
-  const [showEwsBanner, setShowEwsBanner] = useState(true);
   const [showEwsModal, setShowEwsModal] = useState(false);
   const [footerModalData, setFooterModalData] = useState<{ title: string; content: React.ReactNode } | null>(null);
 
-  const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    const params = new URLSearchParams(searchParams.toString());
-    if (val === 'all') {
-      params.delete('classId');
-    } else {
-      params.set('classId', val);
+  // Interactive trend and weekly filters
+  const [trendRange, setTrendRange] = useState<'8' | '6' | '3' | 'all'>('8');
+  const [isListening, setIsListening] = useState(false);
+
+  const handleVoiceSearch = () => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('កម្មវិធីរុករករបស់អ្នកមិនទាន់គាំទ្រ Voice Search ទេ សូមប្រើប្រាស់ Google Chrome ឬ Microsoft Edge');
+      return;
     }
-    startTransition(() => {
-      router.push(`?${params.toString()}`);
-    });
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'km-KH';
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+    recognition.onresult = (event: any) => {
+      if (event.results && event.results[0] && event.results[0][0]) {
+        const transcript = event.results[0][0].transcript;
+        setSearchQuery(transcript);
+      }
+    };
+    recognition.start();
   };
 
   async function handleAddActivity(e: React.FormEvent) {
@@ -88,10 +102,17 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
     }
   }
 
-  const filteredActivities = activities.filter(a => 
+  const filteredActivities = activities.filter(a =>
     a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (a.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const visibleTrendData = useMemo(() => {
+    if (!stats.trendData) return [];
+    if (trendRange === '3') return stats.trendData.slice(-3);
+    if (trendRange === '6') return stats.trendData.slice(-6);
+    return stats.trendData;
+  }, [stats.trendData, trendRange]);
 
   const generateSvgPath = (data: { monthLabel: string; attendancePct: number; gradePct: number }[], key: 'attendancePct' | 'gradePct') => {
     if (!data || data.length === 0) return '';
@@ -102,9 +123,9 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
     });
     return `M${points.join(' L')}`;
   };
-  
-  const attendancePath = generateSvgPath(stats.trendData, 'attendancePct');
-  const gradesPath = generateSvgPath(stats.trendData, 'gradePct');
+
+  const attendancePath = generateSvgPath(visibleTrendData, 'attendancePct');
+  const gradesPath = generateSvgPath(visibleTrendData, 'gradePct');
 
   return (
     <div className={`space-y-6 animate-fadeIn select-none ${isPending ? 'opacity-70' : ''}`}>
@@ -115,24 +136,24 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
             {profile?.role === 'principal'
               ? 'ផ្ទាំងគ្រប់គ្រងនាយកសាលា'
               : profile?.role === 'admin'
-              ? 'ផ្ទាំងគ្រប់គ្រងប្រព័ន្ធ'
-              : 'ផ្ទាំងគ្រប់គ្រងគ្រូបង្រៀន'}
+                ? 'ផ្ទាំងគ្រប់គ្រងប្រព័ន្ធ'
+                : 'ផ្ទាំងគ្រប់គ្រងគ្រូបង្រៀន'}
           </h1>
           <p className="text-xs font-semibold text-[#64748B] mt-0.5">
-            ស្វាគមន៍មកកាន់ប្រព័ន្ធគ្រប់គ្រងសាលា វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង
+            ស្វាគមន៍មកកាន់ប្រព័ន្ធគ្រប់គ្រងសាលា វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង ({stats.classNameKh})
           </p>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-          {/* EWS Alert Symbol (Replaced Banner) */}
+          {/* EWS Alert Symbol */}
           {atRiskStudents.length > 0 && (
-            <button 
-              onClick={() => setShowEwsModal(true)} 
-              className="relative p-3 bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-full shadow-sm text-rose-600 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            <button
+              onClick={() => setShowEwsModal(true)}
+              className="relative p-3 bg-rose-50 hover:bg-rose-100 border border-rose-200/60 rounded-full shadow-xs text-rose-600 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               title={`${atRiskStudents.length} សិស្សកំពុងប្រឈមហានិភ័យ`}
             >
               <AlertTriangle className="w-5 h-5 animate-pulse" />
-              <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 bg-rose-600 text-white flex items-center justify-center text-[8px] font-black rounded-full border border-white">
+              <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-rose-600 text-white flex items-center justify-center text-[9px] font-black rounded-full border border-white">
                 {atRiskStudents.length}
               </span>
             </button>
@@ -143,87 +164,101 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
             <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="ស្វែងរក..."
+              placeholder="ស្វែងរកកំណត់ត្រា..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-slate-100/80 rounded-full py-3 pl-11 pr-4 text-sm font-semibold shadow-xs focus:outline-none focus:ring-2 focus:ring-[#155EEF] text-slate-700 placeholder-slate-400 transition-all"
+              className="w-full bg-white border border-slate-200/80 rounded-full py-2.5 pl-11 pr-4 text-sm font-semibold shadow-xs focus:outline-none focus:ring-2 focus:ring-[#155EEF] text-slate-700 placeholder-slate-400 transition-all"
             />
           </div>
 
           {/* Voice Search Button */}
           <button
-            onClick={() => alert('មុខងារ Voice Search ជាភាសាខ្មែរនឹងរួចរាល់ឆាប់ៗនេះ!')}
-            className="bg-[#FFCF59] p-3 rounded-full shadow-sm text-yellow-950 hover:bg-yellow-400 transition-all hover:scale-105 active:scale-95 shrink-0 flex items-center justify-center cursor-pointer"
-            title="ស្វែងរកដោយសំឡេង"
+            onClick={handleVoiceSearch}
+            className={`p-3 rounded-full shadow-xs transition-all hover:scale-105 active:scale-95 shrink-0 flex items-center justify-center cursor-pointer ${isListening ? 'bg-rose-500 text-white animate-bounce ring-4 ring-rose-200' : 'bg-[#FFCF59] text-yellow-950 hover:bg-yellow-400'
+              }`}
+            title="ស្វែងរកដោយសំឡេង (Voice Search)"
           >
             <Mic className="w-5 h-5" />
           </button>
         </div>
       </header>
 
-
-
-      {/* EWS Modal */}
-      {showEwsModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowEwsModal(false)} />
-          <div className="relative w-full max-w-2xl bg-white rounded-[32px] shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
-            <div className="p-6 sm:p-8 border-b border-slate-100 flex items-center justify-between bg-rose-50 rounded-t-[32px]">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-rose-600" />
-                </div>
+      {/* EWS Modal (Full-Screen Frosted Glass Portal) */}
+      <Modal
+        isOpen={showEwsModal}
+        onClose={() => setShowEwsModal(false)}
+        size="2xl"
+        headerBg="bg-rose-50/90"
+        icon={
+          <div className="w-10 h-10 bg-rose-100/80 rounded-2xl flex items-center justify-center shadow-xs">
+            <AlertTriangle className="w-5 h-5 text-rose-600" />
+          </div>
+        }
+        title={`សិស្សប្រឈមហានិភ័យ (${stats.classNameKh})`}
+        subtitle="Early Warning System (EWS)"
+      >
+        <div className="p-6 sm:p-8 space-y-4">
+          {atRiskStudents.length > 0 ? (
+            atRiskStudents.map((student) => (
+              <div
+                key={student.id}
+                className="p-4 border border-slate-100/90 rounded-2xl bg-white shadow-xs hover:border-[#155EEF]/30 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between transition-all"
+              >
                 <div>
-                  <h2 className="text-xl font-black text-slate-900">សិស្សប្រឈមហានិភ័យ</h2>
-                  <p className="text-xs font-bold text-rose-600">Early Warning System (EWS)</p>
+                  <h4 className="font-extrabold text-slate-900 flex items-center gap-2">
+                    {student.name}
+                    {student.severity === 'high' && (
+                      <span className="px-2.5 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-extrabold rounded-full">
+                        ហានិភ័យខ្ពស់
+                      </span>
+                    )}
+                  </h4>
+                  <ul className="mt-2 space-y-1">
+                    {student.reasons.map((r, i) => (
+                      <li
+                        key={i}
+                        className="text-xs font-semibold text-slate-600 flex items-start gap-1.5"
+                      >
+                        <span className="text-rose-500 mt-0.5">•</span> {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="shrink-0 w-full sm:w-auto">
+                  <Link
+                    href="/parents"
+                    onClick={() => setShowEwsModal(false)}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-rose-50 hover:bg-[#155EEF] hover:text-white text-rose-700 font-extrabold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                  >
+                    <PhoneCall className="w-3.5 h-3.5" />
+                    <span>ចុះហៅអាណាព្យាបាល</span>
+                  </Link>
                 </div>
               </div>
-              <button onClick={() => setShowEwsModal(false)} className="p-2 hover:bg-white rounded-xl transition-colors cursor-pointer text-slate-500">
-                <X className="w-5 h-5" />
-              </button>
+            ))
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-slate-500 font-bold text-sm">
+                មិនមានសិស្សប្រឈមហានិភ័យទេក្នុងខែនេះ។
+              </p>
             </div>
-            
-            <div className="p-6 sm:p-8 overflow-y-auto space-y-4">
-              {atRiskStudents.map((student) => (
-                <div key={student.id} className="p-4 border border-slate-100 rounded-2xl bg-white shadow-sm flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                  <div>
-                    <h4 className="font-black text-slate-900 flex items-center gap-2">
-                      {student.name}
-                      {student.severity === 'high' && <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-black rounded-full">ធ្ងន់ធ្ងរ</span>}
-                    </h4>
-                    <ul className="mt-2 space-y-1">
-                      {student.reasons.map((r, i) => (
-                        <li key={i} className="text-xs font-bold text-slate-600 flex items-start gap-1.5">
-                          <span className="text-rose-500 mt-0.5">•</span> {r}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="shrink-0 w-full sm:w-auto">
-                    <button className="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-[#155EEF] hover:text-white text-slate-700 font-black rounded-xl text-xs transition-colors cursor-pointer">
-                      ចុះហៅអាណាព្យាបាល
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
-      )}
+      </Modal>
 
       {/* 4 Top Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
-        <Link href="/students" className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
+        <Link href="/classes/info" className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
           <div className="flex justify-between items-start">
             <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{stats.students}</h2>
             <div className="w-9 h-9 rounded-full border border-yellow-900/20 flex items-center justify-center group-hover:bg-yellow-900 group-hover:text-white transition-all shadow-2xs">
               <ArrowUpRight className="w-4 h-4 text-yellow-950 group-hover:text-white transition-colors" />
             </div>
           </div>
-          <p className="text-sm font-bold text-yellow-950 mt-4">សិស្សសរុប</p>
+          <p className="text-sm font-bold text-yellow-950 mt-4">សិស្សសរុប ({stats.classNameKh})</p>
         </Link>
 
-        <Link href="/students?filter=remediation" className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
+        <Link href="/support" className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
           <div className="flex justify-between items-start">
             <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{stats.remediation}</h2>
             <div className="w-9 h-9 rounded-full border border-yellow-900/20 flex items-center justify-center group-hover:bg-yellow-900 group-hover:text-white transition-all shadow-2xs">
@@ -250,12 +285,13 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
               <ArrowUpRight className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
             </div>
           </div>
-          <p className="text-sm font-bold text-blue-100 mt-4">របាយការណ៍សរុប</p>
+          <p className="text-sm font-bold text-blue-100 mt-4">របាយការណ៍ប្រចាំខែ</p>
         </Link>
       </div>
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Gender Demographic */}
         <div className="lg:col-span-4 bg-white p-6 rounded-[24px] shadow-xs border border-slate-100/80 flex flex-col justify-between">
           <div className="flex justify-between items-center mb-6">
             <h3 className="font-extrabold text-slate-800 text-base">ស្ថិតិសិស្សតាមភេទ</h3>
@@ -291,6 +327,7 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
           </div>
         </div>
 
+        {/* Monthly Attendance & Average Grade Trends */}
         <div className="lg:col-span-8 bg-white p-6 rounded-[24px] shadow-xs border border-slate-100/80 flex flex-col">
           <div className="flex justify-between items-center mb-4">
             <div>
@@ -298,14 +335,18 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
               <p className="text-[11px] text-[#64748B] font-medium">ស្ថិតិប្រៀបធៀបប្រចាំខែក្នុងឆ្នាំសិក្សាសម្រាប់ {stats.classNameKh}</p>
             </div>
             <div className="relative inline-flex items-center">
-              <select className="appearance-none bg-slate-50 text-xs font-bold text-[#64748B] px-3 py-1.5 pr-7 rounded-lg border border-slate-200/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer transition-colors hover:bg-slate-100">
+              <select
+                value={trendRange}
+                onChange={(e) => setTrendRange(e.target.value as any)}
+                className="appearance-none bg-slate-50 text-xs font-bold text-[#64748B] px-3 py-1.5 pr-7 rounded-lg border border-slate-200/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer transition-colors hover:bg-slate-100"
+              >
                 <option value="8">8 ខែចុងក្រោយ</option>
                 <option value="6">6 ខែចុងក្រោយ</option>
                 <option value="3">3 ខែចុងក្រោយ</option>
                 <option value="all">ពេញមួយឆ្នាំ</option>
               </select>
               <div className="pointer-events-none absolute right-2 text-slate-400">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                <ChevronDown className="w-3.5 h-3.5" />
               </div>
             </div>
           </div>
@@ -331,14 +372,14 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
               <div className="absolute top-2/4 left-10 right-0 border-t border-slate-100" />
               <div className="absolute top-3/4 left-10 right-0 border-t border-slate-100" />
               <div className="absolute bottom-6 left-10 right-0 border-t border-slate-100" />
-              
+
               <svg className="w-full h-full overflow-visible z-10" viewBox="0 0 500 100" preserveAspectRatio="none">
                 {attendancePath && <path d={attendancePath} fill="none" stroke="#FFCF59" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}
                 {gradesPath && <path d={gradesPath} fill="none" stroke="#155EEF" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}
               </svg>
             </div>
             <div className="absolute bottom-0 left-10 right-0 flex justify-between text-[11px] font-extrabold text-[#64748B] px-2">
-              {stats.trendData?.map((d, i) => <span key={i}>{d.monthLabel}</span>)}
+              {visibleTrendData?.map((d, i) => <span key={i}>{d.monthLabel}</span>)}
             </div>
           </div>
         </div>
@@ -346,22 +387,16 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
 
       {/* Charts Row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Weekly Attendance */}
         <div className="lg:col-span-5 bg-white p-6 rounded-[24px] shadow-xs border border-slate-100/80 flex flex-col">
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="font-extrabold text-slate-800 text-base">វត្តមានប្រចាំសប្តាហ៍</h3>
               <p className="text-[11px] text-[#64748B] font-medium">ស្ថិតិវត្តមាន និងអវត្តមានប្រចាំថ្ងៃក្នុង {stats.classNameKh}</p>
             </div>
-            <div className="relative inline-flex items-center">
-              <select className="appearance-none bg-slate-50 text-xs font-bold text-[#64748B] px-3 py-1.5 pr-7 rounded-lg border border-slate-200/60 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer transition-colors hover:bg-slate-100">
-                <option value="weekly">ប្រចាំសប្តាហ៍</option>
-                <option value="monthly">ប្រចាំខែ</option>
-                <option value="semester">ប្រចាំឆមាស</option>
-              </select>
-              <div className="pointer-events-none absolute right-2 text-slate-400">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
+            <span className="text-[11px] font-bold text-[#155EEF] bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+              ច័ន្ទ - សុក្រ
+            </span>
           </div>
 
           <div className="flex gap-6 mb-6">
@@ -422,13 +457,14 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
               </div>
             </div>
 
+            {/* Quick Action Shortcuts */}
             <div className="grid grid-cols-2 gap-3 mb-5 p-3 rounded-2xl bg-[#F4F7FE] border border-blue-100/80">
               <Link href="/grades" className="flex items-center gap-2.5 bg-white p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 transition-all shadow-2xs group cursor-pointer">
                 <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                   <ClipboardList className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs font-bold text-slate-800 truncate">បញ្ចូលពិន្ទុប្រឡង</div>
+                  <div className="text-xs font-bold text-slate-800 truncate">ពិន្ទុប្រឡង</div>
                   <div className="text-[10px] text-[#64748B] font-medium truncate">តារាងចំណាត់ថ្នាក់</div>
                 </div>
               </Link>
@@ -443,6 +479,7 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
               </Link>
             </div>
 
+            {/* Add Activity Form */}
             {showAddModal && (
               <form onSubmit={handleAddActivity} className="mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 animate-fadeIn">
                 <div className="flex justify-between items-center">
@@ -488,6 +525,7 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
               </form>
             )}
 
+            {/* Activities Feed */}
             <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
               {filteredActivities.length === 0 ? (
                 <div className="text-center py-8 text-slate-400 font-semibold text-sm">
@@ -496,23 +534,17 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
               ) : (
                 filteredActivities.map((item) => (
                   <div key={item.id} className="flex gap-3.5 items-start p-3.5 rounded-2xl bg-white hover:bg-slate-50 transition-all border border-slate-100/80 hover:border-slate-200 group relative shadow-2xs">
-                    <div className={`p-3 rounded-2xl shadow-sm shrink-0 ${
-                      item.activity_type === 'award' ? 'bg-[#FFCF59] text-yellow-950' :
-                      item.activity_type === 'report' ? 'bg-purple-600 text-white' : 'bg-[#155EEF] text-white'
-                    }`}>
+                    <div className={`p-3 rounded-2xl shadow-sm shrink-0 ${item.activity_type === 'award' ? 'bg-[#FFCF59] text-yellow-950' :
+                        item.activity_type === 'report' ? 'bg-purple-600 text-white' : 'bg-[#155EEF] text-white'
+                      }`}>
                       {item.activity_type === 'award' ? <Award className="w-5 h-5" /> :
-                       item.activity_type === 'report' ? <ClipboardList className="w-5 h-5" /> : <CalendarCheck className="w-5 h-5" />}
+                        item.activity_type === 'report' ? <ClipboardList className="w-5 h-5" /> : <CalendarCheck className="w-5 h-5" />}
                     </div>
-                    <div className="flex-1 min-w-0 cursor-pointer">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <h4 className="text-sm font-extrabold text-slate-900 truncate group-hover:text-[#155EEF] transition-colors">
                           {item.title}
                         </h4>
-                        {item.class_id && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
-                            ថ្នាក់ {item.class_id}
-                          </span>
-                        )}
                       </div>
                       <p className="text-xs text-[#64748B] mt-1 font-medium line-clamp-2 leading-relaxed">
                         {item.description}
@@ -549,7 +581,7 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
       <footer className="flex flex-col sm:flex-row gap-4 text-xs font-bold text-[#64748B] pt-6 justify-between items-center border-t border-slate-200/60">
         <div className="flex flex-wrap items-center gap-4 text-center sm:text-left">
           <span>រក្សាសិទ្ធិគ្រប់យ៉ាង © 2026 វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</span>
-          <button 
+          <button
             onClick={() => setFooterModalData({
               title: 'គោលការណ៍ឯកជនភាព (Privacy Policy)',
               content: (
@@ -564,7 +596,7 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
           >
             គោលការណ៍ឯកជនភាព
           </button>
-          <button 
+          <button
             onClick={() => setFooterModalData({
               title: 'លក្ខខណ្ឌប្រើប្រាស់ (Terms of Use)',
               content: (
@@ -589,31 +621,27 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
         </div>
       </footer>
 
-      {/* Footer Modal */}
-      {footerModalData && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 animate-overlayFade" onClick={() => setFooterModalData(null)}>
-          <div className="bg-white rounded-3xl w-full max-w-lg p-6 sm:p-8 space-y-6 shadow-2xl relative animate-modalScale" onClick={(e) => e.stopPropagation()}>
-            <button 
+      {/* Footer Modal (Full-Screen Frosted Glass Portal) */}
+      <Modal
+        isOpen={!!footerModalData}
+        onClose={() => setFooterModalData(null)}
+        size="lg"
+        title={footerModalData?.title}
+      >
+        <div className="p-6 sm:p-8 space-y-6">
+          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100/90 text-sm font-medium text-slate-700 leading-relaxed">
+            {footerModalData?.content}
+          </div>
+          <div className="pt-2">
+            <button
               onClick={() => setFooterModalData(null)}
-              className="absolute top-6 right-6 text-slate-400 hover:text-slate-700 transition-colors bg-slate-100 hover:bg-slate-200 rounded-full p-2 cursor-pointer"
+              className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold rounded-xl shadow-xs transition-all text-sm cursor-pointer active:scale-98"
             >
-              <X className="w-4 h-4" />
+              យល់ព្រម
             </button>
-            <h3 className="text-xl font-black text-slate-900 pr-10">{footerModalData.title}</h3>
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-              {footerModalData.content}
-            </div>
-            <div className="pt-2">
-              <button 
-                onClick={() => setFooterModalData(null)}
-                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl shadow-sm transition-all text-sm cursor-pointer"
-              >
-                យល់ព្រម
-              </button>
-            </div>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

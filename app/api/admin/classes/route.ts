@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
+import { getServerAuth } from '@/lib/auth-server';
 
 export async function GET(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || (user.user_metadata?.role !== 'admin' && user.user_metadata?.role !== 'principal')) {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -15,17 +14,7 @@ export async function GET(req: Request) {
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({
-      isDemo: true,
-      classes: [
-        { id: 'cls-1', name: 'ថ្នាក់ ១០ ក', shift: 'ព្រឹក', room_number: '១០១', track: 'ទូទៅ', teacher_id: null, grade: '10', student_count: 38, female_count: 20 },
-        { id: 'cls-2', name: 'ថ្នាក់ ១០ ខ', shift: 'ព្រឹក', room_number: '១០២', track: 'ទូទៅ', teacher_id: null, grade: '10', student_count: 48, female_count: 26 },
-        { id: 'cls-3', name: 'ថ្នាក់ ១១ ក', shift: 'ព្រឹក', room_number: '២០១', track: 'វិទ្យាសាស្ត្រពិត', teacher_id: null, grade: '11', student_count: 35, female_count: 18 },
-        { id: 'cls-4', name: 'ថ្នាក់ ១២ ក', shift: 'ព្រឹក', room_number: '២០២', track: 'វិទ្យាសាស្ត្រសង្គម', teacher_id: null, grade: '12', student_count: 42, female_count: 22 },
-        { id: 'cls-5', name: 'ថ្នាក់ ៧ ក', shift: 'រសៀល', room_number: '១០១', track: 'ទូទៅ', teacher_id: null, grade: '7', student_count: 0, female_count: 0 },
-        { id: 'cls-6', name: 'ថ្នាក់ ៨ ក', shift: 'រសៀល', room_number: '១០២', track: 'ទូទៅ', teacher_id: null, grade: '8', student_count: 39, female_count: 19 },
-      ]
-    });
+    return NextResponse.json({ isDemo: false, classes: [] });
   }
 
   try {
@@ -65,32 +54,21 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || (user.user_metadata?.role !== 'admin' && user.user_metadata?.role !== 'principal')) {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
   const body = await req.json();
   const adminClient = createAdminClient();
 
+  if (!adminClient) {
+    return NextResponse.json({ error: 'Database service unavailable' }, { status: 500 });
+  }
+
   // Batch insert support (e.g. from Bulk Generate or Excel Import)
   if (Array.isArray(body.classes)) {
-    if (!adminClient) {
-      const demoClasses = body.classes.map((c: any, idx: number) => ({
-        id: `cls-batch-${Date.now()}-${idx}`,
-        ...c,
-        shift: c.shift || 'ព្រឹក',
-        room_number: c.room_number || '',
-        track: c.track || 'ទូទៅ',
-        teacher_id: c.teacher_id || null,
-        student_count: 0,
-        female_count: 0
-      }));
-      return NextResponse.json({ isDemo: true, classes: demoClasses });
-    }
-
     try {
       const records = body.classes.map((c: any) => ({
         name: c.name,
@@ -123,24 +101,6 @@ export async function POST(req: Request) {
 
   // Single class insert support
   const { name, grade, academic_year_id, teacher_id, shift, room_number, track } = body;
-
-  if (!adminClient) {
-    return NextResponse.json({
-      isDemo: true,
-      class: { 
-        id: `cls-demo-${Date.now()}`, 
-        name, 
-        grade, 
-        academic_year_id, 
-        teacher_id: teacher_id || null,
-        shift: shift || 'ព្រឹក',
-        room_number: room_number || '',
-        track: track || 'ទូទៅ',
-        student_count: 0,
-        female_count: 0
-      }
-    });
-  }
 
   try {
     // Check for duplicates first
@@ -182,10 +142,9 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || (user.user_metadata?.role !== 'admin' && user.user_metadata?.role !== 'principal')) {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -195,7 +154,7 @@ export async function PATCH(req: Request) {
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({ isDemo: true, success: true });
+    return NextResponse.json({ error: 'Database service unavailable' }, { status: 500 });
   }
 
   try {
@@ -221,10 +180,9 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || (user.user_metadata?.role !== 'admin' && user.user_metadata?.role !== 'principal')) {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -238,7 +196,7 @@ export async function DELETE(req: Request) {
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({ isDemo: true, success: true });
+    return NextResponse.json({ error: 'Database service unavailable' }, { status: 500 });
   }
 
   try {
@@ -267,4 +225,3 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-

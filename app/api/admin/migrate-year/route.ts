@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
+import { getServerAuth } from '@/lib/auth-server';
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -24,12 +23,7 @@ export async function POST(req: Request) {
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({
-      isDemo: true,
-      success: true,
-      count: 12,
-      message: 'Demo migration: 12 classes cloned successfully.'
-    });
+    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
   try {
@@ -61,7 +55,7 @@ export async function POST(req: Request) {
       .map(c => ({
         name: c.name,
         grade: String(c.grade),
-        teacher_id: c.teacher_id || null,
+        teacher_id: c.teacher_id,
         shift: c.shift || (['10', '11', '12'].includes(String(c.grade)) ? 'ព្រឹក' : 'រសៀល'),
         room_number: c.room_number || null,
         track: c.track || 'ទូទៅ',
@@ -70,13 +64,14 @@ export async function POST(req: Request) {
 
     if (newClassesToInsert.length === 0) {
       return NextResponse.json({ 
+        isDemo: false,
         success: true, 
-        count: 0, 
-        message: 'ថ្នាក់រៀនទាំងអស់ពីឆ្នាំប្រភពមានរួចហើយនៅក្នុងឆ្នាំគោលដៅ!' 
+        count: 0,
+        message: 'ថ្នាក់រៀនទាំងអស់មានរួចហើយនៅក្នុងឆ្នាំសិក្សាគោលដៅ។'
       });
     }
 
-    // 4. Batch insert into target year
+    // 4. Batch insert into the target academic year
     const { error: insertErr } = await adminClient
       .from('classes')
       .insert(newClassesToInsert);
@@ -84,10 +79,10 @@ export async function POST(req: Request) {
     if (insertErr) throw insertErr;
 
     return NextResponse.json({ 
-      isDemo: false, 
+      isDemo: false,
       success: true, 
       count: newClassesToInsert.length,
-      message: `ចម្លងថ្នាក់រៀនបានជោគជ័យចំនួន ${newClassesToInsert.length} ថ្នាក់!` 
+      message: `បានចម្លងរចនាសម្ព័ន្ធថ្នាក់រៀនចំនួន ${newClassesToInsert.length} ថ្នាក់ទៅឆ្នាំថ្មីជោគជ័យ!`
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

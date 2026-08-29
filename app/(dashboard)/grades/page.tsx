@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
-import { CURRICULUM_SCHEMAS, SubjectSchema } from '@/lib/curriculum';
+import { CURRICULUM_SCHEMAS, SubjectSchema, getCurriculumSchemaForClass } from '@/lib/curriculum';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
 import { computeSummaryGrades } from '@/lib/grade-calculations';
 import {
@@ -12,44 +12,28 @@ import {
   Search,
   Award,
   Download,
-  Upload
+  Upload,
+  FileSpreadsheet,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import Link from 'next/link';
 import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { ClassGradeImportModal } from '@/components/grades/ClassGradeImportModal';
-
-const DEMO_STUDENTS_GR: Student[] = [
-  { id: 'std-1', class_id: 'demo-class-1', student_id_number: 'ID-001', full_name: 'កែវ ច័ន្ទធីតា', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-2', class_id: 'demo-class-1', student_id_number: 'ID-002', full_name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-3', class_id: 'demo-class-1', student_id_number: 'ID-003', full_name: 'ចាន់ សុភាព', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-4', class_id: 'demo-class-1', student_id_number: 'ID-004', full_name: 'ដួង រដ្ឋា', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-5', class_id: 'demo-class-1', student_id_number: 'ID-005', full_name: 'ទិត្យ វិសាល', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-6', class_id: 'demo-class-1', student_id_number: 'ID-006', full_name: 'ប៊ុន រស្មី', gender: 'F', is_active: true, created_at: new Date().toISOString() },
-  { id: 'std-7', class_id: 'demo-class-1', student_id_number: 'ID-007', full_name: 'មាស សុខា', gender: 'M', is_active: true, created_at: new Date().toISOString() },
-];
+import { GeipExportModal } from '@/components/grades/GeipExportModal';
 
 export default function GradesPage() {
   const { activeClass, isDemoMode } = useAuth();
-  const [students, setStudents] = useState<Student[]>(DEMO_STUDENTS_GR);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   
-  const curriculumType = useMemo(() => {
-    if (!activeClass?.name) return 'upper-sec-sci';
-    const gradeMatch = activeClass.name.match(/\d+/);
-    if (gradeMatch) {
-      const grade = parseInt(gradeMatch[0], 10);
-      if (grade >= 7 && grade <= 9) return 'lower-sec';
-      if (grade >= 10 && grade <= 12) {
-        if (activeClass.name.toLowerCase().includes('ss') || activeClass.name.toLowerCase().includes('art')) {
-          return 'upper-sec-art';
-        }
-        return 'upper-sec-sci';
-      }
-    }
-    return 'upper-sec-sci';
-  }, [activeClass]);
+  const activeSchema = useMemo(() => {
+    return getCurriculumSchemaForClass(activeClass?.grade, activeClass?.track);
+  }, [activeClass?.grade, activeClass?.track]);
   
-  const activeSchema = CURRICULUM_SCHEMAS[curriculumType];
+  const curriculumType = activeSchema.id;
   const maxTotalScore = activeSchema.subjects.reduce((sum, sub) => sum + sub.maxScore, 0);
 
   const [selectedPeriod, setSelectedPeriod] = useState('dec');
@@ -63,6 +47,7 @@ export default function GradesPage() {
   const isAnnual = selectedPeriod === 'annual';
   
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isGeipModalOpen, setIsGeipModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   
   const supabase = createClient();
@@ -159,21 +144,14 @@ export default function GradesPage() {
   }, [activeSchema]);
 
   useEffect(() => {
-    if (isDemoMode || !activeClass) {
-      setStudents(DEMO_STUDENTS_GR);
-      // Demo Data
-      const mData: Record<string, Record<string, number>> = {};
-      DEMO_STUDENTS_GR.forEach(s => {
-        mData[s.id] = {};
-        flatColumns.forEach(col => {
-           mData[s.id][col.id] = Math.floor(Math.random() * (col.maxScore - (col.maxScore * 0.4))) + (col.maxScore * 0.4);
-        });
-      });
-      setMatrixData(mData);
+    if (!activeClass) {
+      setStudents([]);
+      setMatrixData({});
       return;
     }
 
     async function loadData() {
+      setIsLoading(true);
       const { data: stdData } = await supabase
         .from('students')
         .select('*')
@@ -210,7 +188,11 @@ export default function GradesPage() {
           });
         }
         setMatrixData(newMap);
+      } else {
+        setStudents([]);
+        setMatrixData({});
       }
+      setIsLoading(false);
     }
 
     loadData();
@@ -245,6 +227,23 @@ export default function GradesPage() {
     (s.student_id_number && s.student_id_number.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  const [sortState, setSortState] = useState<{ field: string | null; direction: 'asc' | 'desc' | null }>({
+    field: null,
+    direction: null,
+  });
+
+  const handleSort = (field: string) => {
+    setSortState(prev => {
+      if (prev.field !== field) {
+        return { field, direction: 'asc' };
+      }
+      if (prev.direction === 'asc') {
+        return { field, direction: 'desc' };
+      }
+      return { field: null, direction: null };
+    });
+  };
+
   // Calculate totals and ranks (Only using main subjects, skipping sub-metrics)
   const rankedStudents = useMemo(() => {
     const isSem1 = selectedPeriod === 'sem1-summary';
@@ -252,7 +251,7 @@ export default function GradesPage() {
     const isAnnual = selectedPeriod === 'annual';
     const totalCoefficient = maxTotalScore / 50;
 
-    return [...filteredStudents].map((std) => {
+    let computedList = [...filteredStudents].map((std) => {
       const studentScores = matrixData[std.id] || {};
       const totalScore = activeSchema.subjects.reduce((sum, sub) => sum + (studentScores[sub.id] || 0), 0);
       
@@ -343,7 +342,62 @@ export default function GradesPage() {
 
       return { ...std, totalScore, grade, percentage: average, breakdown };
     }).sort((a, b) => b.totalScore - a.totalScore);
-  }, [filteredStudents, matrixData, rawGradesData, activeSchema, maxTotalScore, selectedPeriod]);
+
+    // Attach fixed rank based on total score
+    const withRank = computedList.map((std, idx) => ({ ...std, rank: idx + 1 }));
+
+    if (sortState.field && sortState.direction) {
+      const { field, direction } = sortState;
+      const factor = direction === 'asc' ? 1 : -1;
+
+      return [...withRank].sort((a: any, b: any) => {
+        let valA = a[field];
+        let valB = b[field];
+
+        if (field.startsWith('sub_')) {
+          const subId = field.replace('sub_', '');
+          valA = matrixData[a.id]?.[subId] || 0;
+          valB = matrixData[b.id]?.[subId] || 0;
+        }
+
+        if (valA === undefined || valA === null) valA = '';
+        if (valB === undefined || valB === null) valB = '';
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return (valA - valB) * factor;
+        }
+
+        return String(valA).localeCompare(String(valB), 'km', { numeric: true }) * factor;
+      });
+    }
+
+    return withRank;
+  }, [filteredStudents, matrixData, rawGradesData, activeSchema, maxTotalScore, selectedPeriod, sortState]);
+
+  const renderSortHeader = (label: React.ReactNode, field: string, align: 'left' | 'center' | 'right' = 'center', className: string = '') => {
+    const isActive = sortState.field === field && sortState.direction !== null;
+    return (
+      <th 
+        onClick={() => handleSort(field)}
+        className={`cursor-pointer select-none hover:bg-blue-100/90 transition-colors group ${className}`}
+      >
+        <div className={`flex items-center gap-1 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
+          <span>{label}</span>
+          <span className="text-slate-400 group-hover:text-slate-600 transition-colors shrink-0">
+            {isActive ? (
+              sortState.direction === 'asc' ? (
+                <ArrowUp className="w-3 h-3 text-[#155EEF] font-bold" />
+              ) : (
+                <ArrowDown className="w-3 h-3 text-[#155EEF] font-bold" />
+              )
+            ) : (
+              <ArrowUpDown className="w-2.5 h-2.5 text-slate-300 opacity-60 group-hover:opacity-100" />
+            )}
+          </span>
+        </div>
+      </th>
+    );
+  };
 
   return (
     <div className="space-y-6 animate-fadeIn select-none">
@@ -373,6 +427,14 @@ export default function GradesPage() {
             <span>នាំចូលពិន្ទុ</span>
           </button>
           
+          <button
+            onClick={() => setIsGeipModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-black shadow-sm flex items-center gap-2 transition-all scale-[1.01]"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-indigo-700" />
+            <span>Export GEIP ៣.១.៤</span>
+          </button>
+
           <button
             onClick={exportToExcel}
             disabled={isExporting}
@@ -434,29 +496,52 @@ export default function GradesPage() {
         </div>
       </div>
 
-      {/* Massive Matrix Table */}
-      <div className="bg-white rounded-[24px] border border-slate-200 shadow-2xs overflow-hidden">
+      {isLoading ? (
+        <div className="p-12 text-center text-slate-500 font-bold animate-pulse">កំពុងផ្ទុកទិន្នន័យ...</div>
+      ) : students.length === 0 || Object.keys(matrixData).length === 0 ? (
+        <div className="bg-white p-12 rounded-[24px] border border-slate-200 shadow-2xs text-center flex flex-col items-center justify-center">
+           <Award className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+           <h2 className="text-xl font-black text-slate-800 mb-2">មិនទាន់មានទិន្នន័យ</h2>
+           <p className="text-sm font-semibold text-slate-500 max-w-md">
+             មិនមានទិន្នន័យសិស្ស ឬពិន្ទុសម្រាប់ថ្នាក់នេះក្នុង {ACADEMIC_PERIODS.find(p => p.id === selectedPeriod)?.label} ទេ។ ប្រសិនបើអ្នកមិនទាន់បានបញ្ចូលពិន្ទុទេ សូមទាក់ទង Admin ឲ្យជួយរៀបចំទិន្នន័យ។
+           </p>
+        </div>
+      ) : (
+      <>
+        {/* Massive Matrix Table */}
+        <div className="bg-white rounded-[24px] border border-slate-200 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto max-h-[600px] overflow-y-auto relative">
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-100 border-b border-slate-200 text-[10px] font-black text-slate-700 uppercase tracking-wider">
                 <th className="py-4 px-3 w-10 text-center sticky left-0 bg-slate-100 z-20 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">ល.រ</th>
-                <th className="py-4 px-3 text-center sticky left-[40px] bg-slate-100 z-20 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">អត្តលេខ</th>
-                <th className="py-4 px-4 sticky left-[100px] bg-slate-100 z-20 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[160px]">គោត្តនាម & នាម</th>
+                {renderSortHeader('អត្តលេខ', 'student_id_number', 'center', 'py-4 px-3 sticky left-[40px] bg-slate-100 z-20 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]')}
+                {renderSortHeader('គោត្តនាម & នាម', 'full_name', 'left', 'py-4 px-4 sticky left-[100px] bg-slate-100 z-20 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] min-w-[160px]')}
                 
                 {!isSummaryPeriod && !isAnnual ? (
                   <>
-                    <th className="py-4 px-3 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200 min-w-[90px]">ពិន្ទុសរុប<br/>({maxTotalScore})</th>
-                    <th className="py-4 px-3 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200 min-w-[90px]">មធ្យមភាគ<br/>(50)</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ចំណាត់<br/>ថ្នាក់</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">និទ្ទេស</th>
+                    {renderSortHeader(<>ពិន្ទុសរុប<br/>({maxTotalScore})</>, 'totalScore', 'center', 'py-4 px-3 bg-blue-100/80 text-blue-900 border-r border-blue-200 min-w-[90px]')}
+                    {renderSortHeader(<>មធ្យមភាគ<br/>(50)</>, 'percentage', 'center', 'py-4 px-3 bg-blue-100/80 text-blue-900 border-r border-blue-200 min-w-[90px]')}
+                    {renderSortHeader(<>ចំណាត់<br/>ថ្នាក់</>, 'rank', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
+                    {renderSortHeader('និទ្ទេស', 'grade', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
                     
                     {flatColumns.map(col => (
-                      <th key={col.id} className={`py-2 px-1 text-center border-r border-slate-200 min-w-[70px] ${!col.isMain ? 'bg-amber-50/80' : ''}`}>
+                      <th 
+                        key={col.id} 
+                        onClick={() => handleSort(`sub_${col.id}`)}
+                        className={`py-2 px-1 text-center border-r border-slate-200 min-w-[70px] cursor-pointer select-none hover:bg-amber-100/80 transition-colors group ${!col.isMain ? 'bg-amber-50/80' : ''}`}
+                      >
                         <div className="flex flex-col items-center gap-1">
-                          <span className={`truncate w-full block text-[9px] ${!col.isMain ? 'text-amber-700' : 'text-slate-700'}`}>
-                            {col.label}
-                          </span>
+                          <div className="flex items-center justify-center gap-0.5 w-full">
+                            <span className={`truncate text-[9px] ${!col.isMain ? 'text-amber-700 font-black' : 'text-slate-700 font-bold'}`}>
+                              {col.label}
+                            </span>
+                            <span className="text-slate-400">
+                              {sortState.field === `sub_${col.id}` && sortState.direction !== null ? (
+                                sortState.direction === 'asc' ? <ArrowUp className="w-2.5 h-2.5 text-[#155EEF]" /> : <ArrowDown className="w-2.5 h-2.5 text-[#155EEF]" />
+                              ) : null}
+                            </span>
+                          </div>
                           <span className={`px-2 py-0.5 rounded-md text-[10px] ${
                             !col.isMain ? 'bg-white text-amber-600 border border-amber-200' : 'bg-white text-[#155EEF] border border-slate-200'
                           }`}>
@@ -468,20 +553,20 @@ export default function GradesPage() {
                   </>
                 ) : isSummaryPeriod ? (
                   <>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ពិន្ទុប្រលង<br/>ឆមាស</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ម.ប្រលង<br/>ឆមាស</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ម.ខែ<br/>ឆមាស</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ម.ប្រចាំ<br/>ឆមាស</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">និទ្ទេស<br/>ប្រចាំឆ.</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ចំ.<br/>ថ្នាក់</th>
+                    {renderSortHeader(<>ពិន្ទុប្រលង<br/>ឆមាស</>, 'examScore', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
+                    {renderSortHeader(<>ម.ប្រលង<br/>ឆមាស</>, 'examAvg', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
+                    {renderSortHeader(<>ម.ខែ<br/>ឆមាស</>, 'monthlyAvg', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
+                    {renderSortHeader(<>ម.ប្រចាំ<br/>ឆមាស</>, 'percentage', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
+                    {renderSortHeader(<>និទ្ទេស<br/>ប្រចាំឆ.</>, 'grade', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
+                    {renderSortHeader(<>ចំ.<br/>ថ្នាក់</>, 'rank', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
                   </>
                 ) : (
                   <>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">មធ្យមភាគ<br/>ឆមាសទី១</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">មធ្យមភាគ<br/>ឆមាសទី២</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">មធ្យមភាគ<br/>ប្រចាំឆ្នាំ</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">និទ្ទេស<br/>រួម</th>
-                    <th className="py-4 px-2 text-center bg-blue-100/80 text-blue-900 border-r border-blue-200">ចំ.<br/>ថ្នាក់</th>
+                    {renderSortHeader(<>មធ្យមភាគ<br/>ឆមាសទី១</>, 'sem1Avg', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
+                    {renderSortHeader(<>មធ្យមភាគ<br/>ឆមាសទី២</>, 'sem2Avg', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
+                    {renderSortHeader(<>មធ្យមភាគ<br/>ប្រចាំឆ្នាំ</>, 'percentage', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
+                    {renderSortHeader(<>និទ្ទេស<br/>រួម</>, 'grade', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
+                    {renderSortHeader(<>ចំ.<br/>ថ្នាក់</>, 'rank', 'center', 'py-4 px-2 bg-blue-100/80 text-blue-900 border-r border-blue-200')}
                   </>
                 )}
               </tr>
@@ -625,6 +710,8 @@ export default function GradesPage() {
           </table>
         </div>
       </div>
+      </>
+      )}
       
       <ClassGradeImportModal 
         isOpen={isImportModalOpen}
@@ -638,6 +725,18 @@ export default function GradesPage() {
         period={selectedPeriod}
         students={students}
         flatColumns={flatColumns}
+      />
+
+      <GeipExportModal
+        isOpen={isGeipModalOpen}
+        onClose={() => setIsGeipModalOpen(false)}
+        className={activeClass?.name || ''}
+        periodLabel={ACADEMIC_PERIODS.find(p => p.id === selectedPeriod)?.label || selectedPeriod}
+        periodKey={selectedPeriod}
+        students={students}
+        matrixData={matrixData}
+        activeSchema={activeSchema}
+        maxTotalScore={maxTotalScore}
       />
     </div>
   );

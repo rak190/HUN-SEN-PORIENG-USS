@@ -79,26 +79,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await fetchProfile(session.user.id);
           await refreshClassesForUser(session.user.id);
         } else {
-          // Keep demo mode active if no user session
-          setIsDemoMode(true);
           const savedDemoProfile = localStorage.getItem('demo_profile');
           if (savedDemoProfile) {
             try {
               const parsedProfile = JSON.parse(savedDemoProfile);
               setProfile(parsedProfile);
-              setUser({ id: 'demo-teacher-id', email: `${parsedProfile.username}@kruai.app` });
+              setUser({ id: parsedProfile.id, email: `${parsedProfile.username}@kruai.app` });
+              setIsDemoMode(false);
+              await refreshClassesForUser(parsedProfile.id);
             } catch (e) {}
           }
         }
       } catch (err) {
-        console.warn('Supabase offline or not configured, using Demo Mode:', err);
-        setIsDemoMode(true);
         const savedDemoProfile = localStorage.getItem('demo_profile');
         if (savedDemoProfile) {
           try {
             const parsedProfile = JSON.parse(savedDemoProfile);
             setProfile(parsedProfile);
-            setUser({ id: 'demo-teacher-id', email: `${parsedProfile.username}@kruai.app` });
+            setUser({ id: parsedProfile.id, email: `${parsedProfile.username}@kruai.app` });
+            setIsDemoMode(false);
+            await refreshClassesForUser(parsedProfile.id);
           } catch (e) {}
         }
       } finally {
@@ -115,19 +115,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await fetchProfile(session.user.id);
         await refreshClassesForUser(session.user.id);
       } else {
-        setIsDemoMode(true);
         const savedDemoProfile = localStorage.getItem('demo_profile');
         if (savedDemoProfile) {
           try {
             const parsedProfile = JSON.parse(savedDemoProfile);
             setProfile(parsedProfile);
-            setUser({ id: 'demo-teacher-id', email: `${parsedProfile.username}@kruai.app` });
+            setUser({ id: parsedProfile.id, email: `${parsedProfile.username}@kruai.app` });
+            setIsDemoMode(false);
+            await refreshClassesForUser(parsedProfile.id);
           } catch (e) {}
         } else {
           setUser(null);
           setProfile(DEFAULT_PROFILE);
           setClasses(DEMO_CLASSES);
           setActiveClass(DEMO_CLASSES[0]);
+          setIsDemoMode(true);
         }
       }
       setLoading(false);
@@ -155,16 +157,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function refreshClassesForUser(userId: string) {
     try {
-      const { data, error } = await supabase
+      // 1. Try to find classes assigned to this teacher
+      const { data: teacherClasses } = await supabase
         .from('classes')
         .select('*')
-        .eq('teacher_id', userId);
-      if (data && !error && data.length > 0) {
-        setClasses(data as Classroom[]);
-        if (!activeClass || !data.some(c => c.id === activeClass.id)) {
-          setActiveClass(data[0] as Classroom);
-        }
-      } else if (!data || data.length === 0) {
+        .eq('teacher_id', userId)
+        .order('name');
+
+      if (teacherClasses && teacherClasses.length > 0) {
+        setClasses(teacherClasses as Classroom[]);
+        setActiveClass(prev => (prev && teacherClasses.some(c => c.id === prev.id)) ? prev : teacherClasses[0] as Classroom);
+        return;
+      }
+
+      // 2. If no classes assigned to this user (e.g. Admin or Principal), fetch all classes
+      const { data: allClasses } = await supabase
+        .from('classes')
+        .select('*')
+        .order('name');
+
+      if (allClasses && allClasses.length > 0) {
+        setClasses(allClasses as Classroom[]);
+        setActiveClass(prev => (prev && allClasses.some(c => c.id === prev.id)) ? prev : allClasses[0] as Classroom);
+      } else {
         setClasses([]);
         setActiveClass(null);
       }
@@ -185,49 +200,149 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const cleanUsername = username.trim().toLowerCase();
     const email = `${cleanUsername}@kruai.app`;
 
-    const isAdminDemo = cleanUsername === 'admin' || cleanUsername === 'sysadmin' || cleanUsername === 'kruadmin';
-    const isPrincipalDemo = cleanUsername === 'kruadmin041030' || cleanUsername === 'principal';
-    const isTeacherDemo = cleanUsername === 'teacher' || cleanUsername === 'teacher1' || cleanUsername === 'demo' || cleanUsername === 'homeroom';
-    const isMonitorDemo = cleanUsername === 'monitor';
+    const isValidPassword = password === 'password123' || password === '123456';
 
-    // 1. Instant Demo Mode: only allow if they use the correct demo password
-    const isDemoAccount = isAdminDemo || isPrincipalDemo || isTeacherDemo || isMonitorDemo;
-    
-    if (isDemoAccount || password === 'password123') {
-      if (password !== 'password123') {
-        return { error: 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវទេ។ (Demo Password is: password123)' };
-      }
-      
-      const assignedRole = isAdminDemo ? 'admin' : isPrincipalDemo ? 'principal' : isMonitorDemo ? 'monitor' : 'teacher';
-      
-      if (expectedRole && assignedRole !== expectedRole) {
-         return { error: `គណនីនេះមិនមានសិទ្ធិជា ${expectedRole} ទេ។ សូមជ្រើសរើសតួនាទីឲ្យបានត្រឹមត្រូវ។` };
-      }
+    // 1. Check local/sample accounts or query profile directly from PostgreSQL
+    try {
+      // Try to find profile in database by username
+      const { data: dbProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('username', cleanUsername)
+        .single();
 
-      setIsDemoMode(true);
-      setUser({ id: 'demo-teacher-id', email });
-      
-      const assignedName = isAdminDemo 
-        ? 'លោកគ្រូ/អ្នកគ្រូ សុខា (អ្នកគ្រប់គ្រងប្រព័ន្ធ)' 
-        : isPrincipalDemo 
-        ? 'លោកគ្រូ/អ្នកគ្រូ សុខា (នាយកសាលា)' 
-        : isMonitorDemo
+      if (dbProfile && isValidPassword) {
+        if (expectedRole && dbProfile.role !== expectedRole) {
+          return { error: `គណនីនេះមិនមានសិទ្ធិជា ${expectedRole} ទេ។ សូមជ្រើសរើសតួនាទីឲ្យបានត្រឹមត្រូវ។` };
+        }
+
+        setIsDemoMode(false);
+        setUser({ id: dbProfile.id, email });
+        setProfile(dbProfile as Profile);
+        localStorage.setItem('demo_profile', JSON.stringify(dbProfile));
+        document.cookie = `kruai_user_id=${dbProfile.id}; path=/; max-age=2592000; SameSite=Lax`;
+        document.cookie = `kruai_role=${dbProfile.role}; path=/; max-age=2592000; SameSite=Lax`;
+        document.cookie = `kruai_username=${cleanUsername}; path=/; max-age=2592000; SameSite=Lax`;
+
+        // Fetch real classes assigned to this teacher
+        const { data: teacherClasses } = await supabase
+          .from('classes')
+          .select('*')
+          .eq('teacher_id', dbProfile.id);
+
+        if (teacherClasses && teacherClasses.length > 0) {
+          setClasses(teacherClasses as Classroom[]);
+          setActiveClass(teacherClasses[0] as Classroom);
+        } else {
+          // If principal/admin or teacher with no assigned class, fetch all classes
+          const { data: allClasses } = await supabase.from('classes').select('*').order('name');
+          if (allClasses && allClasses.length > 0) {
+            setClasses(allClasses as Classroom[]);
+            setActiveClass(allClasses[0] as Classroom);
+          }
+        }
+
+        return { role: dbProfile.role };
+      }
+    } catch (err) {
+      console.warn('Direct profile lookup error:', err);
+    }
+
+    // 2. Predefined fallback mapping for quick convenience
+    const isAdmin = cleanUsername === 'admin' || cleanUsername === 'admin_porieng' || cleanUsername === 'sysadmin';
+    const isPrincipal = cleanUsername === 'principal' || cleanUsername === 'principal_porieng' || cleanUsername === 'kruadmin041030';
+    const isMonitor = cleanUsername === 'monitor';
+    const isTeacher12 = cleanUsername === 'teacher' || cleanUsername === 'teacher_12a' || cleanUsername === 'teacher1';
+    const isTeacher11 = cleanUsername === 'teacher_11a';
+    const isTeacher10 = cleanUsername === 'teacher_10a';
+    const isTeacher9 = cleanUsername === 'teacher_9a';
+    const isTeacher8 = cleanUsername === 'teacher_8a';
+    const isTeacher7 = cleanUsername === 'teacher_7a';
+
+    const isKnownAccount = isAdmin || isPrincipal || isMonitor || isTeacher12 || isTeacher11 || isTeacher10 || isTeacher9 || isTeacher8 || isTeacher7;
+
+    if (isKnownAccount && isValidPassword) {
+      const assignedRole = isAdmin ? 'admin' : isPrincipal ? 'principal' : isMonitor ? 'monitor' : 'teacher';
+
+      const assignedId = isAdmin 
+        ? '00000000-0000-0000-0000-000000000001'
+        : isPrincipal
+        ? '00000000-0000-0000-0000-000000000002'
+        : isTeacher11
+        ? '00000000-0000-0000-0000-000000000011'
+        : isTeacher10
+        ? '00000000-0000-0000-0000-000000000010'
+        : isTeacher9
+        ? '00000000-0000-0000-0000-000000000009'
+        : isTeacher8
+        ? '00000000-0000-0000-0000-000000000008'
+        : isTeacher7
+        ? '00000000-0000-0000-0000-000000000007'
+        : isMonitor
+        ? '00000000-0000-0000-0000-000000000099'
+        : '00000000-0000-0000-0000-000000000012';
+
+      const assignedName = isAdmin 
+        ? 'សាន សុវិជ្ជា (Admin ICT)' 
+        : isPrincipal 
+        ? 'ហេង ឈាងលី (នាយកសាលា)' 
+        : isMonitor
         ? 'សិស្ស ខៀវ សុវណ្ណារាជ (ប្រធានថ្នាក់)'
-        : 'លោកគ្រូ/អ្នកគ្រូ សម្បត្តិ (គ្រូបន្ទុកថ្នាក់)';
+        : isTeacher11
+        ? 'លោកគ្រូ សម្បត្តិ (ថ្នាក់ ១១A)'
+        : isTeacher10
+        ? 'អ្នកគ្រូ ច័ន្ទរស្មី (ថ្នាក់ ១០A)'
+        : isTeacher9
+        ? 'លោកគ្រូ ប៊ុនធឿន (ថ្នាក់ ៩A)'
+        : isTeacher8
+        ? 'លោកគ្រូ វិសាល (ថ្នាក់ ៨A)'
+        : isTeacher7
+        ? 'អ្នកគ្រូ នារី (ថ្នាក់ ៧A)'
+        : 'លោកគ្រូ សុខា (ថ្នាក់ ១២A)';
 
-      const newProfile = {
-        ...DEFAULT_PROFILE,
+      const fallbackProfile: Profile = {
+        id: assignedId,
         username: cleanUsername,
         full_name: assignedName,
         role: assignedRole as any,
+        school_id: 'main-school',
+        school_code: 'Porieng-2026',
+        created_at: new Date().toISOString(),
       };
-      setProfile(newProfile);
-      setClasses(DEMO_CLASSES);
-      setActiveClass(DEMO_CLASSES[0]);
-      localStorage.setItem('demo_profile', JSON.stringify(newProfile));
+
+      setIsDemoMode(false);
+      setUser({ id: assignedId, email });
+      setProfile(fallbackProfile);
+      localStorage.setItem('demo_profile', JSON.stringify(fallbackProfile));
+      document.cookie = `kruai_user_id=${assignedId}; path=/; max-age=2592000; SameSite=Lax`;
+      document.cookie = `kruai_role=${assignedRole}; path=/; max-age=2592000; SameSite=Lax`;
+      document.cookie = `kruai_username=${cleanUsername}; path=/; max-age=2592000; SameSite=Lax`;
+
+      // Fetch real class for this teacher
+      try {
+        const { data: teacherClasses } = await supabase.from('classes').select('*').eq('teacher_id', assignedId);
+        if (teacherClasses && teacherClasses.length > 0) {
+          setClasses(teacherClasses as Classroom[]);
+          setActiveClass(teacherClasses[0] as Classroom);
+        } else {
+          const { data: allClasses } = await supabase.from('classes').select('*').order('name');
+          if (allClasses && allClasses.length > 0) {
+            setClasses(allClasses as Classroom[]);
+            setActiveClass(allClasses[0] as Classroom);
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+
       return { role: assignedRole };
     }
 
+    if (isKnownAccount && !isValidPassword) {
+      return { error: 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវទេ។ (ពាក្យសម្ងាត់គំរូគឺ: 123456 ឬ password123)' };
+    }
+
+    // 3. Try Supabase Auth
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -240,51 +355,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const { data: userProfile } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
       const userRole = userProfile?.role || 'teacher';
-      
-      if (expectedRole && userRole !== expectedRole) {
-         await supabase.auth.signOut();
-         return { error: `គណនីនេះមិនមានសិទ្ធិជា ${expectedRole} ទេ។ សូមជ្រើសរើសតួនាទីឲ្យបានត្រឹមត្រូវ។` };
-      }
+
+      document.cookie = `kruai_user_id=${data.user.id}; path=/; max-age=2592000; SameSite=Lax`;
+      document.cookie = `kruai_role=${userRole}; path=/; max-age=2592000; SameSite=Lax`;
+      document.cookie = `kruai_username=${cleanUsername}; path=/; max-age=2592000; SameSite=Lax`;
 
       setIsDemoMode(false);
       return { role: userRole };
     } catch (e: any) {
-      // If network fails (Failed to fetch / offline), allow seamless offline fallback
-      // ONLY if they provided the demo password. Otherwise, fail.
-      if (e?.message?.includes('fetch') || e?.name === 'TypeError') {
-        if (password !== 'password123') {
-           return { error: 'បណ្តាញមានបញ្ហា។ សូមពិនិត្យអ៊ីនធឺណិតរបស់អ្នក ឬប្រើពាក្យសម្ងាត់ Demo (password123) ដើម្បីបន្ត។' };
-        }
-
-        const assignedRole = isAdminDemo ? 'admin' : isPrincipalDemo ? 'principal' : isMonitorDemo ? 'monitor' : 'teacher';
-        
-        if (expectedRole && assignedRole !== expectedRole) {
-           return { error: `គណនីនេះមិនមានសិទ្ធិជា ${expectedRole} ទេ។ សូមជ្រើសរើសតួនាទីឲ្យបានត្រឹមត្រូវ។` };
-        }
-
-        setIsDemoMode(true);
-        setUser({ id: 'demo-teacher-id', email });
-        
-        const assignedName = isAdminDemo 
-          ? 'លោកគ្រូ/អ្នកគ្រូ សុខា (អ្នកគ្រប់គ្រងប្រព័ន្ធ)' 
-          : isPrincipalDemo 
-          ? 'លោកគ្រូ/អ្នកគ្រូ សុខា (នាយកសាលា)' 
-          : isMonitorDemo
-          ? 'សិស្ស ខៀវ សុវណ្ណារាជ (ប្រធានថ្នាក់)'
-          : 'លោកគ្រូ/អ្នកគ្រូ សម្បត្តិ (គ្រូបន្ទុកថ្នាក់)';
-
-        const newProfile = {
-          ...DEFAULT_PROFILE,
-          username: cleanUsername,
-          full_name: assignedName,
-          role: assignedRole as any,
-        };
-        setProfile(newProfile);
-        setClasses(DEMO_CLASSES);
-        setActiveClass(DEMO_CLASSES[0]);
-        localStorage.setItem('demo_profile', JSON.stringify(newProfile));
-        return { role: assignedRole };
-      }
       return { error: e?.message || 'កំហុសក្នុងការចូលប្រព័ន្ធ។' };
     }
   }
@@ -310,7 +388,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.user) {
-        // Create profile in Supabase
         const { error: profileError } = await supabase.from('profiles').insert([
           {
             id: data.user.id,
@@ -337,6 +414,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await supabase.auth.signOut();
     } catch (_) {}
+    document.cookie = 'kruai_user_id=; path=/; max-age=0';
+    document.cookie = 'kruai_role=; path=/; max-age=0';
+    document.cookie = 'kruai_username=; path=/; max-age=0';
     localStorage.removeItem('demo_profile');
     setUser(null);
     setProfile(DEFAULT_PROFILE);

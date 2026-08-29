@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Table as TableIcon, X, Check, Plus, Loader2, Save } from 'lucide-react';
@@ -15,7 +16,12 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
   const { activeClass, isDemoMode } = useAuth();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [mounted, setMounted] = useState(false);
   const tableRef = useRef<HTMLTableElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // We start with 5 empty rows
   const generateEmptyRow = () => ({
@@ -27,7 +33,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
 
   const [gridData, setGridData] = useState<any[]>(Array(10).fill(null).map(generateEmptyRow));
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleChange = (index: number, field: string, value: string) => {
     const newData = [...gridData];
@@ -39,6 +45,10 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
     }
     
     setGridData(newData);
+  };
+
+  const handleAddRow = () => {
+    setGridData(prev => [...prev, generateEmptyRow()]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number, field: string) => {
@@ -93,9 +103,9 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 lg:p-10 animate-overlayFade">
-      <div className="w-full h-full max-w-7xl bg-white rounded-[24px] shadow-2xl overflow-hidden flex flex-col relative animate-modalScale">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 lg:p-10 animate-overlayFade" onClick={onClose}>
+      <div className="w-full h-full max-w-7xl bg-white rounded-[24px] shadow-2xl overflow-hidden flex flex-col relative animate-modalScale" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
         <div className="px-6 py-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
@@ -108,7 +118,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
               <p className="text-xs font-bold text-slate-500">វាយបញ្ចូលទិន្នន័យបានលឿនដូច Excel។ ចុច <span className="bg-slate-200 px-1.5 py-0.5 rounded">Enter</span> ដើម្បីចុះបន្ទាត់។</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -148,44 +158,48 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
                       data-row={idx}
                       data-col="full_name"
                       type="text"
-                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent font-bold text-sm"
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-sm font-semibold text-slate-800"
                       value={row.full_name}
                       onChange={(e) => handleChange(idx, 'full_name', e.target.value)}
                       onKeyDown={(e) => handleKeyDown(e, idx, 'full_name')}
-                      placeholder={idx === 0 ? "ឈ្មោះសិស្ស" : ""}
+                      placeholder={idx === 0 ? "ឧ. សុខ ចិន្តា" : ""}
                     />
                   </td>
                   <td className="border border-slate-200 p-0 relative">
-                    <select
+                    <input
                       data-row={idx}
                       data-col="gender"
-                      className="w-full h-10 px-2 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent font-bold text-sm cursor-pointer"
+                      type="text"
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-center font-bold text-sm"
                       value={row.gender}
                       onChange={(e) => handleChange(idx, 'gender', e.target.value)}
-                    >
-                      <option value="M">ប្រុស</option>
-                      <option value="F">ស្រី</option>
-                    </select>
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'gender')}
+                      maxLength={1}
+                    />
                   </td>
                   <td className="border border-slate-200 p-0 relative">
                     <input
                       data-row={idx}
                       data-col="parent_phone"
                       type="text"
-                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent font-mono text-sm"
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-sm font-mono"
                       value={row.parent_phone}
                       onChange={(e) => handleChange(idx, 'parent_phone', e.target.value)}
                       onKeyDown={(e) => handleKeyDown(e, idx, 'parent_phone')}
-                      placeholder={idx === 0 ? "012345678" : ""}
+                      placeholder={idx === 0 ? "012 345 678" : ""}
                     />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Add Row Button Row */}
+        <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
           <button 
-            onClick={() => setGridData([...gridData, generateEmptyRow()])}
-            className="flex items-center gap-2 mt-4 ml-4 px-4 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+            onClick={handleAddRow}
+            className="flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-xl transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" /> បន្ថែមជួរថ្មី
           </button>
@@ -199,11 +213,11 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
             <p className="text-slate-500 font-bold text-xs">ទិន្នន័យទទេនឹងមិនត្រូវបានរក្សាទុកទេ។</p>
           )}
           <div className="flex gap-3">
-            <button onClick={onClose} className="px-6 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">បោះបង់</button>
+            <button onClick={onClose} className="px-6 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer">បោះបង់</button>
             <button 
               onClick={handleSave} 
               disabled={loading}
-              className="px-8 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-lg shadow-indigo-500/20 flex items-center gap-2 transition-all disabled:opacity-50"
+              className="px-8 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-lg shadow-indigo-500/20 flex items-center gap-2 transition-all disabled:opacity-50 cursor-pointer"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               រក្សាទុកទៅក្នុងបញ្ជី
@@ -212,6 +226,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
         </div>
         
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

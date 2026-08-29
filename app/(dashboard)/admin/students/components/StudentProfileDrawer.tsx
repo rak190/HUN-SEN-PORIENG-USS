@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, User, MapPin, Phone, Calendar, AlertCircle, Home, CheckCircle2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { HomeVisit } from '@/types';
@@ -12,6 +13,20 @@ interface StudentProfileDrawerProps {
 export default function StudentProfileDrawer({ isOpen, onClose, student }: StudentProfileDrawerProps) {
   const [homeVisits, setHomeVisits] = useState<HomeVisit[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const orig = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = orig;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !student) return;
@@ -41,18 +56,18 @@ export default function StudentProfileDrawer({ isOpen, onClose, student }: Stude
     fetchDeepData();
   }, [isOpen, student]);
 
-  if (!isOpen || !student) return null;
+  if (!isOpen || !student || !mounted) return null;
 
-  return (
-    <>
-      {/* Backdrop */}
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex justify-end">
+      {/* Full-Screen Frosted Backdrop */}
       <div 
-        className="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 animate-in fade-in transition-all"
+        className="fixed inset-0 bg-slate-900/45 backdrop-blur-md animate-overlayFade select-none"
         onClick={onClose}
       />
       
       {/* Drawer Panel */}
-      <div className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300">
+      <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 z-10">
         
         {/* Header */}
         <div className="flex-shrink-0 border-b border-slate-100 p-6 bg-slate-50/50 flex items-start justify-between">
@@ -128,7 +143,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, student }: Stude
                       <div className="flex items-center gap-2">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
                         <span className="text-xs font-bold text-slate-500">
-                          {new Date(visit.date).toLocaleDateString('km-KH')}
+                          {new Date(visit.date || visit.created_at || Date.now()).toLocaleDateString('km-KH')}
                         </span>
                       </div>
                       {visit.status === 'submitted' ? (
@@ -152,6 +167,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, student }: Stude
           
         </div>
       </div>
-    </>
+    </div>,
+    document.body
   );
 }

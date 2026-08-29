@@ -2,123 +2,181 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function fetchAdminDashboardData() {
-  // Mock data for the ICT Focal Teacher (Admin) dashboard
-  
   const supabase = createAdminClient();
-  let atRiskStudents: any[] = [];
+  if (!supabase) throw new Error("No admin client available");
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const currentMonthIdx = now.getMonth();
+  const monthIds = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const currentPeriodId = monthIds[currentMonthIdx];
+
+  // 1. Get active academic year
+  const { data: activeYear } = await supabase.from('academic_years').select('id').eq('is_active', true).maybeSingle();
+  const yearId = activeYear?.id;
+
+  // 2. Fetch basic counts and rates
+  const { count: totalStudents } = await supabase.from('students').select('*', { count: 'exact', head: true }).eq('is_active', true);
   
-  if (supabase) {
-    const { data } = await supabase
-      .from('students')
-      .select('id, full_name, class_id, poor_id_status, is_orphan, dropout_risk, classes(name)')
-      .limit(50);
+  const { data: monthAttendance } = await supabase.from('attendance_records').select('status').gte('date', startOfMonth.split('T')[0]);
+  let attendanceRate = '0%';
+  if (monthAttendance && monthAttendance.length > 0) {
+    const present = monthAttendance.filter(a => a.status === 'present' || a.status === 'permission' || a.status === 'P').length;
+    attendanceRate = Math.round((present / monthAttendance.length) * 100) + '%';
+  }
+
+  // Count distinct classes with grades uploaded
+  let gradesQuery = supabase.from('grades').select('class_id, period');
+  const { data: recentGrades } = await gradesQuery;
+  const distinctGrades = new Set(recentGrades?.map(g => `${g.class_id}-${g.period}`) || []);
+  const scoresUploaded = distinctGrades.size.toString();
+
+  const { data: allStudents } = await supabase.from('students').select('gender, dob, poor_id_status').eq('is_active', true);
+  let dataCompleteness = '0%';
+  if (allStudents && allStudents.length > 0) {
+    const complete = allStudents.filter(s => s.gender && s.dob).length;
+    dataCompleteness = Math.round((complete / allStudents.length) * 100) + '%';
+  }
+
+  const { count: supportLogs } = await supabase.from('audit_logs').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth);
+  const techSupportGiven = supportLogs?.toString() || '0';
+
+  // 3. Demographics
+  const { data: profiles } = await supabase.from('profiles').select('role');
+  const totalUsers = profiles?.length || 0;
+  const teachersCount = profiles?.filter(p => p.role === 'teacher').length || 0;
+  const principalsCount = profiles?.filter(p => p.role === 'principal').length || 0;
+  const monitorsCount = profiles?.filter(p => p.role === 'monitor').length || 0;
+
+  // 4. At Risk Students
+  const { data: riskStudentsRaw } = await supabase
+    .from('students')
+    .select('id, full_name, class_id, poor_id_status, is_orphan, dropout_risk, classes(name)')
+    .eq('is_active', true)
+    .or('dropout_risk.eq.true,poor_id_status.neq.none,is_orphan.eq.true')
+    .limit(15);
+
+  let atRiskStudents = [];
+  if (riskStudentsRaw) {
+    for (const s of riskStudentsRaw) {
+      let reasons: string[] = [];
+      let severity = 'medium';
       
-    if (data) {
-      // In a real production system, this would be a JOIN with an aggregated view or RPC
-      // For this implementation, we simulate fetching recent attendance summaries for the threshold logic
-      const mockAttendanceData = data.reduce((acc: any, s: any) => {
-        // Randomly simulate 10% of students having high absence (3 consecutive or 5 total)
-        if (Math.random() > 0.9) {
-          acc[s.id] = { total_absences: Math.floor(Math.random() * 5) + 5, consecutive: Math.floor(Math.random() * 2) + 3 };
-        }
-        return acc;
-      }, {});
-
-      atRiskStudents = data.filter((s: any) => {
-        const hasAttendanceRisk = mockAttendanceData[s.id] && (mockAttendanceData[s.id].consecutive >= 3 || mockAttendanceData[s.id].total_absences >= 5);
-        return s.dropout_risk === true || ['poor_1', 'poor_2'].includes(s.poor_id_status) || s.is_orphan === true || hasAttendanceRisk;
-      }).map((s: any) => {
-        let reasons = [];
-        const att = mockAttendanceData[s.id];
-        if (att && att.consecutive >= 3) reasons.push(`អវត្តមានជាប់គ្នា ${att.consecutive} ថ្ងៃ (3+ Consecutive)`);
-        else if (att && att.total_absences >= 5) reasons.push(`អវត្តមានសរុប ${att.total_absences} ថ្ងៃក្នុងខែនេះ (5+ Total)`);
-
-        if (s.dropout_risk) reasons.push('ប្រឈមការបោះបង់ការសិក្សា');
-        if (s.poor_id_status && s.poor_id_status !== 'none') reasons.push('សិស្សក្រីក្រ (' + s.poor_id_status + ')');
-        if (s.is_orphan) reasons.push('សិស្សកំព្រា');
-        
-        if (reasons.length === 0) reasons.push('ស្ថិតក្នុងការតាមដាន');
-
-        return {
-          id: s.id,
-          name: `${s.full_name} (${s.classes?.name || 'គ្មានថ្នាក់'})`,
-          reasons: reasons,
-          // High severity if consecutive >= 3 OR total >= 5 OR manually marked dropout risk
-          severity: (s.dropout_risk || (att && (att.consecutive >= 3 || att.total_absences >= 5))) ? 'high' : 'medium'
-        };
+      if (s.dropout_risk) {
+        reasons.push('ប្រឈមការបោះបង់ការសិក្សា');
+        severity = 'high';
+      }
+      if (s.poor_id_status && s.poor_id_status !== 'none') reasons.push('សិស្សក្រីក្រ (' + s.poor_id_status + ')');
+      if (s.is_orphan) reasons.push('សិស្សកំព្រា');
+      
+      atRiskStudents.push({
+        id: s.id,
+        name: `${s.full_name} (${(s.classes as any)?.name || 'គ្មានថ្នាក់'})`,
+        reasons: reasons.length > 0 ? reasons : ['ស្ថិតក្នុងការតាមដាន'],
+        severity
       });
-      // Limit to 15 for dashboard display
-      atRiskStudents = atRiskStudents.slice(0, 15);
     }
   }
 
-  if (atRiskStudents.length === 0) {
-    atRiskStudents = [
-      { id: '1', name: 'សុខ មករា (ថ្នាក់ ១០ក)', reasons: ['ប្រឈមការបោះបង់ការសិក្សា', 'អវត្តមាន ៥ ថ្ងៃ'], severity: 'high' },
-      { id: '2', name: 'ចាន់ ធូ (ថ្នាក់ ៩ខ)', reasons: ['សិស្សក្រីក្រ (Poor 1)', 'ពិន្ទុធ្លាក់ចុះ'], severity: 'medium' }
-    ];
+  // 5. Data Status per Grade (7 to 12)
+  let classQuery = supabase.from('classes').select('id, grade').eq('is_archived', false);
+  if (yearId) {
+    classQuery = classQuery.eq('academic_year_id', yearId);
   }
+  const { data: activeClasses } = await classQuery;
+  const dataStatus = [];
+  if (activeClasses) {
+    const gradesMap: Record<string, { total: number, submitted: number }> = {
+      '7': { total: 0, submitted: 0 },
+      '8': { total: 0, submitted: 0 },
+      '9': { total: 0, submitted: 0 },
+      '10': { total: 0, submitted: 0 },
+      '11': { total: 0, submitted: 0 },
+      '12': { total: 0, submitted: 0 }
+    };
+    
+    activeClasses.forEach(c => {
+      const g = String(c.grade);
+      if (gradesMap[g]) gradesMap[g].total++;
+    });
+    
+    const { data: thisMonthGrades } = await supabase.from('grades').select('class_id').eq('period', currentPeriodId);
+    const submittedClassIds = new Set(thisMonthGrades?.map(g => g.class_id) || []);
+    
+    activeClasses.forEach(c => {
+      const g = String(c.grade);
+      if (submittedClassIds.has(c.id) && gradesMap[g]) {
+        gradesMap[g].submitted++;
+      }
+    });
+    
+    for (const [grade, counts] of Object.entries(gradesMap)) {
+      if (counts.total > 0) {
+        dataStatus.push({
+          grade: `ថ្នាក់ទី ${grade}`,
+          submitted: counts.submitted,
+          missing: counts.total - counts.submitted
+        });
+      }
+    }
+  }
+
+  // 6. Trend Data (Audit Logs)
+  const trendData = [];
+  const monthNames = ['មករា','កុម្ភៈ','មីនា','មេសា','ឧសភា','មិថុនា','កក្កដា','សីហា','កញ្ញា','តុលា','វិច្ឆិកា','ធ្នូ'];
+  const { data: allLogs } = await supabase.from('audit_logs').select('created_at').order('created_at', { ascending: false }).limit(500);
+  const monthCounts: Record<number, number> = {};
+  if (allLogs) {
+    allLogs.forEach(log => {
+      const m = new Date(log.created_at).getMonth();
+      monthCounts[m] = (monthCounts[m] || 0) + 1;
+    });
+  }
+  
+  const currentM = now.getMonth();
+  for (let i = 5; i >= 0; i--) {
+    let m = currentM - i;
+    if (m < 0) m += 12;
+    trendData.push({
+      monthLabel: monthNames[m],
+      systemUsagePct: monthCounts[m] || 0,
+      giepPct: 0 
+    });
+  }
+
+  // 7. Recent Activities
+  const { data: recentLogs } = await supabase.from('audit_logs')
+    .select('id, action, type, created_at, profiles:user_id(full_name, role)')
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  const activities = recentLogs?.map(log => ({
+    id: log.id,
+    user: (log.profiles as any)?.full_name || 'System',
+    role: (log.profiles as any)?.role || 'Admin',
+    action: log.action,
+    time: new Date(log.created_at).toLocaleString('km-KH'),
+    type: log.type === 'info' ? 'success' : log.type
+  })) || [];
 
   return {
     stats: {
-      totalStudents: '1,452',
-      attendanceRate: '96%',
-      scoresUploaded: '12',
-      dataCompleteness: '92%',
-      techSupportGiven: '34',
+      totalStudents: totalStudents?.toString() || '0',
+      attendanceRate,
+      scoresUploaded,
+      dataCompleteness,
+      techSupportGiven,
       systemHealth: '100%',
       
-      // Demographics for Donut Chart
-      totalUsers: '145',
-      teachersCount: '110',
-      monitorsCount: '30',
-      principalsCount: '5',
+      totalUsers: totalUsers.toString(),
+      teachersCount: teachersCount.toString(),
+      monitorsCount: monitorsCount.toString(),
+      principalsCount: principalsCount.toString(),
 
-      // Data Submission Status (Left column in Row 2)
-      dataStatus: [
-        { grade: 'ថ្នាក់ទី ១០', submitted: 85, missing: 15 },
-        { grade: 'ថ្នាក់ទី ១១', submitted: 95, missing: 5 },
-        { grade: 'ថ្នាក់ទី ១២', submitted: 100, missing: 0 },
-      ],
-
-      // System Adoption vs GIEP Data (Trend Line Chart)
-      trendData: [
-        { monthLabel: 'មករា', systemUsagePct: 40, giepPct: 20 },
-        { monthLabel: 'កុម្ភៈ', systemUsagePct: 50, giepPct: 25 },
-        { monthLabel: 'មីនា', systemUsagePct: 45, giepPct: 35 },
-        { monthLabel: 'មេសា', systemUsagePct: 60, giepPct: 40 },
-        { monthLabel: 'ឧសភា', systemUsagePct: 80, giepPct: 60 },
-        { monthLabel: 'មិថុនា', systemUsagePct: 75, giepPct: 70 },
-        { monthLabel: 'កក្កដា', systemUsagePct: 90, giepPct: 85 },
-        { monthLabel: 'សីហា', systemUsagePct: 95, giepPct: 90 }
-      ]
+      dataStatus,
+      trendData
     },
-    
-    // Tech Support Logs (Right column in Row 2)
-    activities: [
-      {
-        id: '1',
-        title: 'បណ្តុះបណ្តាលគ្រូ',
-        description: 'បានណែនាំអ្នកគ្រូ ចាន់ រស្មី ពីរបៀបបញ្ចូលពិន្ទុថ្មី។',
-        activity_type: 'training',
-        created_at: new Date().toISOString()
-      },
-      {
-        id: '2',
-        title: 'បង្កើតគណនីថ្មី',
-        description: 'បានបង្កើតគណនីសម្រាប់គ្រូបង្រៀនថ្មីចំនួន ៣ នាក់។',
-        activity_type: 'account',
-        created_at: new Date(Date.now() - 86400000).toISOString()
-      },
-      {
-        id: '3',
-        title: 'ដោះស្រាយបញ្ហា (Bug Fix)',
-        description: 'បានជួយលោកគ្រូ សុខា ផ្លាស់ប្តូរលេខសម្ងាត់ថ្មី (Password Reset)។',
-        activity_type: 'support',
-        created_at: new Date(Date.now() - 172800000).toISOString()
-      }
-    ],
-
+    activities,
     atRiskStudents
   };
 }

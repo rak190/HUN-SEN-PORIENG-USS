@@ -1,32 +1,54 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { GraduationCap, Search, Filter, CheckCircle2, Award, Users, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { GraduationCap, Search, Filter, Award, Users, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 export default function PrincipalStudentsPage() {
   const { profile } = useAuth();
+  const supabase = createClient();
+  const [students, setStudents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
 
-  const studentsList = [
-    { id: 'ID-001', name: 'កែវ ច័ន្ទធីតា', gender: 'F', grade: '12', class: '12 ក', gpa: '3.85', rank: 'A', status: 'សកម្ម' },
-    { id: 'ID-002', name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', grade: '12', class: '12 ក', gpa: '3.92', rank: 'A', status: 'សកម្ម' },
-    { id: 'ID-003', name: 'ចាន់ សុភាព', gender: 'F', grade: '12', class: '12 ក', gpa: '3.45', rank: 'B', status: 'សកម្ម' },
-    { id: 'ID-004', name: 'ដួង រដ្ឋា', gender: 'M', grade: '11', class: '11 ខ', gpa: '3.10', rank: 'B', status: 'សកម្ម' },
-    { id: 'ID-005', name: 'ទិត្យ វិសាល', gender: 'M', grade: '11', class: '11 ខ', gpa: '2.85', rank: 'C', status: 'សកម្ម' },
-    { id: 'ID-006', name: 'ប៊ុន រស្មី', gender: 'F', grade: '10', class: '10 គ', gpa: '3.65', rank: 'A', status: 'សកម្ម' },
-    { id: 'ID-007', name: 'ពេជ្រ សុខលី', gender: 'F', grade: '10', class: '10 គ', gpa: '3.20', rank: 'B', status: 'សកម្ម' },
-    { id: 'ID-008', name: 'ហេង វណ្ណៈ', gender: 'M', grade: '9', class: '9 ក', gpa: '2.95', rank: 'C', status: 'សកម្ម' },
-    { id: 'ID-009', name: 'សុវណ្ណ ពិសិដ្ឋ', gender: 'M', grade: '8', class: '8 ង', gpa: '3.10', rank: 'B', status: 'សកម្ម' },
-    { id: 'ID-010', name: 'លីដា សុធារី', gender: 'F', grade: '7', class: '7 ច', gpa: '3.80', rank: 'A', status: 'សកម្ម' },
-  ];
+  useEffect(() => {
+    async function fetchSchoolStudents() {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('id, full_name, student_id_number, gender, is_active, class_id, classes(id, name, grade, track)')
+          .eq('is_active', true)
+          .order('full_name');
 
-  // We wrap studentsList in useMemo in case it's passed from props or a hook in the future
-  const students = useMemo(() => studentsList, []);
+        if (error) throw error;
 
-  // Dynamically extract available classes but ensure grades 7-12 always exist
+        const mapped = (data || []).map((s: any) => ({
+          id: s.student_id_number || s.id.slice(0, 8),
+          dbId: s.id,
+          name: s.full_name,
+          gender: s.gender === 'F' || s.gender === 'ស្រី' ? 'F' : 'M',
+          grade: s.classes?.grade ? String(s.classes.grade) : '12',
+          class: s.classes?.name || 'គ្មានថ្នាក់',
+          status: 'សកម្ម'
+        }));
+
+        setStudents(mapped);
+      } catch (err) {
+        console.error('Error fetching principal students:', err);
+        setStudents([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchSchoolStudents();
+  }, []);
+
+  // Dynamically extract available classes from real data
   const filterOptions = useMemo(() => {
     const options: Record<string, Set<string>> = {
       '12': new Set(),
@@ -39,10 +61,11 @@ export default function PrincipalStudentsPage() {
 
     students.forEach(s => {
       if (!options[s.grade]) options[s.grade] = new Set();
-      options[s.grade].add(s.class);
+      if (s.class && s.class !== 'គ្មានថ្នាក់') {
+        options[s.grade].add(s.class);
+      }
     });
     
-    // Sort grades descending (12 to 7)
     const sortedGrades = Object.keys(options).sort((a, b) => Number(b) - Number(a));
     
     return sortedGrades.map(grade => ({
@@ -72,7 +95,7 @@ export default function PrincipalStudentsPage() {
   }, [searchQuery, selectedFilter, students]);
 
   const itemsPerPage = 20;
-  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / itemsPerPage));
   
   const currentStudents = useMemo(() => {
     return filteredStudents.slice(
@@ -80,6 +103,11 @@ export default function PrincipalStudentsPage() {
       currentPage * itemsPerPage
     );
   }, [filteredStudents, currentPage]);
+
+  const g12Count = students.filter(s => s.grade === '12').length;
+  const g11Count = students.filter(s => s.grade === '11').length;
+  const g10Count = students.filter(s => s.grade === '10').length;
+  const totalFemale = students.filter(s => s.gender === 'F').length;
 
   return (
     <div className="space-y-6 animate-fadeIn select-none">
@@ -92,7 +120,7 @@ export default function PrincipalStudentsPage() {
           <p className="text-xs font-semibold text-[#64748B] mt-0.5 flex items-center gap-1.5">
             <span>សរុបសិស្សសកម្ម៖</span>
             <span className="font-bold text-[#155EEF] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-              680 នាក់ (ស្រី 352 នាក់)
+              {students.length} នាក់ (ស្រី {totalFemale} នាក់)
             </span>
           </p>
         </div>
@@ -148,7 +176,7 @@ export default function PrincipalStudentsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] border border-yellow-400/30">
           <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">145</h2>
+            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{g12Count}</h2>
             <div className="w-10 h-10 rounded-full bg-yellow-900/10 flex items-center justify-center group-hover:bg-yellow-900 group-hover:text-white transition-all">
               <Users className="w-5 h-5 text-yellow-950 group-hover:text-white transition-colors" />
             </div>
@@ -158,7 +186,7 @@ export default function PrincipalStudentsPage() {
 
         <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] border border-yellow-400/30">
           <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">160</h2>
+            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{g11Count}</h2>
             <div className="w-10 h-10 rounded-full bg-yellow-900/10 flex items-center justify-center group-hover:bg-yellow-900 group-hover:text-white transition-all">
               <Users className="w-5 h-5 text-yellow-950 group-hover:text-white transition-colors" />
             </div>
@@ -168,7 +196,7 @@ export default function PrincipalStudentsPage() {
 
         <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] border border-yellow-400/30">
           <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">185</h2>
+            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{g10Count}</h2>
             <div className="w-10 h-10 rounded-full bg-yellow-900/10 flex items-center justify-center group-hover:bg-yellow-900 group-hover:text-white transition-all">
               <Users className="w-5 h-5 text-yellow-950 group-hover:text-white transition-colors" />
             </div>
@@ -178,12 +206,14 @@ export default function PrincipalStudentsPage() {
 
         <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 flex flex-col justify-between min-h-[130px] border border-blue-400/30">
           <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-black text-white tracking-tight leading-none">48.5%</h2>
+            <h2 className="text-4xl font-black text-white tracking-tight leading-none">
+              {students.length > 0 ? `${Math.round((totalFemale / students.length) * 100)}%` : '0%'}
+            </h2>
             <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all">
               <Award className="w-5 h-5 text-white group-hover:text-[#155EEF] transition-colors" />
             </div>
           </div>
-          <p className="text-sm font-bold text-blue-100 mt-4">អត្រាជាប់និទ្ទេស A និង B</p>
+          <p className="text-sm font-bold text-blue-100 mt-4">សមាមាត្រសិស្សស្រីទូទាំងសាលា</p>
         </div>
       </div>
 
@@ -205,100 +235,98 @@ export default function PrincipalStudentsPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
-                <th className="py-4 px-6 w-16 text-center">ល.រ</th>
-                <th className="py-4 px-6">អត្តលេខ</th>
-                <th className="py-4 px-6 min-w-[180px]">គោត្តនាម & នាម</th>
-                <th className="py-4 px-4 text-center">ភេទ</th>
-                <th className="py-4 px-6 text-center">ថ្នាក់រៀន</th>
-                <th className="py-4 px-6 text-center">មធ្យមភាគ</th>
-                <th className="py-4 px-6 text-center">ចំណាត់ថ្នាក់</th>
-                <th className="py-4 px-6 text-right">ស្ថានភាព</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-sm font-semibold">
-              {currentStudents.map((s, idx) => {
-                let badgeClass = 'bg-slate-100 text-slate-700';
-                if (s.rank === 'A') badgeClass = 'bg-emerald-500 text-white shadow-xs font-black border border-emerald-600/50';
-                else if (s.rank === 'B') badgeClass = 'bg-[#155EEF] text-white shadow-xs font-black border border-blue-600/50';
-                else if (s.rank === 'C') badgeClass = 'bg-indigo-500 text-white font-bold border border-indigo-600/50';
+          {loading ? (
+            <div className="py-16 text-center text-slate-400 flex flex-col items-center gap-2 font-bold">
+              <Loader2 className="w-6 h-6 animate-spin text-[#155EEF]" />
+              <span>កំពុងទាញយកទិន្នន័យសិស្ស...</span>
+            </div>
+          ) : currentStudents.length === 0 ? (
+            <div className="py-16 text-center text-slate-400 font-bold">
+              មិនមានទិន្នន័យសិស្សត្រូវនឹងលក្ខខណ្ឌស្វែងរកទេ។
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
+                  <th className="py-4 px-6 w-16 text-center">ល.រ</th>
+                  <th className="py-4 px-6">អត្តលេខ</th>
+                  <th className="py-4 px-6 min-w-[180px]">គោត្តនាម & នាម</th>
+                  <th className="py-4 px-4 text-center">ភេទ</th>
+                  <th className="py-4 px-6 text-center">ថ្នាក់រៀន</th>
+                  <th className="py-4 px-6 text-center">កម្រិត</th>
+                  <th className="py-4 px-6 text-right">ស្ថានភាព</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-sm font-semibold">
+                {currentStudents.map((s, idx) => {
+                  const avatarColor = s.gender === 'F' ? 'bg-pink-100 text-pink-600' : 'bg-blue-100 text-blue-600';
+                  const initial = s.name.charAt(0);
+                  const absoluteIndex = ((currentPage - 1) * itemsPerPage) + idx + 1;
 
-                const avatarColor = s.gender === 'F' ? 'bg-pink-100 text-pink-600' : 'bg-blue-100 text-blue-600';
-                const initial = s.name.charAt(0);
-                const absoluteIndex = ((currentPage - 1) * itemsPerPage) + idx + 1;
-
-                return (
-                  <tr key={s.id} className="hover:bg-slate-50/80 transition-colors group cursor-pointer">
-                    <td className="py-3 px-6 text-center text-slate-400 font-bold">{String(absoluteIndex).padStart(2, '0')}</td>
-                    <td className="py-3 px-6 font-mono text-slate-500 text-xs">{s.id}</td>
-                    <td className="py-3 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-xs ${avatarColor} group-hover:scale-105 transition-transform`}>
-                          {initial}
+                  return (
+                    <tr key={s.dbId || idx} className="hover:bg-slate-50/80 transition-colors group cursor-pointer">
+                      <td className="py-3 px-6 text-center text-slate-400 font-bold">{String(absoluteIndex).padStart(2, '0')}</td>
+                      <td className="py-3 px-6 font-mono text-slate-500 text-xs">{s.id}</td>
+                      <td className="py-3 px-6">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center font-black text-xs ${avatarColor} group-hover:scale-105 transition-transform`}>
+                            {initial}
+                          </div>
+                          <div className="font-extrabold text-slate-800 group-hover:text-[#155EEF] transition-colors">{s.name}</div>
                         </div>
-                        <div className="font-extrabold text-slate-800 group-hover:text-[#155EEF] transition-colors">{s.name}</div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] uppercase font-black border ${s.gender === 'F' ? 'bg-pink-50 text-pink-700 border-pink-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                        {s.gender === 'F' ? 'ស្រី' : 'ប្រុស'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-6 text-center">
-                      <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-black text-[11px] border border-slate-200/80 inline-block group-hover:bg-blue-50 group-hover:text-[#155EEF] group-hover:border-blue-200 transition-colors">
-                        {s.class}
-                      </span>
-                    </td>
-                    <td className="py-3 px-6 text-center font-mono font-black text-slate-700">{s.gpa}</td>
-                    <td className="py-3 px-6 text-center">
-                      <span className={`inline-block px-3 py-1 rounded-full text-[10px] ${badgeClass}`}>
-                        RANK {s.rank}
-                      </span>
-                    </td>
-                    <td className="py-3 px-6 text-right">
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase border border-emerald-200/50">
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>{s.status}</span>
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] uppercase font-black border ${s.gender === 'F' ? 'bg-pink-50 text-pink-700 border-pink-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                          {s.gender === 'F' ? 'ស្រី' : 'ប្រុស'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-6 text-center">
+                        <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-black text-[11px] border border-slate-200/80 inline-block group-hover:bg-blue-50 group-hover:text-[#155EEF] group-hover:border-blue-200 transition-colors">
+                          {s.class}
+                        </span>
+                      </td>
+                      <td className="py-3 px-6 text-center font-bold text-slate-600">
+                        ថ្នាក់ទី {s.grade}
+                      </td>
+                      <td className="py-3 px-6 text-right">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-extrabold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          <span>{s.status}</span>
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
 
-        {/* Pagination Controls */}
-        {totalPages > 0 && (
-          <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <p className="text-xs font-bold text-slate-500">
-              បង្ហាញ {((currentPage - 1) * itemsPerPage) + (currentStudents.length > 0 ? 1 : 0)} ដល់ {Math.min(currentPage * itemsPerPage, filteredStudents.length)} នៃ {filteredStudents.length} សិស្ស
-            </p>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1.5 rounded-full text-xs font-bold bg-white border border-slate-200 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <ChevronLeft className="w-3 h-3" />
-                មុន
-              </button>
-              <div className="flex items-center gap-1 px-2 text-xs font-black text-slate-700">
-                {currentPage} / {totalPages}
-              </div>
-              <button 
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1.5 rounded-full text-xs font-bold bg-white border border-slate-200 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                បន្ទាប់
-                <ChevronRight className="w-3 h-3" />
-              </button>
-            </div>
+        {/* Pagination Footer */}
+        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+          <span className="text-xs font-bold text-[#64748B]">
+            ទំព័រទី {currentPage} នៃ {totalPages} (សរុប {filteredStudents.length} នាក់)
+          </span>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-extrabold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>ថយក្រោយ</span>
+            </button>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage >= totalPages}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-extrabold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1 cursor-pointer"
+            >
+              <span>បន្ទាប់</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

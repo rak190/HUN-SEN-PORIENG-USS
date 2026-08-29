@@ -19,7 +19,7 @@ interface TeacherComboboxProps {
 }
 
 export function TeacherCombobox({
-  teachers,
+  teachers = [],
   value,
   onChange,
   disabled,
@@ -31,11 +31,16 @@ export function TeacherCombobox({
   const [searchTerm, setSearchTerm] = useState('');
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  const getTeacherName = (t?: Teacher | any) => {
+    if (!t) return '';
+    return t.full_name || t.name || t.username || '';
+  };
+
   // Sync internal search term with external value
   useEffect(() => {
     if (value) {
       const teacher = teachers.find(t => t.id === value);
-      setSearchTerm(teacher ? teacher.full_name : '');
+      setSearchTerm(teacher ? getTeacherName(teacher) : '');
     } else {
       setSearchTerm('');
     }
@@ -48,16 +53,17 @@ export function TeacherCombobox({
         setIsOpen(false);
         // Revert searchTerm if they didn't pick anything valid
         const teacher = teachers.find(t => t.id === value);
-        setSearchTerm(teacher ? teacher.full_name : '');
+        setSearchTerm(teacher ? getTeacherName(teacher) : '');
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [value, teachers]);
 
-  const filteredTeachers = teachers.filter(t => 
-    t.full_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredTeachers = (teachers || []).filter(t => {
+    const name = getTeacherName(t);
+    return name.toLowerCase().includes((searchTerm || '').toLowerCase());
+  });
 
   return (
     <div className="relative w-full" ref={wrapperRef}>
@@ -98,19 +104,27 @@ export function TeacherCombobox({
               filteredTeachers.map(t => (
                 <button
                   key={t.id}
+                  type="button"
                   onClick={() => {
                     onChange(t.id);
-                    setSearchTerm(t.full_name);
+                    setSearchTerm(getTeacherName(t));
                     setIsOpen(false);
                   }}
-                  className={`w-full text-left px-3 py-2 text-[12px] font-bold rounded-lg transition-colors hover:bg-emerald-50 hover:text-emerald-700 ${value === t.id ? 'bg-emerald-50 text-emerald-700' : 'text-slate-700'}`}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+                    value === t.id
+                      ? 'bg-emerald-50 text-emerald-700 font-bold'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
                 >
-                  {t.full_name}
+                  <span>{getTeacherName(t)}</span>
+                  {value === t.id && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  )}
                 </button>
               ))
             ) : (
-              <div className="px-3 py-4 text-center text-xs text-slate-400 font-medium">
-                រកមិនឃើញគ្រូឈ្មោះ "{searchTerm}"
+              <div className="p-3 text-center text-xs text-slate-400">
+                រកមិនឃើញគ្រូបង្រៀន
               </div>
             )}
           </div>

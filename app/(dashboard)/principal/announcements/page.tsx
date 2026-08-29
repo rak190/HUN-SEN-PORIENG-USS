@@ -1,33 +1,85 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { Megaphone, Plus, Search, Calendar, CheckCircle2, Bell, MessageSquare, Send } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { Megaphone, Plus, Search, Calendar, CheckCircle2, Send, Loader2, Trash2 } from 'lucide-react';
 
 export default function PrincipalAnnouncementsPage() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
+  const supabase = createClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewModal, setShowNewModal] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [targetAudience, setTargetAudience] = useState('គ្រូបង្រៀនទាំងអស់');
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [announcements, setAnnouncements] = useState([
-    { id: 1, title: 'កិច្ចប្រជុំត្រួតពិនិត្យគរុកោសល្យប្រចាំខែសីហា', date: '02 សីហា 2026', target: 'គ្រូបង្រៀនទាំងអស់', status: 'បានផ្សព្វផ្សាយ', content: 'សូមគោរពអញ្ជើញលោកគ្រូ អ្នកគ្រូទាំងអស់ចូលរួមកិច្ចប្រជុំប្រចាំខែនៅសាលប្រជុំធំ វេលាម៉ោង 08:00 ព្រឹក។' },
-    { id: 2, title: 'ការរៀបចំប្រឡងឆមាសទី 1 ឆ្នាំសិក្សា 2025-2026', date: '28 កក្កដា 2026', target: 'គ្រូបន្ទុកថ្នាក់ & សិស្សានុសិស្ស', status: 'បានផ្សព្វផ្សាយ', content: 'សូមគ្រូបន្ទុកថ្នាក់ទាំងអស់ពិនិត្យបញ្ជីឈ្មោះសិស្ស និងកាលវិភាគប្រឡងឱ្យបានត្រឹមត្រូវ។' },
-    { id: 3, title: 'គោលការណ៍ពង្រឹងវិន័យ និងការស្លៀកពាក់របស់សិស្ស', date: '15 កក្កដា 2026', target: 'សិស្សទូទាំងសាលា', status: 'បានផ្សព្វផ្សាយ', content: 'តម្រូវឱ្យសិស្សទាំងអស់ស្លៀកពាក់ឯកសណ្ឋានសាលាឱ្យបានត្រឹមត្រូវ និងគោរពពេលវេលាចូលរៀន។' },
-  ]);
+  const fetchAnnouncements = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  const handleCreate = (e: React.FormEvent) => {
+      if (error) throw error;
+      setAnnouncements(data || []);
+    } catch (err) {
+      console.error('Error loading announcements:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnnouncements();
+  }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !content) return;
-    setAnnouncements([
-      { id: Date.now(), title, date: 'ថ្ងៃនេះ', target: 'គ្រូបង្រៀនទាំងអស់', status: 'បានផ្សព្វផ្សាយ', content },
-      ...announcements
-    ]);
-    setTitle('');
-    setContent('');
-    setShowNewModal(false);
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await supabase.from('announcements').insert([{
+        title: title.trim(),
+        content: content.trim(),
+        target_audience: targetAudience,
+        is_published: true,
+        created_by: user?.id || null
+      }]);
+
+      if (error) throw error;
+
+      setTitle('');
+      setContent('');
+      setShowNewModal(false);
+      await fetchAnnouncements();
+    } catch (err: any) {
+      alert('កំហុសក្នុងការបង្កើតសេចក្តីជូនដំណឹង៖ ' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('តើអ្នកពិតជាចង់លុបសេចក្តីជូនដំណឹងនេះមែនទេ?')) return;
+    try {
+      const { error } = await supabase.from('announcements').delete().eq('id', id);
+      if (error) throw error;
+      setAnnouncements(prev => prev.filter(a => a.id !== id));
+    } catch (err: any) {
+      alert('កំហុសក្នុងការលុប៖ ' + err.message);
+    }
+  };
+
+  const filteredAnnouncements = announcements.filter(a =>
+    a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    a.content?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="space-y-6 animate-fadeIn select-none">
@@ -54,7 +106,7 @@ export default function PrincipalAnnouncementsPage() {
               placeholder="ស្វែងរកចំណងជើង..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200/80 rounded-full text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#155EEF] shadow-xs"
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200/80 rounded-full text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#155EEF] shadow-xs"
             />
           </div>
 
@@ -87,22 +139,38 @@ export default function PrincipalAnnouncementsPage() {
           </div>
 
           <div className="space-y-3">
-            <div>
-              <label className="text-xs font-extrabold text-slate-700 block mb-1">ចំណងជើងប្រកាស៖</label>
-              <input
-                type="text"
-                required
-                placeholder="ឧទាហរណ៍៖ កិច្ចប្រជុំបន្ទាន់ ឬការប្រឡង..."
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200/80 text-xs font-bold focus:outline-none focus:border-[#155EEF]"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2">
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">ចំណងជើងប្រកាស៖</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ឧទាហរណ៍៖ កិច្ចប្រជុំបន្ទាន់ ឬការប្រឡង..."
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200/80 text-xs font-bold focus:outline-none focus:border-[#155EEF]"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-extrabold text-slate-700 block mb-1">គោលដៅទទួលព័ត៌មាន៖</label>
+                <select
+                  value={targetAudience}
+                  onChange={(e) => setTargetAudience(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200/80 text-xs font-bold focus:outline-none focus:border-[#155EEF] bg-white cursor-pointer"
+                >
+                  <option value="គ្រូបង្រៀនទាំងអស់">គ្រូបង្រៀនទាំងអស់</option>
+                  <option value="គ្រូបន្ទុកថ្នាក់ & សិស្សានុសិស្ស">គ្រូបន្ទុកថ្នាក់ & សិស្សានុសិស្ស</option>
+                  <option value="សិស្សទូទាំងសាលា">សិស្សទូទាំងសាលា</option>
+                  <option value="មាតាបិតា & អាណាព្យាបាល">មាតាបិតា & អាណាព្យាបាល</option>
+                </select>
+              </div>
             </div>
+
             <div>
               <label className="text-xs font-extrabold text-slate-700 block mb-1">ខ្លឹមសារលម្អិត៖</label>
               <textarea
                 required
-                rows={3}
+                rows={4}
                 placeholder="សរសេរខ្លឹមសារលម្អិតនៅទីនេះ..."
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
@@ -121,46 +189,70 @@ export default function PrincipalAnnouncementsPage() {
             </button>
             <button
               type="submit"
-              className="px-6 py-2 rounded-full bg-[#155EEF] hover:bg-blue-700 text-white text-xs font-bold shadow-sm flex items-center gap-2 cursor-pointer"
+              disabled={isSubmitting}
+              className="px-6 py-2 rounded-full bg-[#155EEF] hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold shadow-sm flex items-center gap-2 cursor-pointer"
             >
-              <Send className="w-3.5 h-3.5" />
-              <span>ផ្សព្វផ្សាយឥឡូវនេះ</span>
+              {isSubmitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              <span>{isSubmitting ? 'កំពុងផ្សព្វផ្សាយ...' : 'ផ្សព្វផ្សាយឥឡូវនេះ'}</span>
             </button>
           </div>
         </form>
       )}
 
       {/* Announcements List Grid */}
-      <div className="space-y-4">
-        {announcements.filter(a => a.title.toLowerCase().includes(searchQuery.toLowerCase())).map((item) => (
-          <div key={item.id} className="bg-white p-6 rounded-[24px] border border-slate-100/80 shadow-xs hover:border-[#155EEF]/40 transition-all space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#155EEF] flex items-center justify-center shrink-0">
-                  <Megaphone className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-900">{item.title}</h3>
-                  <div className="flex items-center gap-3 text-xs font-semibold text-[#64748B] mt-0.5">
-                    <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {item.date}</span>
-                    <span>•</span>
-                    <span>គោលដៅ៖ <strong className="text-slate-700">{item.target}</strong></span>
+      {loading ? (
+        <div className="py-20 text-center text-slate-400 flex flex-col items-center gap-2 font-bold">
+          <Loader2 className="w-6 h-6 animate-spin text-[#155EEF]" />
+          <span>កំពុងទាញយកសេចក្តីជូនដំណឹង...</span>
+        </div>
+      ) : filteredAnnouncements.length === 0 ? (
+        <div className="p-12 text-center text-slate-400 bg-white rounded-2xl border border-slate-200 font-bold">
+          មិនមានសេចក្តីជូនដំណឹងត្រូវបង្ហាញទេ។
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredAnnouncements.map((item) => (
+            <div key={item.id} className="bg-white p-6 rounded-[24px] border border-slate-100/80 shadow-xs hover:border-[#155EEF]/40 transition-all space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-[#155EEF] flex items-center justify-center shrink-0">
+                    <Megaphone className="w-5 h-5" />
                   </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900">{item.title}</h3>
+                    <div className="flex items-center gap-3 text-xs font-semibold text-[#64748B] mt-0.5">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5" /> 
+                        {new Date(item.created_at).toLocaleDateString('km-KH', { dateStyle: 'medium' })}
+                      </span>
+                      <span>•</span>
+                      <span>គោលដៅ៖ <strong className="text-slate-700">{item.target_audience || 'ទូទៅ'}</strong></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-center">
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-extrabold border border-emerald-200/60">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>បានផ្សព្វផ្សាយ</span>
+                  </span>
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                    title="លុបសេចក្តីជូនដំណឹង"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-extrabold border border-emerald-200/60 self-start sm:self-center">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>{item.status}</span>
-              </span>
+              <p className="text-sm font-medium text-slate-700 leading-relaxed pl-1 sm:pl-11 whitespace-pre-wrap">
+                {item.content}
+              </p>
             </div>
-
-            <p className="text-sm font-medium text-slate-700 leading-relaxed pl-1 sm:pl-11">
-              {item.content}
-            </p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

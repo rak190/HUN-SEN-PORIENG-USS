@@ -1,22 +1,24 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { getServerAuth } from '@/lib/auth-server';
 import { revalidatePath } from 'next/cache';
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
+  const { user, role } = await getServerAuth();
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user || (user.user_metadata?.role !== 'admin' && user.user_metadata?.role !== 'principal')) {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
+
+  const adminClient = createAdminClient();
+  if (!adminClient) return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
 
   const body = await req.json();
   const { action } = body;
 
   if (action === 'test-connection') {
     const start = Date.now();
-    const { error } = await supabase.from('profiles').select('id').limit(1);
+    const { error } = await adminClient.from('profiles').select('id').limit(1);
     const latency = Date.now() - start;
     
     if (error) {
@@ -24,8 +26,8 @@ export async function POST(req: Request) {
     }
     
     // Log it
-    await supabase.from('audit_logs').insert([{
-      action: `Executed connection test (Latency: ${latency}ms)`,
+    await adminClient.from('audit_logs').insert([{
+      action: `ធ្វើតេស្តល្បឿនតភ្ជាប់ទិន្នន័យ (Latency: ${latency}ms)`,
       type: 'info',
       user_id: user.id
     }]);
@@ -37,8 +39,8 @@ export async function POST(req: Request) {
     revalidatePath('/', 'layout');
     
     // Log it
-    await supabase.from('audit_logs').insert([{
-      action: `Purged global application cache (revalidatePath)`,
+    await adminClient.from('audit_logs').insert([{
+      action: `បានសម្អាត Global Application Cache`,
       type: 'warning',
       user_id: user.id
     }]);
@@ -47,9 +49,8 @@ export async function POST(req: Request) {
   }
 
   if (action === 'backup') {
-    // We cannot physically backup Supabase from Edge, so this is a simulation log.
-    await supabase.from('audit_logs').insert([{
-      action: `Requested automated DB snapshot backup`,
+    await adminClient.from('audit_logs').insert([{
+      action: `ស្នើសុំបង្កើតទិន្នន័យបម្រុង Database Snapshot`,
       type: 'warning',
       user_id: user.id
     }]);

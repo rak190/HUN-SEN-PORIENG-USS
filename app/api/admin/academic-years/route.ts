@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
+import { getServerAuth } from '@/lib/auth-server';
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || (user.user_metadata?.role !== 'admin' && user.user_metadata?.role !== 'principal')) {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -14,11 +13,8 @@ export async function GET() {
 
   if (!adminClient) {
     return NextResponse.json({
-      isDemo: true,
-      academicYears: [
-        { id: 'ay-demo-1', name: '2026-2027', is_active: true, is_archived: false, start_date: '2026-10-01' },
-        { id: 'ay-demo-2', name: '2025-2026', is_active: false, is_archived: true, start_date: '2025-10-01' },
-      ]
+      isDemo: false,
+      academicYears: []
     });
   }
 
@@ -30,36 +26,38 @@ export async function GET() {
 
     if (error) throw error;
 
-    return NextResponse.json({ isDemo: false, academicYears });
+    return NextResponse.json({ isDemo: false, academicYears: academicYears || [] });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || (user.user_metadata?.role !== 'admin' && user.user_metadata?.role !== 'principal')) {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
   const body = await req.json();
-  const { name, start_date } = body;
+  const { name, start_date, end_date } = body;
 
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({
-      isDemo: true,
-      academicYear: { id: `ay-demo-${Date.now()}`, name, start_date, is_active: false, is_archived: false }
-    });
+    return NextResponse.json({ error: 'Database service unavailable' }, { status: 500 });
   }
 
   try {
     const { data: newYear, error } = await adminClient
       .from('academic_years')
-      .insert([{ name, start_date: start_date || null }])
+      .insert([{ 
+        name, 
+        start_date: start_date || null, 
+        end_date: end_date || null,
+        is_active: false, 
+        is_current: false 
+      }])
       .select()
       .single();
 
@@ -72,10 +70,9 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || (user.user_metadata?.role !== 'admin' && user.user_metadata?.role !== 'principal')) {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -85,17 +82,41 @@ export async function PATCH(req: Request) {
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({ isDemo: true, success: true });
+    return NextResponse.json({ error: 'Database service unavailable' }, { status: 500 });
   }
 
   try {
-    // If setting a new active year, deactivate others
+    // If setting a new active year, deactivate others and auto-archive
     if (is_active) {
-      await adminClient.from('academic_years').update({ is_active: false }).neq('id', id);
+      // 1. Get the currently active years
+      const { data: activeYears } = await adminClient
+        .from('academic_years')
+        .select('id')
+        .eq('is_active', true)
+        .neq('id', id);
+
+      // 2. Set them to inactive and archived
+      if (activeYears && activeYears.length > 0) {
+        const activeYearIds = activeYears.map((y: any) => y.id);
+        
+        await adminClient
+          .from('academic_years')
+          .update({ is_active: false, is_current: false, is_archived: true })
+          .in('id', activeYearIds);
+          
+        // 3. Auto-archive all classes belonging to these old years
+        await adminClient
+          .from('classes')
+          .update({ is_archived: true })
+          .in('academic_year_id', activeYearIds);
+      }
     }
 
     const updateData: any = {};
-    if (is_active !== undefined) updateData.is_active = is_active;
+    if (is_active !== undefined) {
+      updateData.is_active = is_active;
+      updateData.is_current = is_active;
+    }
     if (is_archived !== undefined) updateData.is_archived = is_archived;
     if (name !== undefined) updateData.name = name;
     if (start_date !== undefined) updateData.start_date = start_date || null;
@@ -114,10 +135,9 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || (user.user_metadata?.role !== 'admin' && user.user_metadata?.role !== 'principal')) {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -131,7 +151,7 @@ export async function DELETE(req: Request) {
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({ isDemo: true, success: true });
+    return NextResponse.json({ error: 'Database service unavailable' }, { status: 500 });
   }
 
   try {

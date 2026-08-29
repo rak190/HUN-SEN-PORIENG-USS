@@ -9,6 +9,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Document } from '@/types';
+import * as XLSX from 'xlsx';
 
 const OFFICIAL_TEMPLATES = [
   { id: 'tpl-1', title: 'ទម្រង់បញ្ជីរាយនាមសិស្ស', type: 'excel', format: '.xlsx', size: '24 KB', date: '01 តុលា 2026', author: 'MoEYS / GEIP' },
@@ -121,6 +122,34 @@ export default function DocumentsPage() {
     if (url) window.open(url, '_blank');
   };
 
+  const handleDownloadTemplate = (tpl: typeof OFFICIAL_TEMPLATES[0]) => {
+    try {
+      if (tpl.id === 'tpl-1' || tpl.type === 'excel') {
+        const sampleHeaders = [
+          { 'អត្តលេខ': '2026-001', 'គោត្តនាម_នាម': 'សុខ សាន្ត', 'ភេទ': 'ប្រុស', 'ថ្ងៃខែឆ្នាំកំណើត': '2008-05-12', 'ទូរស័ព្ទអាណាព្យាបាល': '012 345 678', 'ស្ថានភាពក្រីក្រ': 'none' },
+          { 'អត្តលេខ': '2026-002', 'គោត្តនាម_នាម': 'ចាន់ ធារី', 'ភេទ': 'ស្រី', 'ថ្ងៃខែឆ្នាំកំណើត': '2008-08-20', 'ទូរស័ព្ទអាណាព្យាបាល': '098 765 432', 'ស្ថានភាពក្រីក្រ': 'level_1' },
+        ];
+        const ws = XLSX.utils.json_to_sheet(sampleHeaders);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'ទម្រង់សិស្ស');
+        XLSX.writeFile(wb, `${tpl.title}.xlsx`);
+      } else {
+        // Text template download
+        const content = `ព្រះរាជាណាចក្រកម្ពុជា\nជាតិ សាសនា ព្រះមហាក្សត្រ\n\n${tpl.title}\n\nស្ថាប័ន៖ វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង\nកាលបរិច្ឆេទ៖ ${new Date().toLocaleDateString('km-KH')}\n\n(ទម្រង់ផ្លូវការសម្រាប់បំពេញឯកសាររដ្ឋបាលសាលារៀន)`;
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${tpl.title}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('មានបញ្ហាក្នុងការទាញយកគំរូឯកសារ');
+    }
+  };
+
   const getIconForType = (type: string, className: string = "w-6 h-6") => {
     switch (type) {
       case 'excel': return <FileSpreadsheet className={`${className} text-emerald-600`} />;
@@ -217,7 +246,7 @@ export default function DocumentsPage() {
                   
                   <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                     <div className="text-xs font-bold text-slate-400">ដោយ៖ <span className="text-slate-600">{tpl.author}</span></div>
-                    <button onClick={() => alert('កំពុងទាញយកឯកសារផ្លូវការ...')} className="p-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-lg transition-colors group-hover:scale-105 duration-200 cursor-pointer">
+                    <button onClick={() => handleDownloadTemplate(tpl)} className="p-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-lg transition-colors group-hover:scale-105 duration-200 cursor-pointer">
                       <Download className="w-4 h-4" />
                     </button>
                   </div>

@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 import { appendToSheet } from '@/lib/google-sheets';
+import { getServerAuth } from '@/lib/auth-server';
 
 export async function POST(request: Request) {
   try {
+    const { user } = await getServerAuth();
+    const isDemo = !process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    if (!isDemo && !user) {
+      return NextResponse.json({ error: 'Unauthorized: Session required' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { date, className, students } = body;
 
@@ -10,7 +18,7 @@ export async function POST(request: Request) {
 
     // For demo purposes, if there is no spreadsheet ID, just simulate success
     if (!spreadsheetId) {
-      console.log('No GOOGLE_SHEET_ID provided, skipping actual Google Sheets insertion. Simulating success.', { date, className, studentsCount: students.length });
+      console.log('No GOOGLE_SHEET_ID provided, skipping actual Google Sheets insertion. Simulating success.', { date, className, studentsCount: students?.length });
       return NextResponse.json({ success: true, message: 'Simulated saving to Google Sheets' });
     }
 

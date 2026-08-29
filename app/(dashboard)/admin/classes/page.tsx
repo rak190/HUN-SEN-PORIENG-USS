@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useClasses } from './useClasses';
 import { TeacherCombobox } from './TeacherCombobox';
+import Modal from '@/components/ui/Modal';
 
 export default function AdminClassesPage() {
   const {
@@ -398,58 +399,53 @@ export default function AdminClassesPage() {
         )}
       </div>
 
-      {/* Import Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                នាំចូលទិន្នន័យពី Excel (Import Classes)
-              </h3>
-              <button 
-                onClick={() => setShowImportModal(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6 flex-1 flex flex-col gap-4">
-              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
-                <div className="font-bold shrink-0 mt-0.5">របៀបប្រើ៖</div>
-                <div>
-                  សូម Copy ទិន្នន័យពី Excel រួច Paste ចូលក្នុងប្រអប់ខាងក្រោម។ ជួរឈរ (Columns) ត្រូវតែរៀបតាមលំដាប់ដូចនេះ៖<br/>
-                  <code className="font-mono font-bold bg-white px-2 py-1 rounded border border-blue-200 text-blue-700 mt-2 inline-block">ឈ្មោះថ្នាក់ (Name) | ថ្នាក់ទី (Grade) | កម្មវិធី (Track) | បន្ទប់ (Room)</code>
-                </div>
-              </div>
-              
-              <textarea
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                placeholder="Paste your Excel data here...&#10;10A&#9;10&#9;ទូទៅ&#9;101&#10;11A&#9;11&#9;វិទ្យាសាស្ត្រពិត&#9;201"
-                className="w-full flex-1 min-h-[250px] p-4 border border-slate-200 rounded-xl bg-slate-50 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/50 focus:border-emerald-400 focus:bg-white transition-all whitespace-pre"
-              ></textarea>
-            </div>
-            
-            <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
-              <button 
-                onClick={() => setShowImportModal(false)}
-                className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-full transition-colors"
-              >
-                បោះបង់ (Cancel)
-              </button>
-              <button 
-                onClick={handleRunImport}
-                disabled={isImporting || !importText.trim()}
-                className="px-6 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-full shadow-sm transition-colors flex items-center gap-2"
-              >
-                {isImporting ? 'កំពុងបញ្ចូល...' : 'បញ្ជាក់ការបញ្ចូល (Import)'}
-              </button>
+      {/* Import Modal (Full-Screen Frosted Glass Portal) */}
+      <Modal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        size="3xl"
+        icon={
+          <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shadow-xs">
+            <FileSpreadsheet className="w-5 h-5" />
+          </div>
+        }
+        title="នាំចូលទិន្នន័យពី Excel (Import Classes)"
+      >
+        <div className="p-6 sm:p-8 flex flex-col gap-5">
+          <div className="bg-blue-50/90 border border-blue-100 rounded-2xl p-4 flex gap-3 text-sm text-blue-800 shadow-2xs">
+            <div className="font-extrabold shrink-0 mt-0.5">របៀបប្រើ៖</div>
+            <div>
+              សូម Copy ទិន្នន័យពី Excel រួច Paste ចូលក្នុងប្រអប់ខាងក្រោម។ ជួរឈរ (Columns) ត្រូវតែរៀបតាមលំដាប់ដូចនេះ៖<br />
+              <code className="font-mono font-bold bg-white px-2 py-1 rounded-lg border border-blue-200 text-blue-700 mt-2 inline-block text-xs">
+                ឈ្មោះថ្នាក់ (Name) | ថ្នាក់ទី (Grade) | កម្មវិធី (Track) | បន្ទប់ (Room)
+              </code>
             </div>
           </div>
+
+          <textarea
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            placeholder="Paste your Excel data here...&#10;10A&#9;10&#9;ទូទៅ&#9;101&#10;11A&#9;11&#9;វិទ្យាសាស្ត្រពិត&#9;201"
+            className="w-full min-h-[220px] p-4 border border-slate-200 rounded-2xl bg-slate-50 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 focus:bg-white transition-all whitespace-pre resize-none"
+          />
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              onClick={() => setShowImportModal(false)}
+              className="px-5 py-2.5 text-xs font-extrabold text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            >
+              បោះបង់ (Cancel)
+            </button>
+            <button
+              onClick={handleRunImport}
+              disabled={isImporting || !importText.trim()}
+              className="px-6 py-2.5 text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-98"
+            >
+              {isImporting ? 'កំពុងបញ្ចូល...' : 'បញ្ជាក់ការបញ្ចូល (Import)'}
+            </button>
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

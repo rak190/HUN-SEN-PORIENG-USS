@@ -79,15 +79,18 @@ export function useClasses() {
       const data = await res.json();
       if (data.academicYears && data.academicYears.length > 0) {
         setAcademicYears(data.academicYears);
-        const activeYear = data.academicYears.find((y: AcademicYear) => y.is_active);
+        const activeYear = data.academicYears.find((y: any) => y.is_active || y.is_current);
         if (activeYear) {
           setSelectedYearId(activeYear.id);
         } else {
           setSelectedYearId(data.academicYears[0].id);
         }
+      } else {
+        fetchClasses('');
       }
     } catch (e) {
       console.error('Failed to fetch academic years:', e);
+      fetchClasses('');
     } finally {
       setLoading(false);
     }
@@ -98,17 +101,25 @@ export function useClasses() {
       const res = await fetch('/api/admin/users');
       const data = await res.json();
       if (data.users) {
-        setTeachers(data.users.filter((u: UserProfile) => u.role === 'teacher'));
+        const teacherList = data.users
+          .filter((u: any) => u.role === 'teacher' || u.role === 'principal' || u.role === 'admin')
+          .map((u: any) => ({
+            id: u.id,
+            full_name: u.full_name || u.name || u.username || 'គ្រូបង្រៀន',
+            role: u.role
+          }));
+        setTeachers(teacherList);
       }
     } catch (e) {
       console.error('Failed to fetch teachers:', e);
     }
   };
 
-  const fetchClasses = async (yearId: string) => {
+  const fetchClasses = async (yearId?: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/classes?academic_year_id=${yearId}`);
+      const url = yearId ? `/api/admin/classes?academic_year_id=${yearId}` : '/api/admin/classes';
+      const res = await fetch(url);
       const data = await res.json();
       if (data.classes) {
         setClasses(data.classes);

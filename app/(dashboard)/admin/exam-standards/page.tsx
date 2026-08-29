@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Save, Trash2, PencilLine, Check, Plus, BookText, SlidersHorizontal, Trophy
+  Save, Trash2, PencilLine, Check, Plus, BookText, SlidersHorizontal, Trophy, CheckCircle2, Loader2
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 
@@ -17,6 +17,9 @@ export default function AdminExamStandardsPage() {
   const [coefficientView, setCoefficientView] = useState('11-12-sci');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isEditingGrades, setIsEditingGrades] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   const [gradingRanges, setGradingRanges] = useState([
     { id: 'A', label: 'ល្អប្រសើរ (Excellent)', min: 85, max: 100, color: 'emerald' },
@@ -40,8 +43,57 @@ export default function AdminExamStandardsPage() {
     { id: '10', name: 'ភាសាបរទេស', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1 },
   ]);
 
+  useEffect(() => {
+    async function loadStandards() {
+      try {
+        const res = await fetch('/api/admin/exam-standards');
+        if (res.ok) {
+          const { standards } = await res.json();
+          if (standards) {
+            if (standards.gradingRanges) setGradingRanges(standards.gradingRanges);
+            if (standards.globalSubjects) setGlobalSubjects(standards.globalSubjects);
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadStandards();
+  }, []);
+
+  const handleSaveStandards = async () => {
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/admin/exam-standards', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          standards: {
+            gradingRanges,
+            globalSubjects
+          }
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to save standards');
+      }
+
+      setHasUnsavedChanges(false);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (err: any) {
+      alert('កំហុសក្នុងការរក្សាទុក៖ ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <div className="space-y-6 animate-fadeIn select-none p-4 md:p-8 bg-slate-50 min-h-screen">
+    <div className="space-y-6 animate-fadeIn select-none">
       
       {/* Top Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
@@ -55,18 +107,24 @@ export default function AdminExamStandardsPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-          {activeTab === 'subjects' && (
-            <button className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-full text-sm transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap group">
-              <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" /> មុខវិជ្ជាថ្មី
-            </button>
-          )}
-          {activeTab === 'grading' && (
-            <button className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-full text-sm transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap group">
-              <Save className="w-4 h-4 group-hover:scale-110 transition-transform" /> រក្សាទុក
-            </button>
-          )}
+          <button 
+            onClick={handleSaveStandards} 
+            disabled={isSaving}
+            className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-full text-sm transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap group cursor-pointer"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 group-hover:scale-110 transition-transform" />}
+            <span>{isSaving ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកទិន្នន័យ'}</span>
+          </button>
         </div>
       </header>
+
+      {/* Success Alert */}
+      {savedSuccess && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center gap-2 text-sm font-bold animate-fadeIn">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>ការកំណត់ស្តង់ដារប្រលង និងពិន្ទុត្រូវបានរក្សាទុកជោគជ័យ!</span>
+        </div>
+      )}
 
       {/* Action Switcher */}
       <div className="flex flex-wrap items-center gap-2 pt-1 border-b border-slate-200/60 pb-4">
@@ -462,10 +520,12 @@ export default function AdminExamStandardsPage() {
                   បោះបង់
                 </button>
                 <button 
-                  onClick={() => setHasUnsavedChanges(false)}
-                  className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-[#155EEF] hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 transition-all flex items-center gap-2 cursor-pointer"
+                  onClick={handleSaveStandards}
+                  disabled={isSaving}
+                  className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-[#155EEF] hover:bg-blue-700 disabled:opacity-50 hover:shadow-lg hover:shadow-blue-500/30 transition-all flex items-center gap-2 cursor-pointer"
                 >
-                  <Check className="w-4 h-4" /> រក្សាទុក
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  <span>{isSaving ? 'កំពុងរក្សាទុក...' : 'រក្សាទុក'}</span>
                 </button>
               </div>
             </div>

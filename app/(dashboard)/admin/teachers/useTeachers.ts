@@ -9,6 +9,8 @@ export interface Account {
   school: string;
   status: string;
   lastLogin: string;
+  phone?: string;
+  subject?: string;
   created_at: string;
 }
 
@@ -17,6 +19,8 @@ export interface InlineNewTeacher {
   fullName: string;
   password?: string;
   role: string;
+  phone?: string;
+  subject?: string;
 }
 
 export function useTeachers() {
@@ -35,7 +39,9 @@ export function useTeachers() {
     username: '',
     fullName: '',
     password: '',
-    role: 'teacher'
+    role: 'teacher',
+    phone: '',
+    subject: ''
   });
 
   const [draftGrid, setDraftGrid] = useState<InlineNewTeacher[]>(
@@ -237,7 +243,7 @@ export function useTeachers() {
     
     rows.forEach(row => {
       const cols = row.split('\t');
-      // Format: FullName | Role | Username | Password
+      // Format: FullName | Role | Phone | Subject | Status | Username | Password
       if (cols.length > 0) {
         const rawRole = cols[1]?.trim().toLowerCase() || '';
         let mappedRole = 'teacher';
@@ -245,14 +251,16 @@ export function useTeachers() {
         else if (rawRole.includes('principal') || rawRole.includes('នាយក')) mappedRole = 'principal';
         else if (rawRole.includes('monitor') || rawRole.includes('ប្រធាន')) mappedRole = 'monitor';
 
-        // Support pasting 5 columns (if they copied the table directly which has Status in middle)
-        const hasStatusCol = cols[2]?.trim().includes('សកម្ម') || cols[2]?.trim().includes('ផ្អាក');
-        const usernameIdx = hasStatusCol ? 3 : 2;
-        const passwordIdx = hasStatusCol ? 4 : 3;
+        // Support pasting with or without Status column (status is usually column 4 if copied from table)
+        const hasStatusCol = cols[4]?.trim().includes('សកម្ម') || cols[4]?.trim().includes('ផ្អាក');
+        const usernameIdx = hasStatusCol ? 5 : 4;
+        const passwordIdx = hasStatusCol ? 6 : 5;
 
         newDrafts.push({
           fullName: cols[0]?.trim() || '',
           role: mappedRole,
+          phone: cols[2]?.trim() || '',
+          subject: cols[3]?.trim() || '',
           username: cols[usernameIdx]?.trim() || '',
           password: cols[passwordIdx]?.trim() || ''
         });
@@ -308,11 +316,13 @@ export function useTeachers() {
   };
 
   const handleExport = () => {
-    const headers = ['ឈ្មោះពេញ', 'ឈ្មោះគណនី (Username)', 'តួនាទី (Role)', 'ស្ថានភាព'];
+    const headers = ['ឈ្មោះពេញ', 'ឈ្មោះគណនី (Username)', 'តួនាទី (Role)', 'លេខទូរស័ព្ទ (Phone)', 'មុខវិជ្ជា (Subject)', 'ស្ថានភាព'];
     const rows = accounts.map(a => [
       a.name,
       a.username,
       a.roleKh || a.role,
+      a.phone || '',
+      a.subject || '',
       a.status
     ]);
     

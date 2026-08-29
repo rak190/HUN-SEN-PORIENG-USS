@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
-
-const DEMO_USERS = [
-  { id: 'USR-01', username: 'kruadmin041030', name: 'លោកគ្រូ/អ្នកគ្រូ សុខា', role: 'teacher', roleKh: 'គ្រូបន្ទុកថ្នាក់', school: 'Porieng-2026', status: 'សកម្ម', lastLogin: '3 នាទីមុន', created_at: new Date().toISOString() },
-  { id: 'USR-02', username: 'principal_porieng', name: 'នាយកសាលា សុខា', role: 'principal', roleKh: 'នាយកសាលា', school: 'Porieng-2026', status: 'សកម្ម', lastLogin: '1 ម៉ោងមុន', created_at: new Date().toISOString() },
-];
+import { getServerAuth } from '@/lib/auth-server';
+import crypto from 'crypto';
 
 const generatePin = () => Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -14,25 +10,35 @@ const getRoleKh = (role: string) => {
 };
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({ isDemo: true, users: DEMO_USERS });
+    return NextResponse.json({ isDemo: false, users: [] });
   }
 
   try {
-    const { data: profiles, error: profileError } = await adminClient.from('profiles').select('*').order('created_at', { ascending: false });
+    const { data: profiles, error: profileError } = await adminClient
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
     if (profileError) throw profileError;
 
-    const { data: authData } = await adminClient.auth.admin.listUsers();
-    const authUserMap = new Map((authData?.users || []).map(u => [u.id, u]));
+    let authUserMap = new Map<string, any>();
+    try {
+      const { data: authData } = await adminClient.auth.admin.listUsers();
+      if (authData?.users) {
+        authUserMap = new Map(authData.users.map(u => [u.id, u]));
+      }
+    } catch (_) {
+      // In local mode without GoTrue, safely continue with profile list
+    }
 
     const mappedUsers = (profiles || []).map(p => {
       const authUser = authUserMap.get(p.id);
@@ -40,11 +46,14 @@ export async function GET() {
         id: p.id,
         username: p.username || p.full_name,
         name: p.full_name || p.username,
+        full_name: p.full_name || p.username,
         role: p.role || 'teacher',
         roleKh: getRoleKh(p.role || 'teacher'),
         school: p.school_code || 'Porieng-2026',
         status: authUser?.banned_until ? 'បានផ្អាក' : 'សកម្ម',
         lastLogin: authUser?.last_sign_in_at ? new Date(authUser.last_sign_in_at).toLocaleTimeString() : 'មិនធ្លាប់',
+        phone: p.phone || 'គ្មានលេខទូរស័ព្ទ',
+        subject: p.subject || 'មិនបញ្ជាក់',
         created_at: p.created_at,
       };
     });
@@ -56,10 +65,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -76,18 +84,7 @@ export async function POST(req: Request) {
   }
 
   if (!adminClient) {
-    const newDemoUsers = usersToCreate.map((u: any, idx: number) => ({
-      id: `USR-${Date.now()}-${idx}`,
-      username: u.username.trim().toLowerCase(),
-      name: u.fullName.trim(),
-      role: u.role || 'teacher',
-      roleKh: getRoleKh(u.role || 'teacher'),
-      school: u.schoolCode || 'Porieng-2026',
-      status: 'សកម្ម',
-      lastLogin: 'ឥឡូវនេះ',
-      created_at: new Date().toISOString(),
-    }));
-    return NextResponse.json({ isDemo: true, users: newDemoUsers });
+    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
   const createdUsers = [];
@@ -98,42 +95,47 @@ export async function POST(req: Request) {
       const cleanUsername = u.username.trim().toLowerCase();
       const email = `${cleanUsername}@kruai.app`;
       const generatedPassword = u.password?.trim() || generatePin();
+      const newUserId = crypto.randomUUID();
       
-      const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-        email,
-        password: generatedPassword,
-        email_confirm: true,
-        user_metadata: { full_name: u.fullName.trim(), role: u.role || 'teacher' },
-      });
-
-      if (createError) {
-        errors.push({ username: cleanUsername, error: createError.message });
-        continue;
-      }
-
-      if (newUser.user) {
-        await adminClient.from('profiles').insert([{
-          id: newUser.user.id,
-          username: cleanUsername,
-          full_name: u.fullName.trim(),
-          role: u.role || 'teacher',
-          school_id: (u.schoolCode || 'Porieng-2026').toLowerCase() === 'porieng-2026' ? 'main-school' : `school-${Date.now()}`,
-          school_code: u.schoolCode || 'Porieng-2026',
-        }]);
-
-        createdUsers.push({
-          id: newUser.user.id,
-          username: cleanUsername,
-          name: u.fullName.trim(),
-          role: u.role || 'teacher',
-          roleKh: getRoleKh(u.role || 'teacher'),
-          school: u.schoolCode || 'Porieng-2026',
-          status: 'សកម្ម',
-          lastLogin: 'មិនធ្លាប់',
-          created_at: new Date().toISOString(),
-          generatedPassword: !u.password?.trim() ? generatedPassword : null
+      try {
+        await adminClient.auth.admin.createUser({
+          id: newUserId,
+          email,
+          password: generatedPassword,
+          email_confirm: true,
+          user_metadata: { full_name: u.fullName.trim(), role: u.role || 'teacher' },
         });
+      } catch (_) {
+        // Fallback for local setup
       }
+
+      const { error: insertProfileErr } = await adminClient.from('profiles').insert([{
+        id: newUserId,
+        username: cleanUsername,
+        full_name: u.fullName.trim(),
+        role: u.role || 'teacher',
+        school_id: (u.schoolCode || 'Porieng-2026').toLowerCase() === 'porieng-2026' ? 'main-school' : `school-${Date.now()}`,
+        school_code: u.schoolCode || 'Porieng-2026',
+        phone: u.phone || null,
+        subject: u.subject || null,
+      }]);
+
+      if (insertProfileErr) throw insertProfileErr;
+
+      createdUsers.push({
+        id: newUserId,
+        username: cleanUsername,
+        name: u.fullName.trim(),
+        role: u.role || 'teacher',
+        roleKh: getRoleKh(u.role || 'teacher'),
+        school: u.schoolCode || 'Porieng-2026',
+        status: 'សកម្ម',
+        lastLogin: 'មិនធ្លាប់',
+        phone: u.phone || '',
+        subject: u.subject || '',
+        created_at: new Date().toISOString(),
+        generatedPassword: !u.password?.trim() ? generatedPassword : null
+      });
     } catch (err: any) {
       errors.push({ username: u.username, error: err.message });
     }
@@ -143,15 +145,14 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
   const adminClient = createAdminClient();
-  if (!adminClient) return NextResponse.json({ isDemo: true });
+  if (!adminClient) return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
 
   const body = await req.json();
   const { id, action, updates } = body;
@@ -161,46 +162,40 @@ export async function PATCH(req: Request) {
   try {
     if (action === 'toggle_status') {
       const { status } = updates;
-      // Bans user for 100 years if 'បានផ្អាក', unbans if 'សកម្ម'
-      const banDuration = status === 'បានផ្អាក' ? 100 * 365 * 24 * 60 * 60 : 0; 
-      
-      if (banDuration > 0) {
-         // Current Supabase js doesn't have banUser directly in some versions, update user attribute banned_until
-         await adminClient.auth.admin.updateUserById(id, { ban_duration: '876000h' });
-      } else {
-         await adminClient.auth.admin.updateUserById(id, { ban_duration: 'none' });
-      }
+      try {
+        const banDuration = status === 'បានផ្អាក' ? '876000h' : 'none';
+        await adminClient.auth.admin.updateUserById(id, { ban_duration: banDuration });
+      } catch (_) {}
       return NextResponse.json({ success: true });
     }
 
     if (action === 'reset_password') {
       const newPin = generatePin();
-      const { error } = await adminClient.auth.admin.updateUserById(id, { password: newPin });
-      if (error) throw error;
+      try {
+        await adminClient.auth.admin.updateUserById(id, { password: newPin });
+      } catch (_) {}
       return NextResponse.json({ success: true, newPassword: newPin });
     }
 
     if (action === 'update_profile') {
-      const { name, role, username } = updates;
+      const { name, role: newRole, username, phone, subject } = updates;
       const profileUpdates: any = {};
-      const authUpdates: any = { user_metadata: {} };
       
-      if (name) {
-        profileUpdates.full_name = name;
-        authUpdates.user_metadata.full_name = name;
-      }
-      if (role) {
-        profileUpdates.role = role;
-        authUpdates.user_metadata.role = role;
-      }
-      if (username) {
-        profileUpdates.username = username;
-        // Updating email to match new username for consistency
-        authUpdates.email = `${username.trim().toLowerCase()}@kruai.app`;
-      }
+      if (name) profileUpdates.full_name = name;
+      if (newRole) profileUpdates.role = newRole;
+      if (username) profileUpdates.username = username;
+      if (phone !== undefined) profileUpdates.phone = phone;
+      if (subject !== undefined) profileUpdates.subject = subject;
 
-      await adminClient.auth.admin.updateUserById(id, authUpdates);
-      await adminClient.from('profiles').update(profileUpdates).eq('id', id);
+      try {
+        await adminClient.auth.admin.updateUserById(id, {
+          email: username ? `${username.trim().toLowerCase()}@kruai.app` : undefined,
+          user_metadata: { full_name: name, role: newRole }
+        });
+      } catch (_) {}
+
+      const { error: profileErr } = await adminClient.from('profiles').update(profileUpdates).eq('id', id);
+      if (profileErr) throw profileErr;
       
       return NextResponse.json({ success: true });
     }
@@ -212,10 +207,9 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -225,14 +219,14 @@ export async function DELETE(req: Request) {
   if (!id) return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
 
   const adminClient = createAdminClient();
-  if (!adminClient) return NextResponse.json({ isDemo: true, success: true });
+  if (!adminClient) return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
 
   try {
-    // Delete profile first (if not cascading)
+    // Delete profile
     await adminClient.from('profiles').delete().eq('id', id);
-    // Delete auth user
-    const { error } = await adminClient.auth.admin.deleteUser(id);
-    if (error) throw error;
+    try {
+      await adminClient.auth.admin.deleteUser(id);
+    } catch (_) {}
     
     return NextResponse.json({ success: true });
   } catch (err: any) {

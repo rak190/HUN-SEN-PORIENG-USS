@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
+import { getServerAuth } from '@/lib/auth-server';
 
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role: userRole } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (userRole !== 'admin' && userRole !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -20,27 +19,7 @@ export async function PATCH(
   const { fullName, role, schoolCode, password, homeroomClass } = body;
 
   if (!adminClient) {
-    // Return mock response for demo environment
-    const roleKh =
-      role === 'principal'
-        ? 'នាយកសាលា'
-        : role === 'admin'
-        ? 'អ្នកគ្រប់គ្រងប្រព័ន្ធ'
-        : role === 'monitor'
-        ? 'ប្រធានថ្នាក់'
-        : 'គ្រូបន្ទុកថ្នាក់';
-
-    return NextResponse.json({
-      isDemo: true,
-      message: 'User updated in demo mode.',
-      user: {
-        id,
-        name: fullName,
-        role,
-        roleKh,
-        school: schoolCode || 'Porieng-2026',
-      },
-    });
+    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
   try {
@@ -63,14 +42,12 @@ export async function PATCH(
 
     // 2. Update Auth User if password is changed
     if (password) {
-      const { error: authError } = await adminClient.auth.admin.updateUserById(id, {
-        password,
-        user_metadata: { full_name: fullName, role },
-      });
-
-      if (authError) {
-        return NextResponse.json({ error: authError.message }, { status: 400 });
-      }
+      try {
+        await adminClient.auth.admin.updateUserById(id, {
+          password,
+          user_metadata: { full_name: fullName, role },
+        });
+      } catch (_) {}
     }
 
     if (homeroomClass && role === 'teacher') {
@@ -84,17 +61,13 @@ export async function PATCH(
         .from('classes')
         .select('id')
         .eq('name', homeroomClass)
-        .single();
+        .maybeSingle();
 
       if (existingClass) {
         await adminClient
           .from('classes')
           .update({ teacher_id: id })
           .eq('id', existingClass.id);
-      } else {
-        await adminClient
-          .from('classes')
-          .insert([{ name: homeroomClass, teacher_id: id }]);
       }
     }
 
@@ -127,10 +100,9 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user, role: userRole } = await getServerAuth();
 
-  if (!user || user.user_metadata?.role !== 'admin') {
+  if (!user || (userRole !== 'admin' && userRole !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -138,29 +110,23 @@ export async function DELETE(
   const adminClient = createAdminClient();
 
   if (!adminClient) {
-    return NextResponse.json({
-      isDemo: true,
-      message: 'User deleted in demo mode.',
-      id,
-    });
+    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
   try {
     // 1. Delete profile
-    await adminClient.from('profiles').delete().eq('id', id);
+    const { error: profileErr } = await adminClient.from('profiles').delete().eq('id', id);
+    if (profileErr) throw profileErr;
 
-    // 2. Delete Auth user
-    const { error: deleteError } = await adminClient.auth.admin.deleteUser(id);
+    // 2. Unassign teacher from any classes
+    await adminClient.from('classes').update({ teacher_id: null }).eq('teacher_id', id);
 
-    if (deleteError) {
-      return NextResponse.json({ error: deleteError.message }, { status: 400 });
-    }
+    // 3. Delete auth user
+    try {
+      await adminClient.auth.admin.deleteUser(id);
+    } catch (_) {}
 
-    return NextResponse.json({
-      isDemo: false,
-      message: 'User successfully deleted',
-      id,
-    });
+    return NextResponse.json({ isDemo: false, message: 'User deleted successfully' });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to delete user' }, { status: 500 });
   }

@@ -219,11 +219,16 @@ export default function MonitorAttendancePage() {
   };
 
   const handleSave = async (type: 'submit') => {
+    if (!activeClass?.id) {
+      setToast({ message: 'សូមជ្រើសរើសថ្នាក់រៀនជាមុនសិន', type: 'error' });
+      return;
+    }
+
     setIsSaving(true);
     
     try {
       const upsertPayload = students.map(s => ({
-        class_id: activeClass?.id || 'demo-class-1',
+        class_id: activeClass.id,
         student_id: s.id,
         date: selectedDate,
         status: s.status,
@@ -236,7 +241,8 @@ export default function MonitorAttendancePage() {
         .upsert(upsertPayload, { onConflict: 'class_id,student_id,date' });
 
       if (dbError) {
-        console.error('Supabase error:', dbError);
+        console.error('Supabase attendance error:', dbError);
+        throw new Error(dbError.message);
       }
 
       const response = await fetch('/api/attendance', {
@@ -244,7 +250,7 @@ export default function MonitorAttendancePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: selectedDate,
-          className: activeClass?.name || '12 ក',
+          className: activeClass.name || '12 ក',
           students
         })
       });
@@ -256,10 +262,10 @@ export default function MonitorAttendancePage() {
       setMissingDays(prev => prev.filter(d => d !== selectedDate));
       setToast({ message: 'បញ្ជូនវត្តមានប្រចាំថ្ងៃទៅកាន់គ្រូដោយជោគជ័យ!', type: 'success' });
       setTimeout(() => setToast(null), 3000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to submit:', error);
-      setToast({ message: 'មានកំហុសក្នុងការបញ្ជូនទិន្នន័យ។ សូមសាកល្បងម្តងទៀត។', type: 'error' });
-      setTimeout(() => setToast(null), 3000);
+      setToast({ message: `មានកំហុសក្នុងការបញ្ជូនទិន្នន័យ៖ ${error?.message || 'សូមសាកល្បងម្តងទៀត'}`, type: 'error' });
+      setTimeout(() => setToast(null), 4000);
     }
     
     setIsSaving(false);

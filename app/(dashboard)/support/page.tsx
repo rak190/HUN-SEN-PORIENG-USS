@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import type { RiskLevel, SupportCaseStatus } from '@/types';
 import * as XLSX from 'xlsx';
 import { useSearchParams } from 'next/navigation';
+import Modal from '@/components/ui/Modal';
 
 interface CaseRow {
   id: string;
@@ -20,17 +21,12 @@ interface CaseRow {
   support_interventions?: Array<{ id: string; action_type: string; action_date: string; notes: string; outcome?: string | null; follow_up_at?: string | null }>;
 }
 
-const DEMO_CASES: CaseRow[] = [
-  { id: 'case-1', student_id: 'std-5', category: 'attendance', priority: 'high', status: 'open', summary: 'អវត្តមានញឹកញាប់ និងជួយការងារគ្រួសារ', next_follow_up_at: '2026-07-10', students: { full_name: 'ទិត្យ វិសាល', guardian_phone: '012 345 678' } },
-  { id: 'case-2', student_id: 'std-3', category: 'achievement', priority: 'medium', status: 'monitoring', summary: 'ពិន្ទុគណិតវិទ្យាទាប', students: { full_name: 'ចាន់ សុភាព', guardian_phone: '097 222 111' } },
-];
-
 const CATEGORY_LABEL: Record<string, string> = {
   attendance: 'វត្តមាន', achievement: 'ការសិក្សា', discipline: 'វិន័យ', health: 'សុខភាព', family: 'គ្រួសារ/ជីវភាព', dropout_risk: 'ហានិភ័យបោះបង់',
 };
 
 export default function SupportPage() {
-  const { activeClass, profile, user, isDemoMode } = useAuth();
+  const { activeClass, profile, user } = useAuth();
   const supabase = createClient();
   const searchParams = useSearchParams();
   const requestedStudent = searchParams.get('student');
@@ -48,22 +44,27 @@ export default function SupportPage() {
   const notify = (message: string) => { setToast(message); setTimeout(() => setToast(''), 2800); };
 
   const loadData = async () => {
-    if (isDemoMode || !activeClass) {
-      setCases(DEMO_CASES);
-      setStudents(DEMO_CASES.map((item) => ({ id: item.student_id, full_name: item.students?.full_name || 'សិស្ស' })));
-      setSelectedId((current) => current || DEMO_CASES[0].id);
+    if (!activeClass) {
+      setCases([]);
+      setStudents([]);
+      setSelectedId('');
       return;
     }
     const [caseResult, studentResult] = await Promise.all([
-      supabase.from('support_cases').select('*, students(full_name, guardian_phone), support_interventions(id, action_type, action_date, notes, outcome, follow_up_at)').eq('class_id', activeClass.id).order('updated_at', { ascending: false }),
+      supabase.from('support_cases').select('*, students(full_name, parent_phone), support_interventions(id, action_type, action_date, notes, outcome, follow_up_at)').eq('class_id', activeClass.id).order('updated_at', { ascending: false }),
       supabase.from('students').select('id, full_name').eq('class_id', activeClass.id).eq('is_active', true).order('full_name'),
     ]);
     if (caseResult.data) setCases(caseResult.data as unknown as CaseRow[]);
+    else setCases([]);
+
     if (studentResult.data) setStudents(studentResult.data);
+    else setStudents([]);
+
     if (caseResult.data?.length) setSelectedId((current) => current || caseResult.data[0].id);
+    else setSelectedId('');
   };
 
-  useEffect(() => { void loadData(); }, [activeClass?.id, isDemoMode]);
+  useEffect(() => { void loadData(); }, [activeClass?.id]);
   useEffect(() => {
     const requestKey = `${requestedStudent || ''}:${requestedCategory || ''}`;
     if (requestKey === handledRequest.current) return;
@@ -84,28 +85,22 @@ export default function SupportPage() {
 
   const createCase = async () => {
     if (!caseForm.studentId || !caseForm.summary.trim()) return alert('សូមជ្រើសសិស្ស និងបំពេញសេចក្តីសង្ខេប។');
-    const student = students.find((item) => item.id === caseForm.studentId);
-    const optimistic: CaseRow = { id: `case-${Date.now()}`, student_id: caseForm.studentId, category: caseForm.category, priority: caseForm.priority, status: 'open', summary: caseForm.summary.trim(), next_follow_up_at: caseForm.followUp || null, students: { full_name: student?.full_name || 'សិស្ស' } };
-    if (isDemoMode || !activeClass || !user) {
-      setCases((current) => [optimistic, ...current]); setSelectedId(optimistic.id); setShowNew(false); return notify('បានបង្កើតករណីគាំទ្រ។');
-    }
+    if (!activeClass || !user) return alert('សូមជ្រើសរើសថ្នាក់ជាមុនសិន។');
+    
     const { data, error } = await supabase.from('support_cases').insert({
       school_id: profile?.school_id, class_id: activeClass.id, student_id: caseForm.studentId, opened_by: user.id, assigned_to: user.id,
       category: caseForm.category, priority: caseForm.priority, summary: caseForm.summary.trim(), next_follow_up_at: caseForm.followUp || null,
-    }).select('*, students(full_name, guardian_phone)').single();
+    }).select('*, students(full_name, parent_phone)').single();
     if (error) return alert(error.message);
     setCases((current) => [data as unknown as CaseRow, ...current]); setSelectedId(data.id); setShowNew(false); notify('បានបង្កើតករណីគាំទ្រ។');
   };
 
   const addIntervention = async (actionType = followUp.actionType) => {
     if (!selectedCase || !followUp.notes.trim()) return alert('សូមបំពេញកំណត់ត្រាសកម្មភាព។');
-    if (!isDemoMode && user) {
+    if (user) {
       const { data: intervention, error } = await supabase.from('support_interventions').insert({ case_id: selectedCase.id, action_type: actionType, action_date: followUp.date, notes: followUp.notes.trim(), outcome: followUp.outcome || null, created_by: user.id }).select('id, action_type, action_date, notes, outcome, follow_up_at').single();
       if (error) return alert(error.message);
       await supabase.from('support_cases').update({ status: 'monitoring', updated_at: new Date().toISOString() }).eq('id', selectedCase.id);
-      setCases((current) => current.map((item) => item.id === selectedCase.id ? { ...item, status: 'monitoring', support_interventions: [intervention, ...(item.support_interventions || [])] } : item));
-    } else {
-      const intervention = { id: `intervention-${Date.now()}`, action_type: actionType, action_date: followUp.date, notes: followUp.notes.trim(), outcome: followUp.outcome || null };
       setCases((current) => current.map((item) => item.id === selectedCase.id ? { ...item, status: 'monitoring', support_interventions: [intervention, ...(item.support_interventions || [])] } : item));
     }
     setFollowUp({ actionType: 'note', notes: '', outcome: '', date: new Date().toISOString().slice(0, 10) });
@@ -115,10 +110,8 @@ export default function SupportPage() {
   const toggleResolved = async () => {
     if (!selectedCase) return;
     const status: SupportCaseStatus = selectedCase.status === 'resolved' ? 'monitoring' : 'resolved';
-    if (!isDemoMode) {
-      const { error } = await supabase.from('support_cases').update({ status, resolved_at: status === 'resolved' ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq('id', selectedCase.id);
-      if (error) return alert(error.message);
-    }
+    const { error } = await supabase.from('support_cases').update({ status, resolved_at: status === 'resolved' ? new Date().toISOString() : null, updated_at: new Date().toISOString() }).eq('id', selectedCase.id);
+    if (error) return alert(error.message);
     setCases((current) => current.map((item) => item.id === selectedCase.id ? { ...item, status } : item));
   };
 
@@ -306,67 +299,107 @@ export default function SupportPage() {
         </div>
       </div>
 
-      {/* New Case Modal */}
-      {showNew && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowNew(false)}>
-          <div className="bg-white rounded-3xl w-full max-w-lg p-8 space-y-6 shadow-2xl scale-100 animate-slideUp" onClick={(event) => event.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                <div className="p-2 bg-blue-50 text-[#155EEF] rounded-lg">
-                  <Plus className="w-5 h-5" />
-                </div>
-                បង្កើតករណីគាំទ្រថ្មី
-              </h2>
-              <button onClick={() => setShowNew(false)} className="text-slate-400 hover:text-slate-600 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 font-bold text-xl">
-                ×
-              </button>
+      {/* New Case Modal (Full-Screen Frosted Glass Portal) */}
+      <Modal
+        isOpen={showNew}
+        onClose={() => setShowNew(false)}
+        size="lg"
+        icon={
+          <div className="w-10 h-10 bg-blue-50 text-[#155EEF] rounded-xl flex items-center justify-center shadow-xs">
+            <Plus className="w-5 h-5" />
+          </div>
+        }
+        title="បង្កើតករណីគាំទ្រថ្មី"
+      >
+        <div className="p-6 sm:p-8 space-y-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                ជ្រើសរើសសិស្ស
+              </label>
+              <select
+                value={caseForm.studentId}
+                onChange={(event) => setCaseForm({ ...caseForm, studentId: event.target.value })}
+                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer"
+              >
+                <option value="">ជ្រើសសិស្ស...</option>
+                {students.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.full_name}
+                  </option>
+                ))}
+              </select>
             </div>
-            
-            <div className="space-y-4">
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">ជ្រើសរើសសិស្ស</label>
-                <select value={caseForm.studentId} onChange={(event) => setCaseForm({ ...caseForm, studentId: event.target.value })} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer">
-                  <option value="">ជ្រើសសិស្ស...</option>
-                  {students.map((student) => <option key={student.id} value={student.id}>{student.full_name}</option>)}
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                  ប្រភេទបញ្ហា
+                </label>
+                <select
+                  value={caseForm.category}
+                  onChange={(event) => setCaseForm({ ...caseForm, category: event.target.value })}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer"
+                >
+                  {Object.entries(CATEGORY_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">ប្រភេទបញ្ហា</label>
-                  <select value={caseForm.category} onChange={(event) => setCaseForm({ ...caseForm, category: event.target.value })} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer">
-                    {Object.entries(CATEGORY_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">កម្រិតអាទិភាព</label>
-                  <select value={caseForm.priority} onChange={(event) => setCaseForm({ ...caseForm, priority: event.target.value as RiskLevel })} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer">
-                    <option value="low">ទាប</option>
-                    <option value="medium">មធ្យម</option>
-                    <option value="high">ខ្ពស់ (បន្ទាន់)</option>
-                  </select>
-                </div>
-              </div>
-              
               <div>
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">សេចក្តីសង្ខេបបញ្ហា</label>
-                <textarea value={caseForm.summary} onChange={(event) => setCaseForm({ ...caseForm, summary: event.target.value })} rows={4} placeholder="ពណ៌នាអំពីបញ្ហារបស់សិស្ស..." className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold resize-none focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all placeholder:text-slate-400" />
-              </div>
-              
-              <div>
-                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">កាលបរិច្ឆេទតាមដានបន្ទាប់</label>
-                <input type="date" value={caseForm.followUp} onChange={(event) => setCaseForm({ ...caseForm, followUp: event.target.value })} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer" />
+                <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                  កម្រិតអាទិភាព
+                </label>
+                <select
+                  value={caseForm.priority}
+                  onChange={(event) => setCaseForm({ ...caseForm, priority: event.target.value as RiskLevel })}
+                  className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer"
+                >
+                  <option value="low">ទាប</option>
+                  <option value="medium">មធ្យម</option>
+                  <option value="high">ខ្ពស់ (បន្ទាន់)</option>
+                </select>
               </div>
             </div>
-            
-            <div className="pt-2">
-              <button onClick={createCase} className="w-full py-4 bg-gradient-to-r from-[#155EEF] to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-black text-sm shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2">
-                <HeartHandshake className="w-5 h-5" /> បង្កើតករណី
-              </button>
+
+            <div>
+              <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                សេចក្តីសង្ខេបបញ្ហា
+              </label>
+              <textarea
+                value={caseForm.summary}
+                onChange={(event) => setCaseForm({ ...caseForm, summary: event.target.value })}
+                rows={4}
+                placeholder="ពណ៌នាអំពីបញ្ហារបស់សិស្ស..."
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold resize-none focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all placeholder:text-slate-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                កាលបរិច្ឆេទតាមដានបន្ទាប់
+              </label>
+              <input
+                type="date"
+                value={caseForm.followUp}
+                onChange={(event) => setCaseForm({ ...caseForm, followUp: event.target.value })}
+                className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold focus:bg-white focus:border-[#155EEF] focus:outline-none focus:ring-4 focus:ring-blue-50 transition-all cursor-pointer"
+              />
             </div>
           </div>
+
+          <div className="pt-2">
+            <button
+              onClick={createCase}
+              className="w-full py-4 bg-gradient-to-r from-[#155EEF] to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-extrabold text-sm shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+            >
+              <HeartHandshake className="w-5 h-5" /> បង្កើតករណី
+            </button>
+          </div>
         </div>
-      )}
+      </Modal>
 
       {toast && (
         <div className="fixed bottom-6 right-6 bg-slate-900/90 backdrop-blur-sm text-white px-6 py-3.5 rounded-2xl shadow-2xl z-50 text-sm font-bold border border-white/10 animate-slideUp flex items-center gap-2">

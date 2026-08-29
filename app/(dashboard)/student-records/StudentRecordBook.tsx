@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Classroom, Student } from '@/types';
-import { CURRICULUM_SCHEMAS } from '@/lib/curriculum';
+import { getCurriculumSchemaForClass } from '@/lib/curriculum';
 import { computeSummaryGrades } from '@/lib/grade-calculations';
 
 interface Props {
@@ -12,11 +12,8 @@ interface Props {
 }
 
 export default function StudentRecordBook({ classInfo, student, allStudents, gradesData, teacherName }: Props) {
-  // Use curriculum schema
-  const schemaId = classInfo.grade.startsWith('10') || classInfo.grade.startsWith('11') || classInfo.grade.startsWith('12') 
-    ? (classInfo.grade.includes('A') || classInfo.grade.includes('B') || classInfo.grade.includes('C') ? 'upper-sec-sci' : 'upper-sec-art')
-    : 'lower-sec';
-  const schema = CURRICULUM_SCHEMAS[schemaId] || CURRICULUM_SCHEMAS['lower-sec'];
+  // Dynamically resolve curriculum schema
+  const schema = getCurriculumSchemaForClass(classInfo.grade, (classInfo as any).track);
 
   const processedData = useMemo(() => {
     const subjectIds = schema.subjects.map(s => s.id);
@@ -95,7 +92,7 @@ export default function StudentRecordBook({ classInfo, student, allStudents, gra
           <p>ថ្នាក់ទី <span className="font-moul text-[13px] text-[#155EEF] leading-none ml-2">{classInfo.name}</span></p>
           <p>សិស្សសរុប <span className="ml-1 text-[13px]">{allStudents.length}នាក់</span></p>
           <p>ស្រី <span className="ml-1 text-[13px]">{allStudents.filter(s => s.gender === 'F' || s.gender === 'ស្រី').length}នាក់</span></p>
-          <p className="text-red-600 font-bold text-[13px]">ឆ្នាំសិក្សា ៖ ២០២៥-២០២៦</p>
+          <p className="text-red-600 font-bold text-[13px]">ឆ្នាំសិក្សា ៖ {(classInfo as any)?.academic_years?.name || '២០២៥-២០២៦'}</p>
         </div>
       </div>
 
