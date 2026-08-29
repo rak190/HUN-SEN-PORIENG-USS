@@ -101,7 +101,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, student }: Stude
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
           
           {/* Quick Stats Grid */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">ថ្នាក់</p>
               <p className="font-extrabold text-slate-700">{student.class_name}</p>
@@ -110,13 +110,17 @@ export default function StudentProfileDrawer({ isOpen, onClose, student }: Stude
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">ភេទ</p>
               <p className="font-extrabold text-slate-700">{student.gender}</p>
             </div>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">គ្រូបន្ទុកថ្នាក់</p>
+              <p className="font-bold text-slate-700 truncate">{student.homeroom_teacher}</p>
+            </div>
             <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
               <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">ប្លង់តុ (Desk)</p>
               <p className="font-black text-[#155EEF] text-lg leading-none">{student.desk_number || 'គ្មាន'}</p>
             </div>
-            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">គ្រូបន្ទុកថ្នាក់</p>
-              <p className="font-bold text-slate-700 truncate">{student.homeroom_teacher}</p>
+            <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100 sm:col-span-2">
+              <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">លេខបន្ទប់ប្រឡង (Exam Room)</p>
+              <p className="font-black text-emerald-700 text-lg leading-none">{student.room_number || 'មិនទាន់កំណត់'}</p>
             </div>
           </div>
 

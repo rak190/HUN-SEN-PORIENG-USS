@@ -40,6 +40,8 @@ export interface SaveStudentPayload {
   housing?: string;
   income?: number;
   address?: string;
+  desk_number?: string;
+  room_number?: string;
   student_phone?: string;
   parent_phone?: string;
   current_status?: string;
@@ -95,6 +97,8 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
       income: payload.income ? Number(payload.income) : null,
       address: payload.address || null,
       parent_phone: payload.father_phone || payload.mother_phone || payload.parent_phone || payload.student_phone || null,
+      desk_number: payload.desk_number || null,
+      room_number: payload.room_number || null,
       enrollment_status: enrollmentStatus,
       is_active: isActive,
     };

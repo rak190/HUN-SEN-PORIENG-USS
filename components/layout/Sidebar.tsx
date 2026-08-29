@@ -103,7 +103,6 @@ const MENU_ITEMS: MenuItem[] = [
       { id: 'admin-school-info', label: 'School Info', khmerLabel: 'ព័ត៌មានសាលា', href: '/admin/school-info', icon: School, roles: ['admin'] },
       { id: 'admin-academic-setup', label: 'School Structure', khmerLabel: 'រចនាសម្ព័ន្ធឆ្នាំសិក្សា', href: '/admin/academic-setup', icon: CalendarDays, roles: ['admin'] },
       { id: 'admin-exam-standards', label: 'Exam Standards', khmerLabel: 'ស្តង់ដារការប្រលង', href: '/admin/exam-standards', icon: Award, roles: ['admin'] },
-      { id: 'admin-exam-rooms', label: 'Exam Rooms', khmerLabel: 'រៀបចំបន្ទប់ប្រឡង', href: '/admin/exam-rooms', icon: Building2, roles: ['admin'], badge: '៥៣បន្ទប់' },
     ]
   },
   {

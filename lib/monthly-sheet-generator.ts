@@ -22,6 +22,7 @@ interface StudentRecord {
   id: string;
   student_id_number?: string;
   desk_number?: string;
+  room_number?: string;
   full_name: string;
   gender?: string;
   dob?: string;
@@ -90,8 +91,12 @@ export function generateMonthlyExamWorkbook(
       return true;
     });
 
-    // Sort students by class and desk number or name
+    // Sort students by room, class, and desk number or name
     tabStudents.sort((a, b) => {
+      const rA = parseInt((a.room_number || '').replace(/\D/g, '') || '0', 10);
+      const rB = parseInt((b.room_number || '').replace(/\D/g, '') || '0', 10);
+      if (rA && rB && rA !== rB) return rA - rB;
+
       const cA = a.classes?.name || '';
       const cB = b.classes?.name || '';
       if (cA !== cB) return cA.localeCompare(cB);
@@ -101,15 +106,41 @@ export function generateMonthlyExamWorkbook(
       return a.full_name.localeCompare(b.full_name, 'km');
     });
 
-    // 2. Build rows for this sheet
+    // 2. Build rooms: check if students have room numbers assigned
+    const hasAssignedRooms = tabStudents.some(s => !!s.room_number);
+    let roomsMap: { roomNum: string | number; roomStudents: StudentRecord[] }[] = [];
+
+    if (hasAssignedRooms) {
+      const grouped = new Map<string, StudentRecord[]>();
+      tabStudents.forEach(s => {
+        const rKey = (s.room_number || '1').trim();
+        const list = grouped.get(rKey) || [];
+        list.push(s);
+        grouped.set(rKey, list);
+      });
+      // Convert map to sorted rooms
+      Array.from(grouped.keys()).sort((a, b) => {
+        const nA = parseInt(a.replace(/\D/g, '') || '0', 10);
+        const nB = parseInt(b.replace(/\D/g, '') || '0', 10);
+        if (nA && nB) return nA - nB;
+        return a.localeCompare(b);
+      }).forEach(k => {
+        roomsMap.push({ roomNum: k, roomStudents: grouped.get(k) || [] });
+      });
+    } else {
+      const studentsPerRoom = 26;
+      const totalRooms = Math.max(1, Math.ceil(tabStudents.length / studentsPerRoom));
+      for (let r = 0; r < totalRooms; r++) {
+        roomsMap.push({
+          roomNum: r + 1,
+          roomStudents: tabStudents.slice(r * studentsPerRoom, (r + 1) * studentsPerRoom)
+        });
+      }
+    }
+
     const sheetRows: any[][] = [];
-    const studentsPerRoom = 26;
-    const totalRooms = Math.max(1, Math.ceil(tabStudents.length / studentsPerRoom));
 
-    for (let roomIdx = 0; roomIdx < totalRooms; roomIdx++) {
-      const roomNum = roomIdx + 1;
-      const roomStudents = tabStudents.slice(roomIdx * studentsPerRoom, (roomIdx + 1) * studentsPerRoom);
-
+    roomsMap.forEach(({ roomNum, roomStudents }, roomIdx) => {
       // Header Banner
       sheetRows.push(['ព្រះរាជាណាចក្រកម្ពុជា']);
       sheetRows.push(['ជាតិ សាសនា ព្រះមហាក្សត្រ']);
@@ -164,7 +195,7 @@ export function generateMonthlyExamWorkbook(
       // Student rows
       let femaleCount = 0;
       roomStudents.forEach((std, sIdx) => {
-        const deskNum = std.desk_number || String(roomIdx * studentsPerRoom + sIdx + 1);
+        const deskNum = std.desk_number || String(roomIdx * 26 + sIdx + 1);
         const idNum = std.student_id_number || '';
         const { lastName, firstName } = splitKhmerName(std.full_name);
         const gender = std.gender === 'female' || std.gender === 'ស្រី' || std.gender === 'F' ? 'ស្រី' : 'ប្រុស';
@@ -215,7 +246,7 @@ export function generateMonthlyExamWorkbook(
       ]);
       sheetRows.push([]);
       sheetRows.push([]);
-    }
+    });
 
     // 3. Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(sheetRows);

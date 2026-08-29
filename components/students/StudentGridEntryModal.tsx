@@ -28,6 +28,8 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
     student_id_number: '',
     full_name: '',
     gender: 'M',
+    desk_number: '',
+    room_number: '',
     parent_phone: '',
   });
 
@@ -78,6 +80,8 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
       is_active: true,
       student_id_number: s.student_id_number.trim() || `ID-${Math.floor(Math.random() * 10000)}`,
       full_name: s.full_name.trim() || 'គ្មានឈ្មោះ',
+      desk_number: s.desk_number?.trim() || null,
+      room_number: s.room_number?.trim() || null,
     }));
 
     if (isDemoMode || !activeClass) {
@@ -129,10 +133,12 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
             <thead className="bg-slate-100 sticky top-0 z-10 shadow-sm font-black text-slate-600 text-xs uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-3 border border-slate-200 w-12 text-center text-slate-400">ល.រ</th>
-                <th className="px-4 py-3 border border-slate-200 w-48">អត្តលេខ*</th>
+                <th className="px-4 py-3 border border-slate-200 w-36">អត្តលេខ*</th>
                 <th className="px-4 py-3 border border-slate-200">ឈ្មោះពេញ*</th>
-                <th className="px-4 py-3 border border-slate-200 w-32">ភេទ (M/F)*</th>
-                <th className="px-4 py-3 border border-slate-200 w-48">លេខទូរសព្ទ</th>
+                <th className="px-4 py-3 border border-slate-200 w-24 text-center">ភេទ (M/F)*</th>
+                <th className="px-4 py-3 border border-slate-200 w-28 text-center">ប្លង់តុ</th>
+                <th className="px-4 py-3 border border-slate-200 w-32 text-center">លេខបន្ទប់</th>
+                <th className="px-4 py-3 border border-slate-200 w-40">លេខទូរសព្ទ</th>
               </tr>
             </thead>
             <tbody>
@@ -175,6 +181,30 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
                       onChange={(e) => handleChange(idx, 'gender', e.target.value)}
                       onKeyDown={(e) => handleKeyDown(e, idx, 'gender')}
                       maxLength={1}
+                    />
+                  </td>
+                  <td className="border border-slate-200 p-0 relative">
+                    <input
+                      data-row={idx}
+                      data-col="desk_number"
+                      type="text"
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-center font-mono text-sm"
+                      value={row.desk_number}
+                      onChange={(e) => handleChange(idx, 'desk_number', e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'desk_number')}
+                      placeholder={idx === 0 ? "A-01" : ""}
+                    />
+                  </td>
+                  <td className="border border-slate-200 p-0 relative">
+                    <input
+                      data-row={idx}
+                      data-col="room_number"
+                      type="text"
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-center font-mono text-sm"
+                      value={row.room_number}
+                      onChange={(e) => handleChange(idx, 'room_number', e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'room_number')}
+                      placeholder={idx === 0 ? "1" : ""}
                     />
                   </td>
                   <td className="border border-slate-200 p-0 relative">

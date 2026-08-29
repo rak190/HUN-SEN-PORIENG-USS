@@ -20,6 +20,7 @@ interface MassiveProfilingStudent {
   // Tab 1: Basic
   student_id_number: string;
   desk_number?: string;
+  room_number?: string;
   full_name: string;
   gender: string;
   date_of_birth: string;
@@ -300,6 +301,8 @@ export default function StudentsPage() {
   const handleExportGEIPExcel = () => {
     const wsData = students.map((std) => ({
       'អត្តលេខ': std.student_id_number,
+      'ប្លង់តុ': std.desk_number || '',
+      'លេខបន្ទប់ប្រឡង': std.room_number || '',
       'នាមត្រកូល និងនាមខ្លួន': std.full_name,
       'ភេទ': std.gender === 'F' ? 'ស្រី' : 'ប្រុស',
       'ថ្ងៃខែឆ្នាំកំណើត': std.date_of_birth,
@@ -849,6 +852,7 @@ export default function StudentsPage() {
                   <>
                     {renderSortHeader('ភេទ', 'gender', 'center')}
                     {renderSortHeader('ប្លង់តុ', 'desk_number', 'center')}
+                    {renderSortHeader('លេខបន្ទប់', 'room_number', 'center')}
                     {renderSortHeader('ថ្ងៃខែឆ្នាំកំណើត', 'date_of_birth')}
                     {renderSortHeader('អាយុ', 'age', 'center')}
                     <th className="p-4">សំបុត្រកំណើត</th>
@@ -912,12 +916,29 @@ export default function StudentsPage() {
                           type="text"
                           defaultValue={std.desk_number || ''}
                           placeholder="A-01"
-                          onBlur={(e) => {
-                            if (e.target.value !== std.desk_number) {
-                              setStudents(students.map(s => s.id === std.id ? { ...s, desk_number: e.target.value } : s));
+                          onBlur={async (e) => {
+                            const val = e.target.value.trim();
+                            if (val !== (std.desk_number || '')) {
+                              setStudents(students.map(s => s.id === std.id ? { ...s, desk_number: val } : s));
+                              await supabase.from('students').update({ desk_number: val || null }).eq('id', std.id);
                             }
                           }}
                           className="w-16 bg-transparent border border-transparent hover:border-slate-200 focus:border-[#155EEF] rounded-lg px-2 py-1 text-center text-xs font-bold font-mono outline-none transition-colors"
+                        />
+                      </td>
+                      <td className="p-4 text-center">
+                        <input
+                          type="text"
+                          defaultValue={std.room_number || ''}
+                          placeholder="បន្ទប់ ១"
+                          onBlur={async (e) => {
+                            const val = e.target.value.trim();
+                            if (val !== (std.room_number || '')) {
+                              setStudents(students.map(s => s.id === std.id ? { ...s, room_number: val } : s));
+                              await supabase.from('students').update({ room_number: val || null }).eq('id', std.id);
+                            }
+                          }}
+                          className="w-20 bg-transparent border border-transparent hover:border-slate-200 focus:border-[#155EEF] rounded-lg px-2 py-1 text-center text-xs font-bold font-mono outline-none transition-colors"
                         />
                       </td>
                       <td className="p-4">{std.date_of_birth}</td>
@@ -1205,6 +1226,14 @@ export default function StudentsPage() {
                     <label className="block text-xs font-bold text-slate-700">
                       លេខសំបុត្រកំណើត
                       <input type="text" value={formData.birth_cert_no || ''} onChange={e=>setFormData({...formData, birth_cert_no:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      ប្លង់តុ (Desk Number)
+                      <input type="text" placeholder="A-01" value={formData.desk_number || ''} onChange={e=>setFormData({...formData, desk_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-700">
+                      លេខបន្ទប់ប្រឡង (Exam Room)
+                      <input type="text" placeholder="បន្ទប់ ១" value={formData.room_number || ''} onChange={e=>setFormData({...formData, room_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                     </label>
                   </>
                 )}

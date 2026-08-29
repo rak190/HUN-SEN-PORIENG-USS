@@ -49,6 +49,7 @@ export default function MasterStudentsPage() {
               full_name: s.full_name,
               student_id_number: s.student_id_number,
               desk_number: s.desk_number,
+              room_number: s.room_number,
               gender: s.gender,
               class_name: s.classes?.name || 'គ្មានថ្នាក់',
               homeroom_teacher: teacherProfile ? teacherProfile.full_name : 'មិនមាន',
@@ -74,7 +75,8 @@ export default function MasterStudentsPage() {
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.full_name.includes(searchQuery) 
       || (s.student_id_number || '').includes(searchQuery)
-      || (s.desk_number || '').includes(searchQuery);
+      || (s.desk_number || '').includes(searchQuery)
+      || (s.room_number || '').includes(searchQuery);
     const matchesClass = activeClass === 'all' || s.class_name === activeClass;
     const matchesTeacher = activeTeacher === 'all' || s.homeroom_teacher === activeTeacher;
     
@@ -100,6 +102,7 @@ export default function MasterStudentsPage() {
       'ថ្នាក់': s.class_name,
       'គ្រូបន្ទុកថ្នាក់': s.homeroom_teacher,
       'ប្លង់តុ': s.desk_number || '',
+      'លេខបន្ទប់': s.room_number || '',
       'ស្ថានភាព': s.is_active ? 'សកម្ម' : 'ផ្អាក'
     }));
 
@@ -342,6 +345,7 @@ export default function MasterStudentsPage() {
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center border-r border-blue-100/80">ភេទ</th>
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center border-r border-blue-100/80">ថ្នាក់</th>
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center border-r border-blue-100/80">ប្លង់តុ</th>
+                <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center border-r border-blue-100/80">លេខបន្ទប់</th>
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider border-r border-blue-100/80">គ្រូបន្ទុកថ្នាក់</th>
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center">ស្ថានភាព</th>
               </tr>
@@ -387,6 +391,13 @@ export default function MasterStudentsPage() {
                       <span className="text-[10px] font-bold text-slate-400 italic">គ្មាន</span>
                     )}
                   </td>
+                  <td className="px-4 py-2 text-center border-r border-slate-100">
+                    {s.room_number ? (
+                      <span className="inline-flex px-2 py-0.5 bg-blue-50 text-[#155EEF] rounded-md text-xs font-black border border-blue-100">{s.room_number}</span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-slate-400 italic">គ្មាន</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 border-r border-slate-100">
                     <div className="flex items-center gap-2">
                       <div className="w-5 h-5 rounded-full bg-[#155EEF]/10 flex items-center justify-center text-[#155EEF] font-bold text-[9px]">
@@ -406,7 +417,7 @@ export default function MasterStudentsPage() {
               ))}
               {filteredStudents.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center border-r border-slate-100">
+                  <td colSpan={8} className="px-6 py-12 text-center border-r border-slate-100">
                     <div className="flex flex-col items-center justify-center space-y-3">
                       <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center">
                         <Search className="w-8 h-8 text-slate-400" />

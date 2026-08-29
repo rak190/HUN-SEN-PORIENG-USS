@@ -42,7 +42,7 @@ export function MonthlyExamSheetModal({ isOpen, onClose, selectedPeriod }: Month
       // 2. Fetch all active students with class information
       const { data: dbStudents, error: stdErr } = await supabase
         .from('students')
-        .select('id, student_id_number, desk_number, full_name, gender, dob, class_id, classes(id, name, grade, track)')
+        .select('id, student_id_number, desk_number, room_number, full_name, gender, dob, class_id, classes(id, name, grade, track)')
         .eq('is_active', true);
 
       if (stdErr) throw stdErr;

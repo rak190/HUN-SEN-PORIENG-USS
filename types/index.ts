@@ -125,6 +125,7 @@ export interface Student {
   dropout_risk?: boolean;
   home_visits?: HomeVisit[];
   desk_number?: string | null;
+  room_number?: string | null;
   scholarship_status?: string | null;
   special_needs_status?: string | null;
   transfer_history?: any[];
