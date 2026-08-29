@@ -87,22 +87,45 @@ export default function MoeysReportsPage() {
     // REP-01: Students joined with classes
     const { data: students, error } = await supabase
       .from('students')
-      .select('*, classes(name, grade)');
+      .select('*, classes(name, grade, track)')
+      .order('full_name', { ascending: true });
       
     if (error) throw error;
     
     // Format data for MoEYS standard
-    const excelData = students.map((s: any, index: number) => ({
-      'ល.រ (No.)': index + 1,
-      'អត្តលេខសិស្ស (Student ID)': s.student_id_number || 'N/A',
-      'គោត្តនាម និងនាម (Full Name)': s.full_name,
-      'ភេទ (Gender)': s.gender,
-      'ថ្ងៃខែឆ្នាំកំណើត (DOB)': s.dob || 'N/A',
-      'ថ្នាក់រៀន (Class)': s.classes?.name || 'N/A',
-      'កម្រិតថ្នាក់ (Grade)': s.classes?.grade || 'N/A',
-      'លេខទូរស័ព្ទអាណាព្យាបាល (Parent Phone)': s.parent_phone || 'N/A',
-      'ស្ថានភាព (Status)': s.is_active ? 'កំពុងសិក្សា' : 'បោះបង់ការសិក្សា'
-    }));
+    const excelData = (students || []).map((s: any, index: number) => {
+      let enrollType = 'សិស្សថ្មី/ឡើងថ្នាក់';
+      if (s.status === 'repeated' || s.is_repeater) enrollType = 'សិស្សត្រួតថ្នាក់';
+      else if (s.status === 'transferred_in') enrollType = 'សិស្សផ្ទេរចូល';
+
+      let statusLabel = 'កំពុងសិក្សា';
+      if (s.status === 'transferred_out') statusLabel = 'ផ្ទេរចេញ';
+      else if (s.status === 'dropped_out') statusLabel = 'បោះបង់ការសិក្សា';
+      else if (!s.is_active) statusLabel = 'អសកម្ម';
+
+      let povertyLabel = 'ទូទៅ';
+      if (s.poverty_status === 'poor_1') povertyLabel = 'ក្រីក្រកម្រិត ១ (ក្រ១)';
+      else if (s.poverty_status === 'poor_2') povertyLabel = 'ក្រីក្រកម្រិត ២ (ក្រ២)';
+      else if (s.poverty_status === 'near_poor') povertyLabel = 'ងាយរងហានិភ័យ';
+
+      return {
+        'ល.រ (No.)': index + 1,
+        'អត្តលេខសិស្ស (Student ID)': s.student_id_number || 'N/A',
+        'គោត្តនាម និងនាម (Full Name)': s.full_name,
+        'ភេទ (Gender)': s.gender === 'F' || s.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស',
+        'ថ្ងៃខែឆ្នាំកំណើត (DOB)': s.dob || 'N/A',
+        'ថ្នាក់រៀន (Class)': s.classes?.name || 'N/A',
+        'កម្រិតថ្នាក់ (Grade)': s.classes?.grade || 'N/A',
+        'បន្ទប់លេខ (Room)': s.room_number || 'N/A',
+        'លេខតុ (Desk)': s.desk_number || 'N/A',
+        'ប្រភេទសិស្ស (Type)': enrollType,
+        'ស្ថានភាពសិស្ស (Status)': statusLabel,
+        'បណ្ណសមធម៌/ក្រីក្រ (Poverty Status)': povertyLabel,
+        'សិស្សរៀនយឺត (Slow Learner)': s.is_slow_learner ? 'បាទ/ចាស' : 'ទេ',
+        'ប្រឈមបោះបង់ (Dropout Risk)': s.dropout_risk ? 'បាទ/ចាស' : 'ទេ',
+        'លេខទូរស័ព្ទអាណាព្យាបាល (Parent Phone)': s.parent_phone || 'N/A'
+      };
+    });
 
     exportToExcel(excelData, 'សរុបស្ថិតិសិស្សដើមឆ្នាំ_REP-01');
   };

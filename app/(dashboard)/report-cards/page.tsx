@@ -23,6 +23,7 @@ export default function ReportCardsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedPeriod, setSelectedPeriod] = useState('dec');
+  const [printMode, setPrintMode] = useState<'single' | 'class'>('single');
   const [dbScores, setDbScores] = useState<Record<string, Record<string, number>>>({});
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [teacherName, setTeacherName] = useState<string>('');
@@ -579,18 +580,32 @@ export default function ReportCardsPage() {
             
             <button 
               onClick={handleExportGEIP}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs shadow-md shadow-emerald-500/20 flex items-center gap-2 transition-all active:scale-95"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs shadow-md shadow-emerald-500/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
             >
               <Download className="w-4 h-4" />
               <span>ទាញយកទិន្នន័យ GEIP</span>
             </button>
 
             <button 
-              onClick={handlePrint}
+              onClick={() => {
+                setPrintMode('single');
+                setTimeout(() => window.print(), 100);
+              }}
+              className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-black rounded-xl text-xs border border-slate-200 shadow-2xs flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+            >
+              <Printer className="w-4 h-4 text-slate-500" />
+              <span>បោះពុម្ពសិស្សនេះ</span>
+            </button>
+
+            <button 
+              onClick={() => {
+                setPrintMode('class');
+                setTimeout(() => window.print(), 100);
+              }}
               className="px-4 py-2 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-xs shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
             >
               <Printer className="w-4 h-4" />
-              <span>ទាញយកជា PDF / បោះពុម្ព</span>
+              <span>បោះពុម្ពទូទាំងថ្នាក់ ({students.length} នាក់)</span>
             </button>
           </div>
         </div>
@@ -614,7 +629,7 @@ export default function ReportCardsPage() {
             <button 
               onClick={prevStudent}
               disabled={currentIndex === 0}
-              className="p-2 bg-slate-50 border border-slate-200 rounded-xl disabled:opacity-50 hover:bg-slate-100 transition-colors"
+              className="p-2 bg-slate-50 border border-slate-200 rounded-xl disabled:opacity-50 hover:bg-slate-100 transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-5 h-5 text-slate-600" />
             </button>
@@ -624,7 +639,7 @@ export default function ReportCardsPage() {
             <button 
               onClick={nextStudent}
               disabled={currentIndex === students.length - 1}
-              className="p-2 bg-slate-50 border border-slate-200 rounded-xl disabled:opacity-50 hover:bg-slate-100 transition-colors"
+              className="p-2 bg-slate-50 border border-slate-200 rounded-xl disabled:opacity-50 hover:bg-slate-100 transition-colors cursor-pointer"
             >
               <ChevronRight className="w-5 h-5 text-slate-600" />
             </button>
@@ -637,11 +652,15 @@ export default function ReportCardsPage() {
         <StudentReportCard studentInfo={currentStudent} />
       </div>
 
-      {/* ----------------- Batch Print View (Hidden on Screen, Block on Print) ----------------- */}
+      {/* ----------------- Print View (Hidden on Screen, Block on Print) ----------------- */}
       <div className="hidden print:block">
-        {rankedStudents.map((std) => (
-          <StudentReportCard key={std.id} studentInfo={std} />
-        ))}
+        {printMode === 'single' ? (
+          <StudentReportCard studentInfo={currentStudent} />
+        ) : (
+          rankedStudents.map((std) => (
+            <StudentReportCard key={std.id} studentInfo={std} />
+          ))
+        )}
       </div>
 
     </div>

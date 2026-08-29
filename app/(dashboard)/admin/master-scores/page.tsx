@@ -9,11 +9,12 @@ import {
 import { MasterScoreUploadModal } from '@/components/admin/MasterScoreUploadModal';
 import { MasterScoreRollbackModal } from '@/components/admin/MasterScoreRollbackModal';
 import { MonthlyExamSheetModal } from '@/components/admin/MonthlyExamSheetModal';
+import { ExamRoomPrintModal } from '@/components/admin/ExamRoomPrintModal';
 import { GEIPExportModal } from '@/components/admin/GEIPExportModal';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
 import { calculateSummaryScores } from './actions';
-import { RotateCcw, History } from 'lucide-react';
+import { RotateCcw, History, Printer } from 'lucide-react';
 
 export default function MasterScoresPage() {
   const [loading, setLoading] = useState(true);
@@ -28,6 +29,7 @@ export default function MasterScoresPage() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isRollbackModalOpen, setIsRollbackModalOpen] = useState(false);
   const [isMonthlyExamSheetModalOpen, setIsMonthlyExamSheetModalOpen] = useState(false);
+  const [isExamRoomPrintModalOpen, setIsExamRoomPrintModalOpen] = useState(false);
   const [isGEIPExportModalOpen, setIsGEIPExportModalOpen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
@@ -194,6 +196,13 @@ export default function MasterScoresPage() {
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4" /> បង្កើត Sheet ប្រឡង (៨ Tabs)
+          </button>
+
+          <button 
+            onClick={() => setIsExamRoomPrintModalOpen(true)}
+            className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl text-sm transition-all border border-blue-200 shadow-2xs flex items-center gap-2 cursor-pointer"
+          >
+            <Printer className="w-4 h-4 text-[#155EEF]" /> បោះពុម្ពបិទមុខបន្ទប់ & ស្លាកតុ
           </button>
 
           <button 
@@ -382,6 +391,12 @@ export default function MasterScoresPage() {
       <MonthlyExamSheetModal
         isOpen={isMonthlyExamSheetModalOpen}
         onClose={() => setIsMonthlyExamSheetModalOpen(false)}
+        selectedPeriod={selectedPeriod}
+      />
+
+      <ExamRoomPrintModal
+        isOpen={isExamRoomPrintModalOpen}
+        onClose={() => setIsExamRoomPrintModalOpen(false)}
         selectedPeriod={selectedPeriod}
       />
 
