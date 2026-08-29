@@ -2,7 +2,8 @@
 -- 🏫 HUN SEN PORIENG UPPER SECONDARY SCHOOL - MASTER DATABASE SETUP SCRIPT
 -- ==============================================================================
 -- Run this entire script in your Supabase Project -> SQL Editor -> Run
--- This creates all tables, indexes, RLS policies, and initial school seed data.
+-- This creates all tables, indexes, RLS policies, triggers, and seed data.
+-- It is 100% idempotent (safe to run multiple times without data loss).
 -- ==============================================================================
 
 BEGIN;
@@ -42,6 +43,10 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS subject VARCHAR(100);
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+
 -- 4. Create Academic Years Table
 CREATE TABLE IF NOT EXISTS academic_years (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -71,7 +76,6 @@ CREATE TABLE IF NOT EXISTS classes (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Ensure all columns exist if classes table was already created
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS room_number VARCHAR(50);
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS room VARCHAR(50);
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS shift VARCHAR(50) DEFAULT 'ព្រឹក';
@@ -108,7 +112,6 @@ CREATE TABLE IF NOT EXISTS students (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Ensure all columns exist if students table was already created
 ALTER TABLE students ADD COLUMN IF NOT EXISTS desk_number VARCHAR(50);
 ALTER TABLE students ADD COLUMN IF NOT EXISTS room_number VARCHAR(50);
 ALTER TABLE students ADD COLUMN IF NOT EXISTS poverty_status VARCHAR(50) DEFAULT 'none';
@@ -150,6 +153,8 @@ CREATE TABLE IF NOT EXISTS grades (
   UNIQUE(student_id, class_id, period)
 );
 
+ALTER TABLE grades ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'draft';
+
 -- 9. Create Grade Snapshots (Rollback & Backup)
 CREATE TABLE IF NOT EXISTS grade_snapshots (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -173,6 +178,23 @@ CREATE TABLE IF NOT EXISTS attendance_records (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(student_id, class_id, date)
+);
+
+-- 10.5 Create Monthly Attendance Summaries Table
+CREATE TABLE IF NOT EXISTS monthly_attendance_summaries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  month VARCHAR(20) NOT NULL,
+  absent_count INTEGER DEFAULT 0,
+  permission_count INTEGER DEFAULT 0,
+  late_count INTEGER DEFAULT 0,
+  root_cause TEXT,
+  needs_home_visit BOOLEAN DEFAULT FALSE,
+  recorded_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(class_id, student_id, month)
 );
 
 -- 11. Create Student Health Records Table
@@ -257,7 +279,19 @@ CREATE TABLE IF NOT EXISTS parent_contacts (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 16. Create Documents & GEIP Evidence Table
+-- 16. Create Activity Logs Table (Homeroom Dashboard Activity)
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  activity_type VARCHAR(50) NOT NULL DEFAULT 'notice',
+  class_id UUID REFERENCES classes(id) ON DELETE CASCADE,
+  created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 17. Create Documents & GEIP Evidence Table
 CREATE TABLE IF NOT EXISTS documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
@@ -272,7 +306,7 @@ CREATE TABLE IF NOT EXISTS documents (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 17. Create System Settings Table
+-- 18. Create System Settings Table
 CREATE TABLE IF NOT EXISTS system_settings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
@@ -283,7 +317,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 18. Create Audit Logs Table
+-- 19. Create Audit Logs Table
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
@@ -294,7 +328,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 19. High Performance Indexes
+-- 20. High Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_classes_academic_year ON classes(academic_year_id);
 CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
@@ -306,11 +340,13 @@ CREATE INDEX IF NOT EXISTS idx_grades_student_class ON grades(student_id, class_
 CREATE INDEX IF NOT EXISTS idx_grades_period ON grades(period);
 CREATE INDEX IF NOT EXISTS idx_attendance_class_date ON attendance_records(class_id, date);
 CREATE INDEX IF NOT EXISTS idx_attendance_student_date ON attendance_records(student_id, date);
+CREATE INDEX IF NOT EXISTS idx_monthly_att_class_month ON monthly_attendance_summaries(class_id, month);
 CREATE INDEX IF NOT EXISTS idx_support_student ON support_cases(student_id);
 CREATE INDEX IF NOT EXISTS idx_support_class ON support_cases(class_id);
 CREATE INDEX IF NOT EXISTS idx_support_status ON support_cases(status);
+CREATE INDEX IF NOT EXISTS idx_activity_class ON activity_logs(class_id);
 
--- 20. Enable Row Level Security (RLS)
+-- 21. Enable Row Level Security (RLS)
 ALTER TABLE schools ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE academic_years ENABLE ROW LEVEL SECURITY;
@@ -320,16 +356,18 @@ ALTER TABLE student_enrollments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE grades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE grade_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE monthly_attendance_summaries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE student_health_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE support_cases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE support_interventions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE home_visits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE parent_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
--- 21. Create Permissive Policies for Authenticated & Public Access
+-- 22. Create Permissive Policies for Authenticated & Public Access
 DROP POLICY IF EXISTS "Public schools read" ON schools;
 CREATE POLICY "Public schools read" ON schools FOR ALL USING (true);
 
@@ -357,6 +395,9 @@ CREATE POLICY "Public snapshots access" ON grade_snapshots FOR ALL USING (true);
 DROP POLICY IF EXISTS "Public attendance access" ON attendance_records;
 CREATE POLICY "Public attendance access" ON attendance_records FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Public monthly attendance access" ON monthly_attendance_summaries;
+CREATE POLICY "Public monthly attendance access" ON monthly_attendance_summaries FOR ALL USING (true);
+
 DROP POLICY IF EXISTS "Public health access" ON student_health_records;
 CREATE POLICY "Public health access" ON student_health_records FOR ALL USING (true);
 
@@ -372,6 +413,9 @@ CREATE POLICY "Public home visits access" ON home_visits FOR ALL USING (true);
 DROP POLICY IF EXISTS "Public parent contacts access" ON parent_contacts;
 CREATE POLICY "Public parent contacts access" ON parent_contacts FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Public activity logs access" ON activity_logs;
+CREATE POLICY "Public activity logs access" ON activity_logs FOR ALL USING (true);
+
 DROP POLICY IF EXISTS "Public documents access" ON documents;
 CREATE POLICY "Public documents access" ON documents FOR ALL USING (true);
 
@@ -382,10 +426,10 @@ DROP POLICY IF EXISTS "Public audit logs access" ON audit_logs;
 CREATE POLICY "Public audit logs access" ON audit_logs FOR ALL USING (true);
 
 -- ==============================================================================
--- 22. SEED INITIAL DATA (School, Academic Year, Classes, Staff Profiles)
+-- 23. SEED INITIAL DATA (School, Academic Year, Classes, Staff Profiles)
 -- ==============================================================================
 
--- 22.1 School
+-- 23.1 School
 INSERT INTO schools (id, code, name, name_en, address, phone)
 VALUES (
   '11111111-1111-1111-1111-111111111111',
@@ -396,7 +440,7 @@ VALUES (
   '012 345 678'
 ) ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name;
 
--- 22.2 Academic Year
+-- 23.2 Academic Year
 INSERT INTO academic_years (id, name, start_date, end_date, is_active)
 VALUES (
   '22222222-2222-2222-2222-222222222222',
@@ -406,7 +450,7 @@ VALUES (
   TRUE
 ) ON CONFLICT (name) DO UPDATE SET is_active = TRUE;
 
--- 22.3 Staff Profiles (Admin, Principal, Teachers, Monitor)
+-- 23.3 Staff Profiles (Admin, Principal, Teachers, Monitor)
 INSERT INTO profiles (id, school_id, username, full_name, role, school_code, subject)
 VALUES
   ('00000000-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'admin_porieng', 'លោកគ្រូ ICT ពោធិ៍រៀង (Admin)', 'admin', 'Porieng-2026', 'ICT'),
@@ -420,15 +464,15 @@ VALUES
   ('00000000-0000-0000-0000-000000000099', '11111111-1111-1111-1111-111111111111', 'monitor', 'ប្រធានថ្នាក់ (Class Monitor)', 'monitor', 'Porieng-2026', 'វត្តមាន')
 ON CONFLICT (username) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role;
 
--- 22.4 Initial Classes
-INSERT INTO classes (id, school_id, academic_year_id, teacher_id, name, grade, track, shift, room)
+-- 23.4 Initial Classes
+INSERT INTO classes (id, school_id, academic_year_id, teacher_id, name, grade, track, shift, room, room_number)
 VALUES
-  ('33333333-3333-3333-3333-333333333312', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000012', '12 ក', '12', 'science', 'morning', 'បន្ទប់ ១២'),
-  ('33333333-3333-3333-3333-333333333311', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000011', '11 ក', '11', 'science', 'morning', 'បន្ទប់ ១១'),
-  ('33333333-3333-3333-3333-333333333310', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000010', '10 ក', '10', 'general', 'morning', 'បន្ទប់ ១០'),
-  ('33333333-3333-3333-3333-333333333309', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000009', '9 ក', '9', 'general', 'afternoon', 'បន្ទប់ ៩'),
-  ('33333333-3333-3333-3333-333333333308', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000008', '8 ក', '8', 'general', 'afternoon', 'បន្ទប់ ៨'),
-  ('33333333-3333-3333-3333-333333333307', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000007', '7 ក', '7', 'general', 'afternoon', 'បន្ទប់ ៧')
+  ('33333333-3333-3333-3333-333333333312', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000012', '12 ក', '12', 'វិទ្យាសាស្ត្រពិត', 'ព្រឹក', 'បន្ទប់ ១២', '12A'),
+  ('33333333-3333-3333-3333-333333333311', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000011', '11 ក', '11', 'វិទ្យាសាស្ត្រពិត', 'ព្រឹក', 'បន្ទប់ ១១', '11A'),
+  ('33333333-3333-3333-3333-333333333310', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000010', '10 ក', '10', 'ទូទៅ', 'ព្រឹក', 'បន្ទប់ ១០', '10A'),
+  ('33333333-3333-3333-3333-333333333309', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000009', '9 ក', '9', 'ទូទៅ', 'រសៀល', 'បន្ទប់ ៩', '9A'),
+  ('33333333-3333-3333-3333-333333333308', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000008', '8 ក', '8', 'ទូទៅ', 'រសៀល', 'បន្ទប់ ៨', '8A'),
+  ('33333333-3333-3333-3333-333333333307', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000007', '7 ក', '7', 'ទូទៅ', 'រសៀល', 'បន្ទប់ ៧', '7A')
 ON CONFLICT (id) DO NOTHING;
 
 COMMIT;
