@@ -82,7 +82,7 @@ export default function ClassesPage() {
     try {
       const { data, error } = await supabase.from('classes').insert([
         {
-          school_id: 'main-school',
+          school_id: '11111111-1111-1111-1111-111111111111',
           teacher_id: user.id,
           name: name.trim(),
           grade,

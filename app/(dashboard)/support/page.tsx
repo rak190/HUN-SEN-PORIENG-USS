@@ -91,7 +91,7 @@ export default function SupportPage() {
     if (!activeClass || !user) return alert('សូមជ្រើសរើសថ្នាក់ជាមុនសិន។');
     
     const { data, error } = await supabase.from('support_cases').insert({
-      school_id: profile?.school_id, class_id: activeClass.id, student_id: caseForm.studentId, opened_by: user.id, assigned_to: user.id,
+      school_id: profile?.school_id || '11111111-1111-1111-1111-111111111111', class_id: activeClass.id, student_id: caseForm.studentId, opened_by: user.id, assigned_to: user.id,
       category: caseForm.category, priority: caseForm.priority, summary: caseForm.summary.trim(), next_follow_up_at: caseForm.followUp || null,
     }).select('*, students(full_name, parent_phone)').single();
     if (error) return alert(error.message);

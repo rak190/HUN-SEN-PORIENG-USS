@@ -382,7 +382,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             username: cleanUsername,
             full_name: fullName.trim() || cleanUsername,
             role,
-            school_id: schoolCode.toLowerCase() === 'porieng-2026' ? 'main-school' : `school-${Date.now()}`,
+            school_id: '11111111-1111-1111-1111-111111111111',
             school_code: schoolCode || 'Porieng-2026',
           },
         ]);

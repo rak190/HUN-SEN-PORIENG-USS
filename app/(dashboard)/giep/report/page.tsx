@@ -11,7 +11,7 @@ export default async function GeipReportPage() {
   const { data: school } = await supabase
     .from('schools')
     .select('*')
-    .eq('id', 'main-school')
+    .limit(1)
     .maybeSingle();
 
   const { data: principalProfile } = await supabase
