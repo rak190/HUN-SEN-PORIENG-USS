@@ -6,7 +6,7 @@ import crypto from 'crypto';
 export async function POST(req: Request) {
   const { user, role: userRole } = await getServerAuth();
 
-  if (!user || (userRole !== 'admin' && userRole !== 'principal')) {
+  if (!user || userRole !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 

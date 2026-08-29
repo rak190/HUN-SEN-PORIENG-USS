@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 export async function POST(req: Request) {
   const { user, role } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 

@@ -30,19 +30,11 @@ export async function getServerAuth(): Promise<AuthContextResult> {
     // Session token absent or expired
   }
 
-  // 2. Secondary: Fallback to secure session cookie ONLY with database validation
-  if (!userId) {
-    const cookieUserId = cookieStore.get('kruai_user_id')?.value;
-    if (cookieUserId && /^[0-9a-fA-F-]{36}$/.test(cookieUserId)) {
-      userId = cookieUserId;
-    }
-  }
-
   if (!userId) {
     return { user: null, profile: null, role: null };
   }
 
-  // 3. Retrieve authoritative database profile (NEVER trust client cookies for role)
+  // 2. Retrieve authoritative database profile (NEVER trust client cookies for role)
   try {
     const { data: profile } = await supabase
       .from('profiles')
@@ -140,3 +132,8 @@ export async function requireStudentAccess(studentId: string): Promise<{ user: {
 
   return auth;
 }
+
+export async function requireAdmin() { return requireRole(['admin']); }
+export async function requirePrincipal() { return requireRole(['principal', 'admin']); }
+export async function requireTeacher() { return requireRole(['teacher', 'principal', 'admin']); }
+export async function requireMonitor() { return requireRole(['monitor', 'admin']); }

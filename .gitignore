@@ -56,3 +56,6 @@ Thumbs.db
 .vscode/
 .idea/
 .local/
+# Legacy Isolations
+lib/legacy/
+docker/

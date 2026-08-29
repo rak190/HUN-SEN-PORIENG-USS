@@ -16,22 +16,25 @@ export async function GET(req: NextRequest) {
     }
 
     // 1. Verify User Session
-    const isDemo = !process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!isDemo && !user) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized: Log in required' }, { status: 401 });
     }
 
-    // 2. Object-level access verification (Admins/Principals have full access; Teachers have school access)
-    if (!isDemo && user && role !== 'admin' && role !== 'principal') {
-      const supabase = await createClient();
-      const { data: doc } = await supabase
-        .from('documents')
-        .select('id, class_id, uploader_id')
-        .eq('file_url', objectKey)
-        .maybeSingle();
+    // 2. Object-level access verification
+    const supabase = await createClient();
+    const { data: doc } = await supabase
+      .from('documents')
+      .select('id, class_id, uploader_id, category')
+      .eq('file_url', objectKey)
+      .maybeSingle();
 
+    if (!doc) {
+      return NextResponse.json({ error: 'Not Found: Object metadata is missing.' }, { status: 404 });
+    }
+
+    if (role !== 'admin' && role !== 'principal' && doc.category !== 'template') {
       // If document is indexed in DB and uploader is different, verify class access
-      if (doc && doc.uploader_id !== user.id) {
+      if (doc.uploader_id !== user.id) {
         const { data: teacherClass } = await supabase
           .from('classes')
           .select('id')

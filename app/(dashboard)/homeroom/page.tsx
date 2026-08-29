@@ -47,14 +47,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     effectiveClassId = classId;
   }
 
-  // 2. Fetch basic stats
-  let studentsQuery = supabase.from('students').select('id, gender', { count: 'exact' });
+  // 2. Fetch basic stats (only active students)
+  let studentsQuery = supabase.from('active_students').select('id, gender', { count: 'exact' });
   if (effectiveClassId) {
     studentsQuery = studentsQuery.eq('class_id', effectiveClassId);
   }
   const { data: studentsData, count: studentsCount } = await studentsQuery;
 
-  let remediationQuery = supabase.from('students').select('id', { count: 'exact' }).eq('is_slow_learner', true);
+  let remediationQuery = supabase.from('active_students').select('id', { count: 'exact' }).eq('is_slow_learner', true);
   if (effectiveClassId) {
     remediationQuery = remediationQuery.eq('class_id', effectiveClassId);
   }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { appendToSheet } from '@/lib/google-sheets';
+import { appendToSheet } from '@/lib/legacy/google-sheets';
 import { getServerAuth } from '@/lib/auth-server';
 
 export async function POST(request: Request) {

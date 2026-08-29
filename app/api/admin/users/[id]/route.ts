@@ -23,6 +23,23 @@ export async function PATCH(
   }
 
   try {
+    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active').eq('id', id).single();
+
+    if (targetProfile?.role === 'admin' && userRole !== 'admin') {
+      return NextResponse.json({ error: 'Principal cannot modify an admin account.' }, { status: 403 });
+    }
+
+    if (role === 'admin' && userRole !== 'admin') {
+      return NextResponse.json({ error: 'Principal cannot assign admin role.' }, { status: 403 });
+    }
+
+    if (targetProfile?.role === 'admin' && role && role !== 'admin') {
+      const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin').eq('is_active', true);
+      if (count !== null && count <= 1) {
+        return NextResponse.json({ error: 'Cannot demote the last active admin.' }, { status: 400 });
+      }
+    }
+
     // 1. Update Profile row
     const updateData: any = {};
     if (fullName) updateData.full_name = fullName.trim();
@@ -47,6 +64,15 @@ export async function PATCH(
           password,
           user_metadata: { full_name: fullName, role },
         });
+
+        // Log the password change
+        await adminClient.from('audit_logs').insert([
+          {
+            action: `បានប្តូរពាក្យសម្ងាត់សម្រាប់គណនីលេខសម្គាល់ ${id}`,
+            type: 'warn',
+            user_id: user.id,
+          }
+        ]);
       } catch (_) {}
     }
 
@@ -102,7 +128,7 @@ export async function DELETE(
 ) {
   const { user, role: userRole } = await getServerAuth();
 
-  if (!user || (userRole !== 'admin' && userRole !== 'principal')) {
+  if (!user || userRole !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -114,6 +140,19 @@ export async function DELETE(
   }
 
   try {
+    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active').eq('id', id).single();
+    
+    if (targetProfile?.role === 'admin' && userRole !== 'admin') {
+      return NextResponse.json({ error: 'Principal cannot delete an admin account.' }, { status: 403 });
+    }
+
+    if (targetProfile?.role === 'admin') {
+      const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
+      if (count !== null && count <= 1) {
+        return NextResponse.json({ error: 'Cannot delete the last admin account.' }, { status: 400 });
+      }
+    }
+
     // 1. Delete profile
     const { error: profileErr } = await adminClient.from('profiles').delete().eq('id', id);
     if (profileErr) throw profileErr;
@@ -125,6 +164,15 @@ export async function DELETE(
     try {
       await adminClient.auth.admin.deleteUser(id);
     } catch (_) {}
+
+    // Log the deletion
+    await adminClient.from('audit_logs').insert([
+      {
+        action: `បានលុបគណនីលេខសម្គាល់ ${id}`,
+        type: 'warn',
+        user_id: user.id,
+      }
+    ]);
 
     return NextResponse.json({ isDemo: false, message: 'User deleted successfully' });
   } catch (err: any) {

@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  FileSpreadsheet, Download, Search, Calendar, BarChart3, 
-  FileText, ArrowDownToLine, CheckCircle2, Clock
+  FileText, Calendar, Download, RefreshCw, Filter, 
+  Search, ShieldAlert, CheckCircle2, FileDown,
+  Building, GraduationCap, LayoutGrid, Clock, Users, FileType, CheckCircle, ChevronDown, Table2, FileArchive, FileSpreadsheet, BarChart3, ArrowDownToLine
 } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
@@ -46,8 +48,14 @@ const AVAILABLE_REPORTS = [
 ];
 
 export default function MoeysReportsPage() {
-  const [academicYear, setAcademicYear] = useState('2025-2026');
+  const { activeAcademicYear } = useAuth();
+  const [academicYear, setAcademicYear] = useState('');
   
+  useEffect(() => {
+    if (activeAcademicYear) {
+      setAcademicYear(activeAcademicYear.name);
+    }
+  }, [activeAcademicYear]);
   // Default to current month for the month picker (YYYY-MM)
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
@@ -288,8 +296,7 @@ export default function MoeysReportsPage() {
               onChange={(e) => setAcademicYear(e.target.value)}
               className="bg-transparent text-sm font-extrabold text-slate-800 focus:outline-none cursor-pointer"
             >
-              <option value="2025-2026">ឆ្នាំសិក្សា ២០២៥ - ២០២៦</option>
-              <option value="2024-2025">ឆ្នាំសិក្សា ២០២៤ - ២០២៥</option>
+              <option value={academicYear || '2025-2026'}>ឆ្នាំសិក្សា {academicYear || '២០២៥ - ២០២៦'}</option>
             </select>
           </div>
         </div>

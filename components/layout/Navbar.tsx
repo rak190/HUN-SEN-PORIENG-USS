@@ -6,15 +6,8 @@ import { ShieldAlert, LogOut, User, BookOpen, ChevronDown, CheckCircle2 } from '
 import { useRouter } from 'next/navigation';
 
 export default function Navbar() {
-  const { profile, activeClass, classes, setActiveClass, logout, isDemoMode, setRole } = useAuth();
+  const { profile, activeClass, classes, setActiveClass, logout, isDemoMode } = useAuth();
   const router = useRouter();
-
-  const handleRoleChange = (newRole: 'teacher' | 'principal' | 'admin') => {
-    setRole(newRole);
-    if (newRole === 'teacher') router.push('/homeroom');
-    else if (newRole === 'principal') router.push('/principal');
-    else if (newRole === 'admin') router.push('/admin');
-  };
 
   return (
     <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-white/80 dark:bg-slate-900/80 border-b border-slate-200/80 dark:border-slate-800 transition-all duration-300">
@@ -69,19 +62,6 @@ export default function Navbar() {
 
         {/* Right Section: User Profile & Role Switcher */}
         <div className="flex items-center space-x-3">
-          {/* Interactive Role Switcher Pill for Testing */}
-          <div className="flex items-center space-x-1.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200/80 px-3 py-1.5 rounded-full shadow-xs">
-            <span className="text-[11px] font-extrabold text-[#155EEF] hidden sm:inline">តួនាទី៖</span>
-            <select
-              value={profile?.role || 'teacher'}
-              onChange={(e) => handleRoleChange(e.target.value as any)}
-              className="bg-transparent text-xs font-extrabold text-[#155EEF] focus:outline-none cursor-pointer"
-            >
-              <option value="teacher">គ្រូបន្ទុកថ្នាក់</option>
-              <option value="principal">នាយកសាលា</option>
-              <option value="admin">អ្នកគ្រប់គ្រងប្រព័ន្ធ</option>
-            </select>
-          </div>
 
           {isDemoMode && (
             <div className="flex items-center space-x-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 px-3 py-1.5 rounded-full text-xs font-semibold">

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Kantumruy_Pro, Moul, Siemreap } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { VersionGuardian } from "@/components/VersionGuardian";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -62,6 +63,7 @@ export default function RootLayout({
     <html lang="km" className={`h-full antialiased ${plusJakarta.variable} ${kantumruy.variable} ${moul.variable} ${siemreap.variable}`}>
       <body className="min-h-full flex flex-col bg-white text-slate-800 font-sans">
         <AuthProvider>
+          <VersionGuardian />
           {children}
         </AuthProvider>
       </body>

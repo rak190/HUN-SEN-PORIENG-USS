@@ -35,16 +35,26 @@ export async function proxy(request: NextRequest) {
   );
 
   let user: any = null;
+  let effectiveRole = 'teacher';
+
   try {
     const { data } = await supabase.auth.getUser();
-    user = data?.user;
+    if (data?.user) {
+      user = data.user;
+      
+      // Fetch authoritative role from DB instead of trusting cookies or metadata
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+        
+      if (profile?.role) {
+        effectiveRole = profile.role;
+      }
+    }
   } catch (e) {}
 
-  const localUserId = request.cookies.get('kruai_user_id')?.value;
-  const localRole = request.cookies.get('kruai_role')?.value;
-
-  const effectiveUser = user || (localUserId ? { id: localUserId } : null);
-  const effectiveRole = localRole || user?.user_metadata?.role || 'teacher';
   const pathname = request.nextUrl.pathname;
 
   // List of protected base paths
@@ -70,13 +80,13 @@ export async function proxy(request: NextRequest) {
   const isProtectedRoute = protectedPrefixes.some(prefix => pathname.startsWith(prefix));
 
   // Redirect to login if unauthenticated
-  if (!effectiveUser && isProtectedRoute) {
+  if (!user && isProtectedRoute) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (effectiveUser && isProtectedRoute) {
+  if (user && isProtectedRoute) {
     // RBAC: Admin only routes
     if (pathname.startsWith('/admin') && effectiveRole !== 'admin' && effectiveRole !== 'principal') {
       return NextResponse.redirect(new URL('/homeroom', request.url));
@@ -89,7 +99,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Redirect authenticated user away from /login
-  if (effectiveUser && pathname === '/login') {
+  if (user && pathname === '/login') {
     const target = effectiveRole === 'admin' 
       ? '/admin/teachers' 
       : effectiveRole === 'principal' 

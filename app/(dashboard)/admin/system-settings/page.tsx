@@ -90,7 +90,11 @@ export default function MergedSystemPage() {
   };
 
   const handleClearLogs = async (mode: 'old' | 'all') => {
-    if (!confirm('តើអ្នកពិតជាចង់លុបកំណត់ត្រាមែនទេ?សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ។')) return;
+    const userInput = prompt('តើអ្នកពិតជាចង់លុបកំណត់ត្រាមែនទេ? សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ។ សូមវាយពាក្យ "CONFIRM" ដើម្បីបន្ត។');
+    if (userInput !== 'CONFIRM') {
+      alert('សកម្មភាពត្រូវបានបោះបង់។ (Cancelled)');
+      return;
+    }
     
     try {
       const res = await fetch(`/api/admin/audit-logs?mode=${mode}`, { method: 'DELETE' });

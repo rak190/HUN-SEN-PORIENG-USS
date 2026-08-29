@@ -16,7 +16,7 @@ export async function fetchAdminDashboardData() {
   const yearId = activeYear?.id;
 
   // 2. Fetch basic counts and rates
-  const { count: totalStudents } = await supabase.from('students').select('*', { count: 'exact', head: true }).eq('is_active', true);
+  const { count: totalStudents } = await supabase.from('active_students').select('*', { count: 'exact', head: true });
   
   const { data: monthAttendance } = await supabase.from('attendance_records').select('status').gte('date', startOfMonth.split('T')[0]);
   let attendanceRate = '0%';
@@ -31,7 +31,7 @@ export async function fetchAdminDashboardData() {
   const distinctGrades = new Set(recentGrades?.map(g => `${g.class_id}-${g.period}`) || []);
   const scoresUploaded = distinctGrades.size.toString();
 
-  const { data: allStudents } = await supabase.from('students').select('gender, dob, poor_id_status').eq('is_active', true);
+  const { data: allStudents } = await supabase.from('active_students').select('gender, dob, poor_id_status');
   let dataCompleteness = '0%';
   if (allStudents && allStudents.length > 0) {
     const complete = allStudents.filter(s => s.gender && s.dob).length;
@@ -50,9 +50,8 @@ export async function fetchAdminDashboardData() {
 
   // 4. At Risk Students
   const { data: riskStudentsRaw } = await supabase
-    .from('students')
+    .from('active_students')
     .select('id, full_name, class_id, poor_id_status, is_orphan, dropout_risk, classes(name)')
-    .eq('is_active', true)
     .or('dropout_risk.eq.true,poor_id_status.neq.none,is_orphan.eq.true')
     .limit(15);
 

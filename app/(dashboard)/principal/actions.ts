@@ -32,9 +32,8 @@ export async function fetchPrincipalDashboardData() {
 
     // 1.6 Fetch Students in active classes
     let studentsQuery = supabase
-      .from('students')
-      .select('id, gender, dropout_risk, is_slow_learner, full_name, class_id, is_active')
-      .eq('is_active', true);
+      .from('active_students')
+      .select('id, gender, dropout_risk, is_slow_learner, full_name, class_id');
 
     if (activeClassIds.length > 0) {
       studentsQuery = studentsQuery.in('class_id', activeClassIds);

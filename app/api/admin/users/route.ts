@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getServerAuth } from '@/lib/auth-server';
 import crypto from 'crypto';
 
-const generatePin = () => Math.floor(100000 + Math.random() * 900000).toString();
+const generatePin = () => crypto.randomInt(100000, 999999).toString();
 
 const getRoleKh = (role: string) => {
   return role === 'principal' ? 'នាយកសាលា' : role === 'admin' ? 'អ្នកគ្រប់គ្រងប្រព័ន្ធ' : role === 'monitor' ? 'ប្រធានថ្នាក់' : 'គ្រូបន្ទុកថ្នាក់';
@@ -26,7 +26,8 @@ export async function GET() {
     const { data: profiles, error: profileError } = await adminClient
       .from('profiles')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(500);
 
     if (profileError) throw profileError;
 
@@ -67,7 +68,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const { user, role } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -93,37 +94,45 @@ export async function POST(req: Request) {
   for (const u of usersToCreate) {
     try {
       const cleanUsername = u.username.trim().toLowerCase();
+      
+      // Phase 2: Role Hierarchy Check
+      if (u.role === 'admin' && role !== 'admin') {
+        errors.push({ username: u.username, error: 'Principal cannot create an admin account.' });
+        continue;
+      }
+
+      // Phase 3: Validate uniqueness before provisioning
+      const { data: existingProfile } = await adminClient
+        .from('profiles')
+        .select('id')
+        .eq('username', cleanUsername)
+        .maybeSingle();
+        
+      if (existingProfile) {
+        errors.push({ username: u.username, error: 'Username already exists.' });
+        continue;
+      }
+
       const email = `${cleanUsername}@kruai.app`;
       const generatedPassword = u.password?.trim() || generatePin();
       const newUserId = crypto.randomUUID();
-      let authUserId: string = newUserId;
-      try {
-        const { data: authCreated, error: createErr } = await adminClient.auth.admin.createUser({
-          id: newUserId,
-          email,
-          password: generatedPassword,
-          email_confirm: true,
-          user_metadata: { full_name: u.fullName.trim(), role: u.role || 'teacher' },
-        });
+      
+      const { data: authCreated, error: createErr } = await adminClient.auth.admin.createUser({
+        id: newUserId,
+        email,
+        password: generatedPassword,
+        email_confirm: true,
+        user_metadata: { full_name: u.fullName.trim(), role: u.role || 'teacher' },
+      });
 
-        if (authCreated?.user) {
-          authUserId = authCreated.user.id;
-        } else if (createErr) {
-          const { data: userList } = await adminClient.auth.admin.listUsers();
-          const existing = userList?.users?.find(usr => usr.email === email);
-          if (existing) {
-            authUserId = existing.id;
-            await adminClient.auth.admin.updateUserById(existing.id, {
-              password: generatedPassword,
-              user_metadata: { full_name: u.fullName.trim(), role: u.role || 'teacher' }
-            });
-          }
-        }
-      } catch (_) {
-        // Fallback for local setup
+      if (createErr || !authCreated?.user) {
+        errors.push({ username: u.username, error: createErr?.message || 'Failed to create auth user.' });
+        continue;
       }
+      
+      const authUserId = authCreated.user.id;
 
-      const { error: insertProfileErr } = await adminClient.from('profiles').upsert([{
+      const { error: insertProfileErr } = await adminClient.from('profiles').insert([{
         id: authUserId,
         username: cleanUsername,
         full_name: u.fullName.trim(),
@@ -133,10 +142,14 @@ export async function POST(req: Request) {
         phone: u.phone || null,
         subject: u.subject || null,
         is_active: true,
-        updated_at: new Date().toISOString(),
-      }], { onConflict: 'username' });
+      }]);
 
-      if (insertProfileErr) throw insertProfileErr;
+      if (insertProfileErr) {
+        // Rollback Auth user creation
+        await adminClient.auth.admin.deleteUser(authUserId);
+        errors.push({ username: u.username, error: 'Failed to create profile. Rolled back auth.' });
+        continue;
+      }
 
       createdUsers.push({
         id: authUserId,
@@ -150,7 +163,7 @@ export async function POST(req: Request) {
         phone: u.phone || '',
         subject: u.subject || '',
         created_at: new Date().toISOString(),
-        generatedPassword: !u.password?.trim() ? generatedPassword : null
+        tempPassword: !u.password?.trim() ? generatedPassword : null
       });
     } catch (err: any) {
       errors.push({ username: u.username, error: err.message });
@@ -176,11 +189,26 @@ export async function PATCH(req: Request) {
   if (!id) return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
 
   try {
+    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active').eq('id', id).single();
+    
+    if (targetProfile?.role === 'admin' && role !== 'admin') {
+      return NextResponse.json({ error: 'Principal cannot modify an admin account.' }, { status: 403 });
+    }
+
     if (action === 'toggle_status') {
       const { status } = updates;
+      
+      if (targetProfile?.role === 'admin' && status === 'បានផ្អាក') {
+        const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin').eq('is_active', true);
+        if (count !== null && count <= 1) {
+          return NextResponse.json({ error: 'Cannot suspend the last active admin.' }, { status: 400 });
+        }
+      }
+
       try {
         const banDuration = status === 'បានផ្អាក' ? '876000h' : 'none';
         await adminClient.auth.admin.updateUserById(id, { ban_duration: banDuration });
+        await adminClient.from('profiles').update({ is_active: status !== 'បានផ្អាក' }).eq('id', id);
       } catch (_) {}
       return NextResponse.json({ success: true });
     }
@@ -196,6 +224,17 @@ export async function PATCH(req: Request) {
     if (action === 'update_profile') {
       const { name, role: newRole, username, phone, subject } = updates;
       const profileUpdates: any = {};
+      
+      if (newRole === 'admin' && role !== 'admin') {
+        return NextResponse.json({ error: 'Principal cannot assign admin role.' }, { status: 403 });
+      }
+
+      if (targetProfile?.role === 'admin' && newRole && newRole !== 'admin') {
+        const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin').eq('is_active', true);
+        if (count !== null && count <= 1) {
+          return NextResponse.json({ error: 'Cannot demote the last active admin.' }, { status: 400 });
+        }
+      }
       
       if (name) profileUpdates.full_name = name;
       if (newRole) profileUpdates.role = newRole;
@@ -225,7 +264,7 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   const { user, role } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -238,11 +277,33 @@ export async function DELETE(req: Request) {
   if (!adminClient) return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
 
   try {
+    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active').eq('id', id).single();
+    
+    if (targetProfile?.role === 'admin' && role !== 'admin') {
+      return NextResponse.json({ error: 'Principal cannot delete an admin account.' }, { status: 403 });
+    }
+
+    if (targetProfile?.role === 'admin') {
+      const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
+      if (count !== null && count <= 1) {
+        return NextResponse.json({ error: 'Cannot delete the last admin account.' }, { status: 400 });
+      }
+    }
+
     // Delete profile
     await adminClient.from('profiles').delete().eq('id', id);
     try {
       await adminClient.auth.admin.deleteUser(id);
     } catch (_) {}
+    
+    // Log the deletion
+    await adminClient.from('audit_logs').insert([
+      {
+        action: `បានលុបគណនីលេខសម្គាល់ ${id}`,
+        type: 'warn',
+        user_id: user.id,
+      }
+    ]);
     
     return NextResponse.json({ success: true });
   } catch (err: any) {

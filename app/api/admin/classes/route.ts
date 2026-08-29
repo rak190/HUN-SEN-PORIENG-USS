@@ -21,7 +21,8 @@ export async function GET(req: Request) {
     let query = adminClient
       .from('classes')
       .select('*, profiles:teacher_id(id, full_name), students(id, gender, is_active)')
-      .order('name', { ascending: true });
+      .order('name', { ascending: true })
+      .limit(500);
 
     if (academicYearId) {
       query = query.eq('academic_year_id', academicYearId);
@@ -56,7 +57,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const { user, role } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -144,7 +145,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const { user, role } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -182,7 +183,7 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   const { user, role } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || role !== 'admin') {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -219,6 +220,15 @@ export async function DELETE(req: Request) {
       .eq('id', id);
 
     if (error) throw error;
+
+    // Log the deletion
+    await adminClient.from('audit_logs').insert([
+      {
+        action: `បានលុបថ្នាក់លេខសម្គាល់ ${id}`,
+        type: 'warn',
+        user_id: user.id,
+      }
+    ]);
 
     return NextResponse.json({ isDemo: false, success: true });
   } catch (err: any) {

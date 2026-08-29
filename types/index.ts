@@ -44,6 +44,7 @@ export interface Profile {
   qualification_level?: string | null;
   ministry_id?: string | null;
   is_giep_trained?: boolean;
+  is_active?: boolean;
   created_at: string;
 }
 
@@ -75,6 +76,17 @@ export interface Classroom {
   track?: string;
   student_count?: number;
   female_count?: number;
+  created_at: string;
+}
+
+export interface AcademicYear {
+  id: string;
+  school_id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  is_archived: boolean;
   created_at: string;
 }
 
@@ -214,16 +226,6 @@ export interface AtRiskStudent {
   severity: 'low' | 'medium' | 'high';
 }
 
-export interface DocumentRecord {
-  id: string;
-  file_name: string;
-  r2_object_key: string;
-  file_type: string;
-  file_size_bytes: number;
-  uploaded_by: string;
-  class_id?: string;
-  created_at: string;
-}
 
 export interface MonthlyReportCard {
   id: string;

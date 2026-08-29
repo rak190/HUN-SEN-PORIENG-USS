@@ -36,7 +36,7 @@ const AVAILABLE_SUBJECTS: Subject[] = [
 ];
 
 export default function ClassesPage() {
-  const { classes, activeClass, setActiveClass, refreshClasses, user, isDemoMode } = useAuth();
+  const { classes, activeClass, setActiveClass, refreshClasses, user, isDemoMode, activeAcademicYear, profile } = useAuth();
   const [showAddForm, setShowAddForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [name, setName] = useState('');
@@ -65,11 +65,12 @@ export default function ClassesPage() {
       setTimeout(() => {
         const newCls: Classroom = {
           id: `demo-cls-${Date.now()}`,
-          school_id: 'main-school',
+          school_id: profile?.school_id || 'main-school',
           teacher_id: 'demo-teacher-id',
           name: name.trim(),
           grade,
           subjects: subjectsObj,
+          academic_year_id: activeAcademicYear?.id || null,
           created_at: new Date().toISOString(),
         };
         setActiveClass(newCls);
@@ -82,11 +83,12 @@ export default function ClassesPage() {
     try {
       const { data, error } = await supabase.from('classes').insert([
         {
-          school_id: '11111111-1111-1111-1111-111111111111',
+          school_id: profile?.school_id || 'main-school',
           teacher_id: user.id,
           name: name.trim(),
           grade,
           subjects: subjectsObj,
+          academic_year_id: activeAcademicYear?.id || null,
         }
       ]).select().single();
 
@@ -159,7 +161,7 @@ export default function ClassesPage() {
               <div className="w-8 h-8 rounded-full bg-[#FFCF59] text-yellow-950 flex items-center justify-center">
                 <Plus className="w-4 h-4 font-black" />
               </div>
-              <span>បង្កើតថ្នាក់រៀនថ្មីសម្រាប់ឆ្នាំសិក្សា 2025-2026</span>
+              <span>បង្កើតថ្នាក់រៀនថ្មីសម្រាប់ឆ្នាំសិក្សា {activeAcademicYear?.name || 'ថ្មី'}</span>
             </h3>
             <button
               type="button"

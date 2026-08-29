@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { r2Client, R2_BUCKET_NAME } from '@/lib/cloudflare-r2';
 import { getServerAuth } from '@/lib/auth-server';
+import { createClient } from '@/lib/supabase/server';
 
 export async function GET(req: NextRequest) {
-  const { user } = await getServerAuth();
-  const isDemo = !process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  if (!isDemo && !user) {
+  const { user, role } = await getServerAuth();
+  
+  if (!user) {
     return new NextResponse('Unauthorized: Session required to access media', { status: 401 });
   }
 
@@ -19,6 +19,32 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const supabase = await createClient();
+    const { data: doc } = await supabase
+      .from('documents')
+      .select('id, class_id, uploader_id, category')
+      .eq('file_url', key)
+      .maybeSingle();
+
+    if (!doc) {
+      return new NextResponse('Not Found: Object metadata is missing.', { status: 404 });
+    }
+
+    if (role !== 'admin' && role !== 'principal' && doc.category !== 'template') {
+      if (doc.uploader_id !== user.id) {
+        const { data: teacherClass } = await supabase
+          .from('classes')
+          .select('id')
+          .eq('teacher_id', user.id)
+          .eq('id', doc.class_id)
+          .maybeSingle();
+
+        if (!teacherClass) {
+          return new NextResponse('Forbidden: Access to this image is restricted', { status: 403 });
+        }
+      }
+    }
+
     const command = new GetObjectCommand({
       Bucket: R2_BUCKET_NAME,
       Key: key,
