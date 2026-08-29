@@ -96,21 +96,35 @@ export async function POST(req: Request) {
       const email = `${cleanUsername}@kruai.app`;
       const generatedPassword = u.password?.trim() || generatePin();
       const newUserId = crypto.randomUUID();
-      
+      let authUserId: string = newUserId;
       try {
-        await adminClient.auth.admin.createUser({
+        const { data: authCreated, error: createErr } = await adminClient.auth.admin.createUser({
           id: newUserId,
           email,
           password: generatedPassword,
           email_confirm: true,
           user_metadata: { full_name: u.fullName.trim(), role: u.role || 'teacher' },
         });
+
+        if (authCreated?.user) {
+          authUserId = authCreated.user.id;
+        } else if (createErr) {
+          const { data: userList } = await adminClient.auth.admin.listUsers();
+          const existing = userList?.users?.find(usr => usr.email === email);
+          if (existing) {
+            authUserId = existing.id;
+            await adminClient.auth.admin.updateUserById(existing.id, {
+              password: generatedPassword,
+              user_metadata: { full_name: u.fullName.trim(), role: u.role || 'teacher' }
+            });
+          }
+        }
       } catch (_) {
         // Fallback for local setup
       }
 
-      const { error: insertProfileErr } = await adminClient.from('profiles').insert([{
-        id: newUserId,
+      const { error: insertProfileErr } = await adminClient.from('profiles').upsert([{
+        id: authUserId,
         username: cleanUsername,
         full_name: u.fullName.trim(),
         role: u.role || 'teacher',
@@ -118,12 +132,14 @@ export async function POST(req: Request) {
         school_code: u.schoolCode || 'Porieng-2026',
         phone: u.phone || null,
         subject: u.subject || null,
-      }]);
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      }], { onConflict: 'username' });
 
       if (insertProfileErr) throw insertProfileErr;
 
       createdUsers.push({
-        id: newUserId,
+        id: authUserId,
         username: cleanUsername,
         name: u.fullName.trim(),
         role: u.role || 'teacher',

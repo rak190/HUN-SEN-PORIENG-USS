@@ -46,9 +46,10 @@ export async function POST(req: Request) {
     const finalSchool = schoolCode || 'Porieng-2026';
     const newUserId = crypto.randomUUID();
 
+    let authUserId: string = newUserId;
     try {
       try {
-        await adminClient.auth.admin.createUser({
+        const { data: authCreated, error: createErr } = await adminClient.auth.admin.createUser({
           id: newUserId,
           email,
           password: finalPassword,
@@ -58,11 +59,25 @@ export async function POST(req: Request) {
             role: finalRole,
           },
         });
+
+        if (authCreated?.user) {
+          authUserId = authCreated.user.id;
+        } else if (createErr) {
+          const { data: userList } = await adminClient.auth.admin.listUsers();
+          const existing = userList?.users?.find(u => u.email === email);
+          if (existing) {
+            authUserId = existing.id;
+            await adminClient.auth.admin.updateUserById(existing.id, {
+              password: finalPassword,
+              user_metadata: { full_name: fullName.trim(), role: finalRole }
+            });
+          }
+        }
       } catch (_) {}
 
-      const { error: profileError } = await adminClient.from('profiles').insert([
+      const { error: profileError } = await adminClient.from('profiles').upsert([
         {
-          id: newUserId,
+          id: authUserId,
           username: cleanUsername,
           full_name: fullName.trim(),
           role: finalRole,
@@ -70,8 +85,10 @@ export async function POST(req: Request) {
           school_code: finalSchool,
           phone: phone || null,
           subject: subject || null,
+          is_active: true,
+          updated_at: new Date().toISOString(),
         },
-      ]);
+      ], { onConflict: 'username' });
 
       if (profileError) {
         failCount++;
@@ -79,7 +96,7 @@ export async function POST(req: Request) {
       } else {
         successCount++;
         results.push({
-          id: newUserId,
+          id: authUserId,
           username: cleanUsername,
           name: fullName.trim(),
           role: finalRole,
