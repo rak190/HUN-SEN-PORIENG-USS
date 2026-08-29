@@ -1,8 +1,18 @@
 import { cookies } from 'next/headers';
 import { createClient } from './supabase/server';
-import { Profile } from '@/types';
+import { Profile, Role } from '@/types';
 
-export async function getServerAuth() {
+export interface AuthContextResult {
+  user: { id: string; email: string } | null;
+  profile: Profile | null;
+  role: Role | null;
+}
+
+/**
+ * Authoritative Server-Side Authentication
+ * Verifies genuine cryptographic Supabase Auth Session and retrieves authoritative DB Profile.
+ */
+export async function getServerAuth(): Promise<AuthContextResult> {
   const cookieStore = await cookies();
   const supabase = await createClient();
 
@@ -16,103 +26,117 @@ export async function getServerAuth() {
       userId = user.id;
       email = user.email || '';
     }
-  } catch (e) {
-    // Supabase Auth call error
+  } catch (_) {
+    // Session token absent or expired
   }
 
-  // 2. Fallback: Cookie if Supabase auth session token is not present
-  const cookieUserId = cookieStore.get('kruai_user_id')?.value;
-  const cookieUsername = cookieStore.get('kruai_username')?.value;
-  const cookieRole = cookieStore.get('kruai_role')?.value;
-
-  if (!userId && cookieUserId) {
-    userId = cookieUserId;
+  // 2. Secondary: Fallback to secure session cookie ONLY with database validation
+  if (!userId) {
+    const cookieUserId = cookieStore.get('kruai_user_id')?.value;
+    if (cookieUserId && /^[0-9a-fA-F-]{36}$/.test(cookieUserId)) {
+      userId = cookieUserId;
+    }
   }
 
-  // 3. Always verify identity and authoritative role from Database Profile
+  if (!userId) {
+    return { user: null, profile: null, role: null };
+  }
+
+  // 3. Retrieve authoritative database profile (NEVER trust client cookies for role)
   try {
-    let profile: any = null;
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
 
-    if (userId) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
-      profile = data;
-    }
-
-    if (!profile && cookieUsername) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('username', cookieUsername.toLowerCase().trim())
-        .maybeSingle();
-      profile = data;
-    }
-
-    if (profile) {
+    if (profile && profile.is_active !== false) {
       return {
         user: { id: profile.id, email: email || `${profile.username}@kruai.app` },
         profile: profile as Profile,
-        role: profile.role || 'teacher'
+        role: profile.role as Role
       };
     }
-
-    // 4. Fallback for administrative bootstrap accounts
-    const isAdmin = cookieRole === 'admin' || cookieUsername === 'admin_porieng' || cookieUsername === 'admin' || userId === '00000000-0000-0000-0000-000000000001';
-    if (isAdmin) {
-      return {
-        user: { id: '00000000-0000-0000-0000-000000000001', email: 'admin@kruai.app' },
-        profile: {
-          id: '00000000-0000-0000-0000-000000000001',
-          username: cookieUsername || 'admin_porieng',
-          full_name: 'អ្នកគ្រប់គ្រងប្រព័ន្ធ (Admin)',
-          role: 'admin',
-          school_id: '11111111-1111-1111-1111-111111111111',
-          school_code: 'Porieng-2026',
-          created_at: new Date().toISOString(),
-        } as Profile,
-        role: 'admin'
-      };
-    }
-
-    const isPrincipal = cookieRole === 'principal' || cookieUsername === 'principal_porieng' || cookieUsername === 'principal' || userId === '00000000-0000-0000-0000-000000000002';
-    if (isPrincipal) {
-      return {
-        user: { id: '00000000-0000-0000-0000-000000000002', email: 'principal@kruai.app' },
-        profile: {
-          id: '00000000-0000-0000-0000-000000000002',
-          username: cookieUsername || 'principal_porieng',
-          full_name: 'លោកនាយកសាលា',
-          role: 'principal',
-          school_id: '11111111-1111-1111-1111-111111111111',
-          school_code: 'Porieng-2026',
-          created_at: new Date().toISOString(),
-        } as Profile,
-        role: 'principal'
-      };
-    }
-
-    // Demo teacher fallback
-    if (userId === 'demo-teacher-id' || cookieRole === 'teacher') {
-      return {
-        user: { id: 'demo-teacher-id', email: 'demo@kruai.app' },
-        profile: {
-          id: 'demo-teacher-id',
-          username: cookieUsername || 'teacher_12a',
-          full_name: 'លោកគ្រូ/អ្នកគ្រូ សុខា',
-          role: 'teacher',
-          school_id: '11111111-1111-1111-1111-111111111111',
-          school_code: 'Porieng-2026',
-          created_at: new Date().toISOString(),
-        } as Profile,
-        role: 'teacher'
-      };
-    }
-
-    return { user: null, profile: null, role: null };
-  } catch (e) {
-    return { user: null, profile: null, role: null };
+  } catch (err) {
+    console.error('Server auth profile query error:', err);
   }
+
+  return { user: null, profile: null, role: null };
+}
+
+/**
+ * Reusable Guard: Require Authenticated User
+ */
+export async function requireAuth(): Promise<{ user: { id: string; email: string }; profile: Profile; role: Role }> {
+  const { user, profile, role } = await getServerAuth();
+  if (!user || !profile || !role) {
+    throw new Error('Unauthorized: Authentication required to access this resource.');
+  }
+  return { user, profile, role };
+}
+
+/**
+ * Reusable Guard: Require Specific Role(s)
+ */
+export async function requireRole(allowedRoles: Role[]): Promise<{ user: { id: string; email: string }; profile: Profile; role: Role }> {
+  const auth = await requireAuth();
+  if (!allowedRoles.includes(auth.role)) {
+    throw new Error(`Forbidden: Insufficient privileges. Required role: [${allowedRoles.join(', ')}], actual role: ${auth.role}`);
+  }
+  return auth;
+}
+
+/**
+ * Reusable Guard: Require School Scope Access
+ */
+export async function requireSchoolAccess(schoolId: string): Promise<{ user: { id: string; email: string }; profile: Profile; role: Role }> {
+  const auth = await requireAuth();
+  if (auth.role === 'admin') return auth;
+  if (auth.profile.school_id && auth.profile.school_id !== schoolId) {
+    throw new Error('Forbidden: You do not have access to this school institution.');
+  }
+  return auth;
+}
+
+/**
+ * Reusable Guard: Require Class Access (Homeroom Teacher, Principal, or Admin)
+ */
+export async function requireClassAccess(classId: string): Promise<{ user: { id: string; email: string }; profile: Profile; role: Role }> {
+  const auth = await requireAuth();
+  if (auth.role === 'admin' || auth.role === 'principal') return auth;
+
+  const supabase = await createClient();
+  const { data: classroom } = await supabase
+    .from('classes')
+    .select('id, teacher_id')
+    .eq('id', classId)
+    .maybeSingle();
+
+  if (!classroom || classroom.teacher_id !== auth.user.id) {
+    throw new Error('Forbidden: You are not authorized to modify records for this class.');
+  }
+
+  return auth;
+}
+
+/**
+ * Reusable Guard: Require Student Access
+ */
+export async function requireStudentAccess(studentId: string): Promise<{ user: { id: string; email: string }; profile: Profile; role: Role }> {
+  const auth = await requireAuth();
+  if (auth.role === 'admin' || auth.role === 'principal') return auth;
+
+  const supabase = await createClient();
+  const { data: student } = await supabase
+    .from('students')
+    .select('id, class_id, classes(teacher_id)')
+    .eq('id', studentId)
+    .maybeSingle();
+
+  const assignedTeacherId = (student?.classes as any)?.teacher_id;
+  if (!student || assignedTeacherId !== auth.user.id) {
+    throw new Error('Forbidden: You are not authorized to modify records for this student.');
+  }
+
+  return auth;
 }

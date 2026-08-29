@@ -6,6 +6,7 @@
  * - 'monitor': ប្រធានថ្នាក់ (Class Monitor)
  */
 export type UserRole = 'teacher' | 'principal' | 'admin' | 'monitor';
+export type Role = UserRole;
 
 export interface AIGeneration {
   id: string;

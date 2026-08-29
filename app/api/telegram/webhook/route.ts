@@ -40,6 +40,13 @@ async function editMessageText(chatId: number, messageId: number, text: string, 
 
 export async function POST(req: Request) {
   try {
+    // 0. Verify Telegram Webhook Secret Token
+    const secretToken = req.headers.get('x-telegram-bot-api-secret-token');
+    const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (expectedSecret && secretToken !== expectedSecret) {
+      return NextResponse.json({ ok: false, error: 'Unauthorized webhook invocation' }, { status: 401 });
+    }
+
     const update = await req.json();
 
     // 1. MAIN MENU

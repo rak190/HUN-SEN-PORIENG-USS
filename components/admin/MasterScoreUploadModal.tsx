@@ -266,16 +266,9 @@ export function MasterScoreUploadModal({ isOpen, onClose, selectedPeriod }: Mast
         
         const { error: upsertErr } = await supabase
           .from('grades')
-          .upsert(cleanPayload, { onConflict: 'student_id,period' });
+          .upsert(cleanPayload, { onConflict: 'student_id,class_id,period' });
           
-        if (upsertErr) {
-           console.warn("Upsert fallback initiated:", upsertErr);
-           for (const cid of classIdsInvolved) {
-              await supabase.from('grades').delete().eq('class_id', cid).eq('period', selectedPeriod);
-           }
-           const { error: insertErr } = await supabase.from('grades').insert(cleanPayload);
-           if (insertErr) throw insertErr;
-        }
+        if (upsertErr) throw upsertErr;
       }
 
       setStatus('success');
