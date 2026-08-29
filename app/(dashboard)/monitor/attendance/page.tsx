@@ -245,20 +245,6 @@ export default function MonitorAttendancePage() {
         throw new Error(dbError.message);
       }
 
-      const response = await fetch('/api/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: selectedDate,
-          className: activeClass.name || '12 ក',
-          students
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-      
       setMissingDays(prev => prev.filter(d => d !== selectedDate));
       setToast({ message: 'បញ្ជូនវត្តមានប្រចាំថ្ងៃទៅកាន់គ្រូដោយជោគជ័យ!', type: 'success' });
       setTimeout(() => setToast(null), 3000);

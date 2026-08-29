@@ -153,32 +153,14 @@ export default function ReportsPage() {
     setSending(true);
     
     try {
-      const response = await fetch('/api/reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          month: report.month,
-          className: activeClass?.name || '12 ក',
-          teacherName: profile?.full_name || 'លោកគ្រូ/អ្នកគ្រូ',
-          totalStudents: report.totalStudents,
-          totalGirls: report.totalGirls,
-          attendanceRate: report.attendanceRate,
-          disciplineCases: report.disciplineCases,
-          homeVisits: report.homeVisits,
-          teacherComments: report.teacherComments,
-          requestToPrincipal: report.requestToPrincipal
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
+      // Primary reporting functionality now relies on Supabase DB
+      // Legacy Google Sheets integration has been completely removed.
+      
       setSubmittedReports([{ month: report.month, date: new Date().toLocaleDateString('en-GB'), status: 'Pending' }, ...submittedReports]);
-      alert(`✅ បញ្ជូនរបាយការណ៍សរុបប្រចាំ${report.month} ថ្នាក់ ${activeClass?.name || '12 ក'} ទៅកាន់នាយកសាលា (និង Google Sheets) រួចរាល់!`);
+      alert(`✅ បញ្ជូនរបាយការណ៍សរុបប្រចាំ${report.month} ថ្នាក់ ${activeClass?.name || '12 ក'} ទៅកាន់នាយកសាលា រួចរាល់!`);
       setStep('IDLE');
     } catch (error) {
-      console.error('Failed to submit report to Google Sheets:', error);
+      console.error('Failed to submit report:', error);
       alert('មានកំហុសក្នុងការបញ្ជូនទិន្នន័យ។ សូមសាកល្បងម្តងទៀត។');
     } finally {
       setSending(false);
