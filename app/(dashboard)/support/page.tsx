@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { HeartHandshake, Plus, Save, Printer, Download, Search, Phone, Home, Users, CheckCircle2, RotateCcw } from 'lucide-react';
+import { HeartHandshake, Plus, Save, Printer, Download, Search, Phone, Home, Users, CheckCircle2, RotateCcw, BookOpen } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import type { RiskLevel, SupportCaseStatus } from '@/types';
@@ -73,7 +73,10 @@ export default function SupportPage() {
       if (existing) setSelectedId(existing.id);
       else {
         const category = requestedCategory && CATEGORY_LABEL[requestedCategory] ? requestedCategory : 'attendance';
-        setCaseForm(current => ({ ...current, studentId: requestedStudent, category }));
+        const defaultSummary = category === 'attendance'
+          ? 'សិស្សមានអវត្តមានច្រើនជាប់ៗគ្នា (ប្រឈមនឹងការបោះបង់ការសិក្សា ត្រូវការការតាមដាន & ជួយគាំទ្រ)'
+          : '';
+        setCaseForm(current => ({ ...current, studentId: requestedStudent, category, summary: defaultSummary }));
         setShowNew(true);
       }
       handledRequest.current = requestKey;
@@ -255,13 +258,14 @@ export default function SupportPage() {
 
                 {/* Add Follow-up */}
                 <div className="space-y-4 pt-4 border-t border-slate-100">
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
                       { label: 'ហៅទូរស័ព្ទ', type: 'parent_call', icon: Phone }, 
                       { label: 'កត់ប្រជុំ', type: 'parent_meeting', icon: Users }, 
-                      { label: 'ចុះផ្ទះ', type: 'home_visit', icon: Home }
+                      { label: 'ចុះផ្ទះ', type: 'home_visit', icon: Home },
+                      { label: 'ថ្នាក់បំប៉ន', type: 'remedial', icon: BookOpen }
                     ].map(({ label, type, icon: Icon }) => (
-                      <button key={label} onClick={() => quickAction(type, label)} className="p-3 bg-white border border-slate-200 hover:border-[#155EEF] hover:shadow-sm rounded-xl text-xs font-black text-slate-700 flex flex-col items-center gap-2 transition-all group">
+                      <button key={label} onClick={() => quickAction(type, label)} className="p-3 bg-white border border-slate-200 hover:border-[#155EEF] hover:shadow-sm rounded-xl text-xs font-black text-slate-700 flex flex-col items-center gap-2 transition-all group cursor-pointer">
                         <Icon className="w-5 h-5 text-slate-400 group-hover:text-[#155EEF] transition-colors" />
                         {label}
                       </button>

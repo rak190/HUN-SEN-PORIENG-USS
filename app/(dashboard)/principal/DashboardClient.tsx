@@ -18,6 +18,7 @@ import {
   X
 } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
+import { SchoolOperationsControlCenter } from '@/components/dashboard/SchoolOperationsControlCenter';
 
 export interface PrincipalDashboardClientProps {
   stats: {
@@ -29,13 +30,17 @@ export interface PrincipalDashboardClientProps {
   trendData: any[];
   atRiskStudents: any[];
   activities: any[];
+  unsubmittedAttendanceClasses?: string[];
+  pendingFollowUpsCount?: number;
 }
 
 export default function PrincipalDashboardClient({
   stats,
   trendData,
   atRiskStudents,
-  activities
+  activities,
+  unsubmittedAttendanceClasses = [],
+  pendingFollowUpsCount = 0
 }: PrincipalDashboardClientProps) {
   const { profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
@@ -167,6 +172,13 @@ export default function PrincipalDashboardClient({
           )}
         </div>
       </Modal>
+
+      {/* School Operations Control Center (What Needs Attention Today) */}
+      <SchoolOperationsControlCenter
+        unsubmittedAttendanceClasses={unsubmittedAttendanceClasses}
+        atRiskCount={atRiskStudents.length}
+        pendingFollowUpsCount={pendingFollowUpsCount}
+      />
 
       {/* 4 Top Stat Cards (Premium Styling) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">

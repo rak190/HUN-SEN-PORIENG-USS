@@ -24,9 +24,30 @@ export default async function PrincipalDashboardPage() {
     .select('*', { count: 'exact', head: true })
     .eq('role', 'teacher');
 
-  const { count: activeClasses } = await supabase
+  const { data: activeClassesList } = await supabase
     .from('classes')
-    .select('*', { count: 'exact', head: true });
+    .select('id, name')
+    .eq('is_archived', false)
+    .order('name');
+
+  const activeClassesCount = activeClassesList?.length || 0;
+
+  // 2.5 Real-time Attendance & Support Ops
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
+  const { data: todayAttendance } = await supabase
+    .from('attendance_records')
+    .select('class_id')
+    .eq('date', todayStr);
+
+  const recordedClassIds = new Set((todayAttendance || []).map(a => a.class_id));
+  const unsubmittedAttendanceClasses = (activeClassesList || [])
+    .filter(c => !recordedClassIds.has(c.id))
+    .map(c => c.name);
+
+  const { count: pendingFollowUpsCount } = await supabase
+    .from('support_cases')
+    .select('*', { count: 'exact', head: true })
+    .neq('status', 'resolved');
 
   // 3. Fetch Audit Logs for Recent Activities
   const { data: activities } = await supabase
@@ -42,15 +63,17 @@ export default async function PrincipalDashboardPage() {
     <PrincipalDashboardClient
       stats={{
         totalStudents: dashboardData?.totalStudents || 0,
-        activeClasses: activeClasses || 0,
+        activeClasses: activeClassesCount,
         teachers: teachers || 0,
         absentRate: dashboardData?.overallAttendance 
           ? (100 - parseFloat(dashboardData.overallAttendance)).toFixed(1) 
-          : '0.0', // actions.ts returns overallAttendance, we want absentRate
+          : '0.0',
       }}
       trendData={dashboardData?.trendData || []}
       atRiskStudents={dashboardData?.atRiskList || []}
       activities={(activities as any) || []}
+      unsubmittedAttendanceClasses={unsubmittedAttendanceClasses}
+      pendingFollowUpsCount={pendingFollowUpsCount || 0}
     />
   );
 }
