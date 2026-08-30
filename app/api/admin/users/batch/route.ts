@@ -41,7 +41,7 @@ export async function POST(req: Request) {
 
     const cleanUsername = username.trim().toLowerCase();
     const email = `${cleanUsername}@kruai.app`;
-    const finalPassword = password || 'password123';
+    const finalPassword = password || crypto.randomInt(100000, 999999).toString();
     const finalRole = role || 'teacher';
     const finalSchool = schoolCode || 'Porieng-2026';
     const newUserId = crypto.randomUUID();
@@ -63,18 +63,10 @@ export async function POST(req: Request) {
         if (authCreated?.user) {
           authUserId = authCreated.user.id;
         } else if (createErr) {
-          const { data: userList } = await adminClient.auth.admin.listUsers();
-          const existing = userList?.users?.find(u => u.email === email);
-          if (existing) {
-            authUserId = existing.id;
-            const { error: updErr } = await adminClient.auth.admin.updateUserById(existing.id, {
-              password: finalPassword,
-              user_metadata: { full_name: fullName.trim(), role: finalRole }
-            });
-            if (updErr) throw updErr;
-          } else {
-            throw createErr;
+          if (createErr.message.includes('already exists') || createErr.status === 422) {
+            throw new Error('Username already exists.');
           }
+          throw createErr;
         }
       } catch (authErr: any) {
         failCount++;
@@ -100,6 +92,8 @@ export async function POST(req: Request) {
       if (profileError) {
         failCount++;
         results.push({ username: cleanUsername, error: profileError.message });
+        // Rollback Auth user creation
+        await adminClient.auth.admin.deleteUser(authUserId).catch(() => {});
       } else {
         successCount++;
         results.push({

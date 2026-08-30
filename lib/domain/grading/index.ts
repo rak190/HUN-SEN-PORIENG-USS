@@ -212,23 +212,11 @@ export function computeSummaryGrades(
     const feb = gradesData.find(g => g.student_id === studentId && g.period === 'feb')?.scores || {};
     const exam = gradesData.find(g => g.student_id === studentId && g.period === 'sem1-exam')?.scores || {};
 
+    const { calculatedScores } = calculateStudentSemesterGrade([dec, jan, feb], exam);
+    // Filter to requested subjectIds
     subjectIds.forEach(subId => {
-      const monthVals: number[] = [];
-      if (typeof dec[subId] === 'number' && !isNaN(dec[subId])) monthVals.push(dec[subId]);
-      if (typeof jan[subId] === 'number' && !isNaN(jan[subId])) monthVals.push(jan[subId]);
-      if (typeof feb[subId] === 'number' && !isNaN(feb[subId])) monthVals.push(feb[subId]);
-
-      const hasExam = typeof exam[subId] === 'number' && !isNaN(exam[subId]);
-
-      if (monthVals.length > 0 && hasExam) {
-        const monthlyAvg = monthVals.reduce((sum, v) => sum + v, 0) / monthVals.length;
-        const semAvg = (monthlyAvg + exam[subId]) / 2;
-        scores[subId] = Number(semAvg.toFixed(2));
-      } else if (monthVals.length > 0) {
-        const monthlyAvg = monthVals.reduce((sum, v) => sum + v, 0) / monthVals.length;
-        scores[subId] = Number(monthlyAvg.toFixed(2));
-      } else if (hasExam) {
-        scores[subId] = Number(exam[subId].toFixed(2));
+      if (typeof calculatedScores[subId] === 'number') {
+        scores[subId] = calculatedScores[subId];
       }
     });
   } else if (period === 'sem2-summary') {
@@ -237,40 +225,20 @@ export function computeSummaryGrades(
     const jul = gradesData.find(g => g.student_id === studentId && g.period === 'jul')?.scores || {};
     const exam = gradesData.find(g => g.student_id === studentId && g.period === 'sem2-exam')?.scores || {};
 
+    const { calculatedScores } = calculateStudentSemesterGrade([may, jun, jul], exam);
     subjectIds.forEach(subId => {
-      const monthVals: number[] = [];
-      if (typeof may[subId] === 'number' && !isNaN(may[subId])) monthVals.push(may[subId]);
-      if (typeof jun[subId] === 'number' && !isNaN(jun[subId])) monthVals.push(jun[subId]);
-      if (typeof jul[subId] === 'number' && !isNaN(jul[subId])) monthVals.push(jul[subId]);
-
-      const hasExam = typeof exam[subId] === 'number' && !isNaN(exam[subId]);
-
-      if (monthVals.length > 0 && hasExam) {
-        const monthlyAvg = monthVals.reduce((sum, v) => sum + v, 0) / monthVals.length;
-        const semAvg = (monthlyAvg + exam[subId]) / 2;
-        scores[subId] = Number(semAvg.toFixed(2));
-      } else if (monthVals.length > 0) {
-        const monthlyAvg = monthVals.reduce((sum, v) => sum + v, 0) / monthVals.length;
-        scores[subId] = Number(monthlyAvg.toFixed(2));
-      } else if (hasExam) {
-        scores[subId] = Number(exam[subId].toFixed(2));
+      if (typeof calculatedScores[subId] === 'number') {
+        scores[subId] = calculatedScores[subId];
       }
     });
   } else if (period === 'annual') {
-    // Annual is average of available semester summaries
     const sem1 = computeSummaryGrades(gradesData, studentId, 'sem1-summary', subjectIds);
     const sem2 = computeSummaryGrades(gradesData, studentId, 'sem2-summary', subjectIds);
 
+    const { calculatedScores } = calculateStudentAnnualGrade(sem1, sem2);
     subjectIds.forEach(subId => {
-      const hasS1 = typeof sem1[subId] === 'number' && !isNaN(sem1[subId]);
-      const hasS2 = typeof sem2[subId] === 'number' && !isNaN(sem2[subId]);
-
-      if (hasS1 && hasS2) {
-        scores[subId] = Number(((sem1[subId] + sem2[subId]) / 2).toFixed(2));
-      } else if (hasS1) {
-        scores[subId] = sem1[subId];
-      } else if (hasS2) {
-        scores[subId] = sem2[subId];
+      if (typeof calculatedScores[subId] === 'number') {
+        scores[subId] = calculatedScores[subId];
       }
     });
   } else {

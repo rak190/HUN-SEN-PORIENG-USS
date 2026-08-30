@@ -1,53 +1,48 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
-// Note: These tests are meant to be run against a local or staging Supabase instance.
-// Ensure environment variables are set for SUPABASE_URL and SUPABASE_ANON_KEY.
-// Run using: node --test --require tsx tests/security/auth-guards.test.ts
+// Note: These tests require SUPABASE_URL and SUPABASE_ANON_KEY to be set
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
 test('Security & Authorization Guards', async (t) => {
-  
-  await t.test('JWT token forgery should be rejected by server guards', async () => {
-    // A forged or expired token should not pass getServerAuth()
-    const mockRequest = new Request('http://localhost/api/admin/users', {
-      headers: {
-        'Cookie': 'sb-auth-token=forged.jwt.token'
-      }
+  // We only run real tests if the environment variables are provided
+  if (!supabaseUrl || !supabaseKey) {
+    console.warn('Skipping real security tests because SUPABASE_URL or SUPABASE_ANON_KEY is missing.');
+    return;
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  await t.test('JWT token forgery should be rejected by Supabase Auth', async () => {
+    // Attempt to set a completely fake JWT
+    const { data, error } = await supabase.auth.getUser('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake.signature');
+    assert.ok(error !== null, 'Should return an error for a forged JWT');
+    assert.strictEqual(data?.user, null, 'Should not return any user data');
+  });
+
+  await t.test('Anonymous users should be blocked by RLS from reading profiles', async () => {
+    const { data, error } = await supabase.from('profiles').select('*').limit(1);
+    // Even if there are profiles, RLS should return 0 rows for anonymous users
+    // If it returns an error, that's also acceptable (e.g. permission denied)
+    if (!error) {
+      assert.strictEqual(data?.length, 0, 'RLS should block anonymous users from seeing profiles');
+    } else {
+      assert.ok(error.message.includes('deny') || error.code === '42501', 'Should be a permission denied error');
+    }
+  });
+
+  await t.test('Anonymous users should be blocked by RLS from creating classes', async () => {
+    const { error } = await supabase.from('classes').insert({
+      id: crypto.randomUUID(),
+      name: 'Hacked Class',
+      grade: '10',
+      academic_year_id: crypto.randomUUID(),
+      school_id: crypto.randomUUID()
     });
-
-    // We can't directly test getServerAuth easily outside Next.js request context without mocking headers().
-    // However, the security requirement is that getServerAuth MUST validate with Supabase.
-    // If we mock the Supabase client to receive this token, getUser() will throw an error.
-    
-    // In a real E2E test, we would hit the API endpoint.
-    assert.ok(true, 'JWT forgery relies on Supabase cryptographically signing the token. Forgery is impossible without the JWT secret.');
+    assert.ok(error !== null, 'Should block anonymous insertion');
+    assert.strictEqual(error.code, '42501', 'Should be new row violates row-level security policy for table "classes"');
   });
-
-  await t.test('Principal role escalation via profile update should be blocked by RLS trigger', async () => {
-    // Migration 28 introduced a trigger to prevent updating role from 'principal' to 'admin'.
-    // Test logic:
-    // 1. Authenticate as a Principal.
-    // 2. Try to update own profile `role` to `admin`.
-    // 3. Expected: Supabase Postgres Error (Forbidden or Trigger violation).
-    assert.ok(true, 'Verified conceptually: Migration 28 trg_enforce_role_escalation prevents this.');
-  });
-
-  await t.test('Cross-school data modification should be rejected by requireClassAccess', async () => {
-    // Principal of School A attempting to upload/download documents or modify class in School B.
-    // Test logic:
-    // 1. requireClassAccess(schoolB_ClassId) with Principal A's auth token.
-    // 2. The function fetches the class, sees class.school_id !== profile.school_id.
-    // 3. Expected: Error('Forbidden: You are not authorized to modify records outside your school.').
-    assert.ok(true, 'Verified conceptually: requireClassAccess and requireStudentAccess enforce school_id checks.');
-  });
-
-  await t.test('SECURITY DEFINER RPCs strictly use auth.uid() instead of caller parameters', async () => {
-    // Migration 28 updated promote_students and migrate_academic_year to NOT accept user_id as an argument.
-    // Test logic:
-    // 1. Call promote_students(source_id, target_id) via RPC.
-    // 2. Ensure it does not accept a third argument for user_id.
-    // 3. Ensure the RPC validates the caller's school_id matches the class's school_id.
-    assert.ok(true, 'Verified conceptually: RPC signatures and internal validations use auth.uid() and school_id checks.');
-  });
-
 });

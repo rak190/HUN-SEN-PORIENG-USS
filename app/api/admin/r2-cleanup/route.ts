@@ -26,24 +26,43 @@ export async function POST(req: Request) {
 
     if (staleErr) throw staleErr;
 
-    // In a real execution, we would:
-    // a) Check R2 if object actually exists.
-    // b) If yes -> finalize to 'active' or 'verified'.
-    // c) If no -> delete from DB.
-    
-    // For now, we will just delete DB records that have been pending for > 24 hours
-    // because if they were uploaded, they should have been finalized.
     let deletedCount = 0;
+    let activatedCount = 0;
     
     if (stalePending && stalePending.length > 0) {
-      const idsToDelete = stalePending.map(doc => doc.id);
-      const { error: delErr } = await adminClient
-        .from('documents')
-        .delete()
-        .in('id', idsToDelete);
-        
-      if (delErr) throw delErr;
-      deletedCount = stalePending.length;
+      // We need to import HeadObjectCommand
+      const { HeadObjectCommand } = await import('@aws-sdk/client-s3');
+      const { r2Client, R2_BUCKET_NAME } = await import('@/lib/cloudflare-r2');
+
+      for (const doc of stalePending) {
+        try {
+          // Check if object exists in R2
+          await r2Client.send(new HeadObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: doc.file_url
+          }));
+          
+          // It exists, so the upload actually succeeded but the finalize step failed.
+          await adminClient
+            .from('documents')
+            .update({ status: 'active' })
+            .eq('id', doc.id);
+            
+          activatedCount++;
+        } catch (error: any) {
+          if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+            // It doesn't exist, so the upload was abandoned. Delete the DB record.
+            await adminClient
+              .from('documents')
+              .delete()
+              .eq('id', doc.id);
+              
+            deletedCount++;
+          } else {
+            console.error(`Error checking R2 object ${doc.file_url}:`, error);
+          }
+        }
+      }
     }
 
     // Log the cleanup

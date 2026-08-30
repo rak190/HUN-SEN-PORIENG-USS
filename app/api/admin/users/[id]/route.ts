@@ -156,31 +156,51 @@ export async function DELETE(
       }
     }
 
-    // 1. Delete profile
-    const { error: profileErr } = await adminClient.from('profiles').delete().eq('id', id);
-    if (profileErr) throw profileErr;
+    const url = new URL(req.url);
+    const forceDelete = url.searchParams.get('force') === 'true';
 
-    // 2. Unassign teacher from any classes
+    // 1. Unassign teacher from any classes
     await adminClient.from('classes').update({ teacher_id: null }).eq('teacher_id', id);
 
-    // 3. Delete auth user
-    try {
-      const { error: authDelErr } = await adminClient.auth.admin.deleteUser(id);
-      if (authDelErr) throw authDelErr;
-    } catch (err: any) {
-      // We already deleted the profile, so the state is partially torn down. 
-      // But we shouldn't fail silently.
-      return NextResponse.json({ error: err.message || 'Failed to delete auth user' }, { status: 500 });
-    }
+    if (forceDelete) {
+      // Hard delete
+      const { error: profileErr } = await adminClient.from('profiles').delete().eq('id', id);
+      if (profileErr) throw profileErr;
 
-    // Log the deletion
-    await adminClient.from('audit_logs').insert([
-      {
-        action: `បានលុបគណនីលេខសម្គាល់ ${id}`,
-        type: 'warn',
-        user_id: user.id,
+      try {
+        const { error: authDelErr } = await adminClient.auth.admin.deleteUser(id);
+        if (authDelErr) throw authDelErr;
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message || 'Failed to delete auth user' }, { status: 500 });
       }
-    ]);
+
+      await adminClient.from('audit_logs').insert([
+        {
+          action: `បានលុបគណនីលេខសម្គាល់ ${id} (Hard Delete)`,
+          type: 'warn',
+          user_id: user.id,
+        }
+      ]);
+    } else {
+      // Soft delete / Archive
+      const { error: profileErr } = await adminClient.from('profiles').update({ is_active: false, is_archived: true }).eq('id', id);
+      if (profileErr) throw profileErr;
+
+      // Suspend Auth user (ban for 100 years)
+      try {
+        await adminClient.auth.admin.updateUserById(id, { ban_duration: '876000h' });
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message || 'Failed to suspend auth user' }, { status: 500 });
+      }
+
+      await adminClient.from('audit_logs').insert([
+        {
+          action: `បានដាក់ចូលបណ្ណសារគណនីលេខសម្គាល់ ${id} (Archive)`,
+          type: 'warn',
+          user_id: user.id,
+        }
+      ]);
+    }
 
     return NextResponse.json({ isDemo: false, message: 'User deleted successfully' });
   } catch (err: any) {
