@@ -203,7 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function logout() {
     try {
       await supabase.auth.signOut();
-    } catch (_) {}
+    } catch (err) { console.warn('Supabase sign out error:', err); }
     document.cookie = 'kruai_user_id=; path=/; max-age=0';
     document.cookie = 'kruai_role=; path=/; max-age=0';
     document.cookie = 'kruai_username=; path=/; max-age=0';

@@ -60,10 +60,11 @@ export async function PATCH(
     // 2. Update Auth User if password is changed
     if (password) {
       try {
-        await adminClient.auth.admin.updateUserById(id, {
+        const { error: pwdErr } = await adminClient.auth.admin.updateUserById(id, {
           password,
           user_metadata: { full_name: fullName, role },
         });
+        if (pwdErr) throw pwdErr;
 
         // Log the password change
         await adminClient.from('audit_logs').insert([
@@ -73,7 +74,9 @@ export async function PATCH(
             user_id: user.id,
           }
         ]);
-      } catch (_) {}
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message || 'Failed to update auth data' }, { status: 500 });
+      }
     }
 
     if (homeroomClass && role === 'teacher') {
@@ -162,8 +165,13 @@ export async function DELETE(
 
     // 3. Delete auth user
     try {
-      await adminClient.auth.admin.deleteUser(id);
-    } catch (_) {}
+      const { error: authDelErr } = await adminClient.auth.admin.deleteUser(id);
+      if (authDelErr) throw authDelErr;
+    } catch (err: any) {
+      // We already deleted the profile, so the state is partially torn down. 
+      // But we shouldn't fail silently.
+      return NextResponse.json({ error: err.message || 'Failed to delete auth user' }, { status: 500 });
+    }
 
     // Log the deletion
     await adminClient.from('audit_logs').insert([

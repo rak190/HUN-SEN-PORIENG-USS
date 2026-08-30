@@ -8,7 +8,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
-import { computeSummaryGrades } from '@/lib/grade-calculations';
+import { computeSummaryGrades } from '@/lib/domain/grading';
 import {
   Printer,
   ChevronLeft,

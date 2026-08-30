@@ -26,8 +26,8 @@ export async function getServerAuth(): Promise<AuthContextResult> {
       userId = user.id;
       email = user.email || '';
     }
-  } catch (_) {
-    // Session token absent or expired
+  } catch (err) {
+    console.debug('Auth check failed:', err);
   }
 
   if (!userId) {
@@ -95,16 +95,27 @@ export async function requireSchoolAccess(schoolId: string): Promise<{ user: { i
  */
 export async function requireClassAccess(classId: string): Promise<{ user: { id: string; email: string }; profile: Profile; role: Role }> {
   const auth = await requireAuth();
-  if (auth.role === 'admin' || auth.role === 'principal') return auth;
+  if (auth.role === 'admin') return auth;
 
   const supabase = await createClient();
   const { data: classroom } = await supabase
     .from('classes')
-    .select('id, teacher_id')
+    .select('id, teacher_id, school_id')
     .eq('id', classId)
     .maybeSingle();
 
-  if (!classroom || classroom.teacher_id !== auth.user.id) {
+  if (!classroom) {
+    throw new Error('Forbidden: Record not found.');
+  }
+
+  if (auth.role === 'principal') {
+    if (classroom.school_id !== auth.profile.school_id) {
+      throw new Error('Forbidden: You are not authorized to modify records outside your school.');
+    }
+    return auth;
+  }
+
+  if (classroom.teacher_id !== auth.user.id) {
     throw new Error('Forbidden: You are not authorized to modify records for this class.');
   }
 
@@ -116,17 +127,29 @@ export async function requireClassAccess(classId: string): Promise<{ user: { id:
  */
 export async function requireStudentAccess(studentId: string): Promise<{ user: { id: string; email: string }; profile: Profile; role: Role }> {
   const auth = await requireAuth();
-  if (auth.role === 'admin' || auth.role === 'principal') return auth;
+  if (auth.role === 'admin') return auth;
 
   const supabase = await createClient();
   const { data: student } = await supabase
     .from('students')
-    .select('id, class_id, classes(teacher_id)')
+    .select('id, class_id, classes(teacher_id, school_id)')
     .eq('id', studentId)
     .maybeSingle();
 
-  const assignedTeacherId = (student?.classes as any)?.teacher_id;
-  if (!student || assignedTeacherId !== auth.user.id) {
+  if (!student) {
+    throw new Error('Forbidden: Student record not found.');
+  }
+
+  const classData = student.classes as any;
+
+  if (auth.role === 'principal') {
+    if (classData?.school_id !== auth.profile.school_id) {
+      throw new Error('Forbidden: You are not authorized to modify students outside your school.');
+    }
+    return auth;
+  }
+
+  if (classData?.teacher_id !== auth.user.id) {
     throw new Error('Forbidden: You are not authorized to modify records for this student.');
   }
 

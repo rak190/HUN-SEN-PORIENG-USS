@@ -67,13 +67,20 @@ export async function POST(req: Request) {
           const existing = userList?.users?.find(u => u.email === email);
           if (existing) {
             authUserId = existing.id;
-            await adminClient.auth.admin.updateUserById(existing.id, {
+            const { error: updErr } = await adminClient.auth.admin.updateUserById(existing.id, {
               password: finalPassword,
               user_metadata: { full_name: fullName.trim(), role: finalRole }
             });
+            if (updErr) throw updErr;
+          } else {
+            throw createErr;
           }
         }
-      } catch (_) {}
+      } catch (authErr: any) {
+        failCount++;
+        results.push({ username: cleanUsername, error: authErr.message || 'Failed to provision auth user' });
+        continue;
+      }
 
       const { error: profileError } = await adminClient.from('profiles').upsert([
         {

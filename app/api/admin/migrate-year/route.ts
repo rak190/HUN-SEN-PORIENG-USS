@@ -28,20 +28,11 @@ export async function POST(req: Request) {
 
   try {
     const { data, error } = await adminClient.rpc('migrate_academic_year', {
-      source_year_id: sourceYearId,
-      target_year_id: targetYearId
+      p_source_year_id: sourceYearId,
+      p_target_year_id: targetYearId
     });
 
     if (error) throw error;
-
-    // Log the migration
-    await adminClient.from('audit_logs').insert([
-      {
-        action: `បានបម្លាស់ទីទិន្នន័យឆ្នាំសិក្សាពី ${sourceYearId} ទៅ ${targetYearId}`,
-        type: 'error',
-        user_id: user.id,
-      }
-    ]);
 
     return NextResponse.json({ 
       isDemo: false,

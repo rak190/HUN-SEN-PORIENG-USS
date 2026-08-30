@@ -27,11 +27,7 @@ export async function fetchAdminDashboardData() {
     attendanceRate = Math.round((present / monthAttendance.length) * 100) + '%';
   }
 
-  // Count distinct classes with grades uploaded
-  let gradesQuery = supabase.from('grades').select('class_id, period');
-  const { data: recentGrades } = await gradesQuery;
-  const distinctGrades = new Set(recentGrades?.map(g => `${g.class_id}-${g.period}`) || []);
-  const scoresUploaded = distinctGrades.size.toString();
+  // Removed old scoresUploaded calculation in favor of fractional one below
 
   const { data: allStudents } = await supabase.from('active_students').select('gender, dob, poor_id_status');
   let dataCompleteness = '0%';
@@ -86,6 +82,9 @@ export async function fetchAdminDashboardData() {
   }
   const { data: activeClasses } = await classQuery;
   const dataStatus = [];
+  let expectedClassesCount = activeClasses?.length || 0;
+  let submittedClassesCount = 0;
+
   if (activeClasses) {
     const gradesMap: Record<string, { total: number, submitted: number }> = {
       '7': { total: 0, submitted: 0 },
@@ -103,6 +102,7 @@ export async function fetchAdminDashboardData() {
     
     const { data: thisMonthGrades } = await supabase.from('grades').select('class_id').eq('period', currentPeriodId);
     const submittedClassIds = new Set(thisMonthGrades?.map(g => g.class_id) || []);
+    submittedClassesCount = submittedClassIds.size;
     
     activeClasses.forEach(c => {
       const g = String(c.grade);
@@ -122,25 +122,27 @@ export async function fetchAdminDashboardData() {
     }
   }
 
+  // Count distinct classes with grades uploaded
+  const scoresUploaded = `${submittedClassesCount} / ${expectedClassesCount}`;
+
   // 6. Trend Data (Audit Logs)
   const trendData = [];
-  const monthNames = ['មករា','កុម្ភៈ','មីនា','មេសា','ឧសភា','មិថុនា','កក្កដា','សីហា','កញ្ញា','តុលា','វិច្ឆិកា','ធ្នូ'];
-  const { data: allLogs } = await supabase.from('audit_logs').select('created_at').order('created_at', { ascending: false }).limit(500);
-  const monthCounts: Record<number, number> = {};
+  const { data: allLogs } = await supabase.from('audit_logs').select('created_at').order('created_at', { ascending: false }).limit(2000);
+  const monthCounts: Record<string, number> = {};
   if (allLogs) {
     allLogs.forEach(log => {
-      const m = new Date(log.created_at).getMonth();
-      monthCounts[m] = (monthCounts[m] || 0) + 1;
+      const d = new Date(log.created_at);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthCounts[key] = (monthCounts[key] || 0) + 1;
     });
   }
   
-  const currentM = now.getMonth();
   for (let i = 5; i >= 0; i--) {
-    let m = currentM - i;
-    if (m < 0) m += 12;
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     trendData.push({
-      monthLabel: monthNames[m],
-      systemUsagePct: monthCounts[m] || 0,
+      monthLabel: key,
+      systemUsagePct: monthCounts[key] || 0,
       giepPct: 0 
     });
   }
@@ -160,6 +162,9 @@ export async function fetchAdminDashboardData() {
     type: log.type === 'info' ? 'success' : log.type
   })) || [];
 
+  // Compute System Health based on DB connection and errors
+  const systemHealth = activeClasses ? 'Active' : 'Degraded';
+
   return {
     stats: {
       totalStudents: totalStudents?.toString() || '0',
@@ -167,7 +172,7 @@ export async function fetchAdminDashboardData() {
       scoresUploaded,
       dataCompleteness,
       techSupportGiven,
-      systemHealth: '100%',
+      systemHealth,
       
       totalUsers: totalUsers.toString(),
       teachersCount: teachersCount.toString(),

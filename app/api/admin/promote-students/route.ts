@@ -28,21 +28,11 @@ export async function POST(req: Request) {
 
   try {
     const { data, error } = await adminClient.rpc('promote_students', {
-      source_class_id: sourceClassId,
-      target_class_id: targetClassId,
-      admin_user_id: user.id
+      p_source_class_id: sourceClassId,
+      p_target_class_id: targetClassId
     });
 
     if (error) throw error;
-
-    // Log the promotion
-    await adminClient.from('audit_logs').insert([
-      {
-        action: `បានដំឡើងថ្នាក់សិស្សពីថ្នាក់ ${sourceClassId} ទៅថ្នាក់ ${targetClassId}`,
-        type: 'warn',
-        user_id: user.id,
-      }
-    ]);
 
     return NextResponse.json({ 
       isDemo: false,

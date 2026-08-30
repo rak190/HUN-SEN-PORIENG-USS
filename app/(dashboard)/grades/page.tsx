@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
 import { CURRICULUM_SCHEMAS, SubjectSchema, getCurriculumSchemaForClass } from '@/lib/curriculum';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
-import { computeSummaryGrades } from '@/lib/grade-calculations';
+import { computeSummaryGrades } from '@/lib/domain/grading';
 import {
   ClipboardList,
   Search,

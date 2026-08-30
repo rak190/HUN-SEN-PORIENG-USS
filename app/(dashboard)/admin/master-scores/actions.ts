@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getCurriculumSchemaForClass } from '@/lib/curriculum';
 import { getServerAuth } from '@/lib/auth-server';
+import { computeSummaryGrades } from '@/lib/domain/grading';
 
 /**
  * Creates an automated backup snapshot before applying bulk grade updates
@@ -106,11 +107,15 @@ export async function rollbackGradeSnapshot(snapshotId: string) {
     }
 
     // 5. Create audit log of the rollback action
-    await supabase.from('audit_logs').insert({
-      user_id: user?.id || null,
-      action: 'rollback_grades',
-      details: { snapshotId, period, restoredCount: backupGrades.length }
-    });
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const adminClient = createAdminClient();
+    if (adminClient) {
+      await adminClient.from('audit_logs').insert({
+        user_id: user?.id || null,
+        action: 'rollback_grades',
+        details: { snapshotId, period, restoredCount: backupGrades.length }
+      });
+    }
 
     return { success: true, count: backupGrades.length, period };
   } catch (err: any) {
@@ -192,57 +197,8 @@ export async function calculateSummaryScores(period: string) {
       }
     });
 
-    const calculatedScores: Record<string, number> = {};
+    const calculatedScores = computeSummaryGrades(gradesData, std.id, period, subjectIds);
     let totalScore = 0;
-
-    subjectIds.forEach(subj => {
-      if (period === 'sem1-summary' || period === 'sem2-summary') {
-        // User chosen policy: Count missing months as 0 and divide by total months (divide by 3)
-        let monthlySum = 0;
-        let hasAnyMonthData = false;
-
-        targetMonths.forEach(mPeriod => {
-          const mScores = pMap.get(mPeriod);
-          if (mScores && typeof mScores[subj] === 'number' && !isNaN(mScores[subj])) {
-            monthlySum += mScores[subj];
-            hasAnyMonthData = true;
-          } else {
-            // Count missing month as 0
-            monthlySum += 0;
-          }
-        });
-
-        const monthlyAvg = targetMonths.length > 0 ? (monthlySum / targetMonths.length) : 0;
-        
-        // Exam score
-        const examScores = pMap.get(examPeriod);
-        const examScore = (examScores && typeof examScores[subj] === 'number' && !isNaN(examScores[subj])) ? examScores[subj] : null;
-
-        if (hasAnyMonthData || examScore !== null) {
-          if (examScore !== null) {
-            calculatedScores[subj] = parseFloat((((monthlyAvg) + examScore) / 2).toFixed(2));
-          } else {
-            calculatedScores[subj] = parseFloat(monthlyAvg.toFixed(2));
-          }
-        }
-
-      } else if (period === 'annual') {
-        // Annual formula: (Sem 1 + Sem 2) / 2
-        const sem1Scores = pMap.get('sem1-summary');
-        const sem2Scores = pMap.get('sem2-summary');
-
-        const s1 = (sem1Scores && typeof sem1Scores[subj] === 'number') ? sem1Scores[subj] : null;
-        const s2 = (sem2Scores && typeof sem2Scores[subj] === 'number') ? sem2Scores[subj] : null;
-
-        if (s1 !== null && s2 !== null) {
-          calculatedScores[subj] = parseFloat(((s1 + s2) / 2).toFixed(2));
-        } else if (s1 !== null) {
-          calculatedScores[subj] = parseFloat(s1.toFixed(2));
-        } else if (s2 !== null) {
-          calculatedScores[subj] = parseFloat(s2.toFixed(2));
-        }
-      }
-    });
 
     if (Object.keys(calculatedScores).length > 0) {
       // Sum up top-level subject scores for total_score

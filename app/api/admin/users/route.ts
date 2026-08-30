@@ -37,8 +37,8 @@ export async function GET() {
       if (authData?.users) {
         authUserMap = new Map(authData.users.map(u => [u.id, u]));
       }
-    } catch (_) {
-      // In local mode without GoTrue, safely continue with profile list
+    } catch (authErr) {
+      console.warn('Failed to fetch auth list, continuing with profiles:', authErr);
     }
 
     const mappedUsers = (profiles || []).map(p => {
@@ -207,17 +207,24 @@ export async function PATCH(req: Request) {
 
       try {
         const banDuration = status === 'បានផ្អាក' ? '876000h' : 'none';
-        await adminClient.auth.admin.updateUserById(id, { ban_duration: banDuration });
-        await adminClient.from('profiles').update({ is_active: status !== 'បានផ្អាក' }).eq('id', id);
-      } catch (_) {}
+        const { error: banErr } = await adminClient.auth.admin.updateUserById(id, { ban_duration: banDuration });
+        if (banErr) throw banErr;
+        const { error: updErr } = await adminClient.from('profiles').update({ is_active: status !== 'បានផ្អាក' }).eq('id', id);
+        if (updErr) throw updErr;
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message || 'Failed to toggle status' }, { status: 500 });
+      }
       return NextResponse.json({ success: true });
     }
 
     if (action === 'reset_password') {
       const newPin = generatePin();
       try {
-        await adminClient.auth.admin.updateUserById(id, { password: newPin });
-      } catch (_) {}
+        const { error: pwdErr } = await adminClient.auth.admin.updateUserById(id, { password: newPin });
+        if (pwdErr) throw pwdErr;
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message || 'Failed to reset password' }, { status: 500 });
+      }
       return NextResponse.json({ success: true, newPassword: newPin });
     }
 
@@ -243,11 +250,14 @@ export async function PATCH(req: Request) {
       if (subject !== undefined) profileUpdates.subject = subject;
 
       try {
-        await adminClient.auth.admin.updateUserById(id, {
+        const { error: metaErr } = await adminClient.auth.admin.updateUserById(id, {
           email: username ? `${username.trim().toLowerCase()}@kruai.app` : undefined,
           user_metadata: { full_name: name, role: newRole }
         });
-      } catch (_) {}
+        if (metaErr) throw metaErr;
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message || 'Failed to update auth metadata' }, { status: 500 });
+      }
 
       const { error: profileErr } = await adminClient.from('profiles').update(profileUpdates).eq('id', id);
       if (profileErr) throw profileErr;

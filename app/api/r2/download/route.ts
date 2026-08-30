@@ -32,6 +32,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Not Found: Object metadata is missing.' }, { status: 404 });
     }
 
+    if (role === 'principal') {
+      const { data: profile } = await supabase.from('profiles').select('school_id').eq('id', user.id).single();
+      if (doc.class_id) {
+        const { data: cls } = await supabase.from('classes').select('school_id').eq('id', doc.class_id).maybeSingle();
+        if (cls?.school_id !== profile?.school_id) {
+          return NextResponse.json({ error: 'Forbidden: Document belongs to another school' }, { status: 403 });
+        }
+      } else {
+        // If no class, assume school-wide or personal, but check if uploader is in same school
+        const { data: uploader } = await supabase.from('profiles').select('school_id').eq('id', doc.uploader_id).maybeSingle();
+        if (uploader?.school_id !== profile?.school_id && doc.category !== 'template') {
+          return NextResponse.json({ error: 'Forbidden: Document belongs to another school' }, { status: 403 });
+        }
+      }
+    }
+
     if (role !== 'admin' && role !== 'principal' && doc.category !== 'template') {
       // If document is indexed in DB and uploader is different, verify class access
       if (doc.uploader_id !== user.id) {

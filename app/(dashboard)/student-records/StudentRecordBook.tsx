@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Classroom, Student } from '@/types';
 import { getCurriculumSchemaForClass } from '@/lib/curriculum';
-import { computeSummaryGrades } from '@/lib/grade-calculations';
+import { computeSummaryGrades } from '@/lib/domain/grading';
 
 interface Props {
   classInfo: Classroom;
