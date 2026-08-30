@@ -168,7 +168,7 @@ export default function AdminUsersPage() {
     showToast(`បានបង្កើត ${summary.successCount} គណនីដោយជោគជ័យ!`, 'success');
   };
 
-  let filteredUsers = usersList.filter(u => {
+  const filteredUsers = usersList.filter(u => {
     const matchesSearch =
       (u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (u.username || '').toLowerCase().includes(searchQuery.toLowerCase());

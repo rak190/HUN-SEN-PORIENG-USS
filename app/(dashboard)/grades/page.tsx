@@ -66,7 +66,7 @@ export default function GradesPage() {
       
       // 3. Find the right sheet (e.g., month or exam)
       const periodNameStr = selectedPeriod.includes('sem') ? 'ឆមាស' : 'ខែ';
-      let targetSheet = workbook.worksheets.find(s => s.name.includes(periodNameStr)) || workbook.worksheets[0];
+      const targetSheet = workbook.worksheets.find(s => s.name.includes(periodNameStr)) || workbook.worksheets[0];
       
       // 4. Fill Data at Row 17
       let currentRow = 17;
@@ -251,7 +251,7 @@ export default function GradesPage() {
     const isAnnual = selectedPeriod === 'annual';
     const totalCoefficient = maxTotalScore / 50;
 
-    let computedList = [...filteredStudents].map((std) => {
+    const computedList = [...filteredStudents].map((std) => {
       const studentScores = matrixData[std.id] || {};
       const totalScore = activeSchema.subjects.reduce((sum, sub) => sum + (studentScores[sub.id] || 0), 0);
       

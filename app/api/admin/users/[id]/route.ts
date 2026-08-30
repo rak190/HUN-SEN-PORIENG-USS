@@ -16,14 +16,14 @@ export async function PATCH(
   const adminClient = createAdminClient();
   const body = await req.json();
 
-  const { fullName, role, schoolCode, password, homeroomClass } = body;
+  const { fullName, role, schoolCode, password, homeroomClassId } = body;
 
   if (!adminClient) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
   }
 
   try {
-    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active').eq('id', id).single();
+    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active, school_id').eq('id', id).single();
 
     if (targetProfile?.role === 'admin' && userRole !== 'admin') {
       return NextResponse.json({ error: 'Principal cannot modify an admin account.' }, { status: 403 });
@@ -79,25 +79,33 @@ export async function PATCH(
       }
     }
 
-    if (homeroomClass && role === 'teacher') {
+    if (homeroomClassId && role === 'teacher') {
+      // Validate class ownership and school scope
+      const { data: classData, error: classErr } = await adminClient
+        .from('classes')
+        .select('id, school_id')
+        .eq('id', homeroomClassId)
+        .single();
+        
+      if (classErr || !classData) {
+        return NextResponse.json({ error: 'មិនមានថ្នាក់នេះទេ (Invalid class ID)' }, { status: 400 });
+      }
+      
+      if (classData.school_id !== (targetProfile?.school_id || schoolCode)) {
+        return NextResponse.json({ error: 'ថ្នាក់នេះមិនស្ថិតនៅក្នុងសាលារបស់អ្នកទេ (School mismatch)' }, { status: 403 });
+      }
+
       // Unassign any previous class
       await adminClient
         .from('classes')
         .update({ teacher_id: null })
         .eq('teacher_id', id);
 
-      const { data: existingClass } = await adminClient
+      // Assign to new class
+      await adminClient
         .from('classes')
-        .select('id')
-        .eq('name', homeroomClass)
-        .maybeSingle();
-
-      if (existingClass) {
-        await adminClient
-          .from('classes')
-          .update({ teacher_id: id })
-          .eq('id', existingClass.id);
-      }
+        .update({ teacher_id: id })
+        .eq('id', homeroomClassId);
     }
 
     const roleKh =
@@ -117,7 +125,7 @@ export async function PATCH(
         role,
         roleKh,
         school: schoolCode || 'Porieng-2026',
-        homeroomClass,
+        homeroomClassId,
       },
     });
   } catch (err: any) {

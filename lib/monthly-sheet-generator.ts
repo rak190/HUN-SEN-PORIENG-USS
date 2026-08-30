@@ -108,7 +108,7 @@ export function generateMonthlyExamWorkbook(
 
     // 2. Build rooms: check if students have room numbers assigned
     const hasAssignedRooms = tabStudents.some(s => !!s.room_number);
-    let roomsMap: { roomNum: string | number; roomStudents: StudentRecord[] }[] = [];
+    const roomsMap: { roomNum: string | number; roomStudents: StudentRecord[] }[] = [];
 
     if (hasAssignedRooms) {
       const grouped = new Map<string, StudentRecord[]>();

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getServerAuth } from '@/lib/auth-server';
 import crypto from 'crypto';
+import { BatchUserSchema } from '@/lib/validations/schemas';
 
 export async function POST(req: Request) {
   const { user, role: userRole } = await getServerAuth();
@@ -13,14 +14,15 @@ export async function POST(req: Request) {
   const adminClient = createAdminClient();
   const body = await req.json();
 
-  const { users } = body;
-
-  if (!Array.isArray(users) || users.length === 0) {
+  const validationResult = BatchUserSchema.safeParse(body);
+  if (!validationResult.success) {
     return NextResponse.json(
-      { error: 'សូមផ្តល់បញ្ជីគណនីយ៉ាងហោចណាស់ 1 (Users array is required)' },
+      { error: validationResult.error.errors[0].message },
       { status: 400 }
     );
   }
+
+  const { users } = validationResult.data;
 
   if (!adminClient) {
     return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
@@ -74,13 +76,27 @@ export async function POST(req: Request) {
         continue;
       }
 
+      const { data: schoolObj } = await adminClient
+        .from('schools')
+        .select('id')
+        .eq('school_code', finalSchool)
+        .maybeSingle();
+
+      if (!schoolObj) {
+        failCount++;
+        results.push({ username: cleanUsername, error: 'Invalid school code.' });
+        // Rollback Auth user creation
+        await adminClient.auth.admin.deleteUser(authUserId).catch(() => {});
+        continue;
+      }
+
       const { error: profileError } = await adminClient.from('profiles').upsert([
         {
           id: authUserId,
           username: cleanUsername,
           full_name: fullName.trim(),
           role: finalRole,
-          school_id: '11111111-1111-1111-1111-111111111111',
+          school_id: schoolObj.id,
           school_code: finalSchool,
           phone: phone || null,
           subject: subject || null,
@@ -107,7 +123,12 @@ export async function POST(req: Request) {
       }
     } catch (err: any) {
       failCount++;
-      results.push({ username: cleanUsername, error: err.message });
+      console.error(`[Batch Provisioning Error] username=${cleanUsername}:`, err);
+      // Sanitize client error
+      const safeError = err.message?.includes('already exists') 
+        ? 'ឈ្មោះគណនីមានរួចហើយ' 
+        : 'មានបញ្ហាក្នុងការបង្កើតគណនី (Server Error)';
+      results.push({ username: cleanUsername, error: safeError });
     }
   }
 

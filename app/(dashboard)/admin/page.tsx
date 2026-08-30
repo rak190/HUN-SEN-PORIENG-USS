@@ -63,8 +63,8 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
   let present = 0;
   let absent = 0;
   let permission = 0;
-  let todayAbsent = 0;
-  let todayTotal = 0;
+  const todayAbsent = 0;
+  const todayTotal = 0;
 
   if (monthAttendance) {
     monthAttendance.forEach(record => {

@@ -8,10 +8,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
 test('Security & Authorization Guards', async (t) => {
-  // We only run real tests if the environment variables are provided
   if (!supabaseUrl || !supabaseKey) {
-    console.warn('Skipping real security tests because SUPABASE_URL or SUPABASE_ANON_KEY is missing.');
-    return;
+    assert.fail('Missing SUPABASE_URL or SUPABASE_ANON_KEY. Security tests must fail closed.');
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);

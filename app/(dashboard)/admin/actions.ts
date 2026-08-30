@@ -53,10 +53,10 @@ export async function fetchAdminDashboardData() {
     .or('dropout_risk.eq.true,poor_id_status.neq.none,is_orphan.eq.true')
     .limit(15);
 
-  let atRiskStudents = [];
+  const atRiskStudents = [];
   if (riskStudentsRaw) {
     for (const s of riskStudentsRaw) {
-      let reasons: string[] = [];
+      const reasons: string[] = [];
       let severity = 'medium';
       
       if (s.dropout_risk) {
@@ -82,7 +82,7 @@ export async function fetchAdminDashboardData() {
   }
   const { data: activeClasses } = await classQuery;
   const dataStatus = [];
-  let expectedClassesCount = activeClasses?.length || 0;
+  const expectedClassesCount = activeClasses?.length || 0;
   let submittedClassesCount = 0;
 
   if (activeClasses) {

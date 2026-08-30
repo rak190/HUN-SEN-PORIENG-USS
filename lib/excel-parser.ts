@@ -297,7 +297,7 @@ export async function parseMasterExcel(file: File): Promise<ParseResult> {
               if (studentIdRaw === 'អត្តលេខ' || studentNameRaw === 'គោត្តនាម និងនាម') break;
 
               let className = classCol !== -1 ? (row[classCol]?.toString().trim() || '') : '';
-              let sectionName = sectionCol !== -1 ? (row[sectionCol]?.toString().trim() || '') : '';
+              const sectionName = sectionCol !== -1 ? (row[sectionCol]?.toString().trim() || '') : '';
               
               if (className && sectionName && sectionName.length <= 2) {
                  className = `${className}${sectionName}`;

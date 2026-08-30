@@ -113,6 +113,18 @@ export async function POST(req: Request) {
         continue;
       }
 
+      // Resolve school UUID from code
+      const { data: schoolObj } = await adminClient
+        .from('schools')
+        .select('id')
+        .eq('school_code', u.schoolCode || 'Porieng-2026')
+        .maybeSingle();
+
+      if (!schoolObj) {
+        errors.push({ username: u.username, error: 'Invalid school code.' });
+        continue;
+      }
+
       const email = `${cleanUsername}@kruai.app`;
       const generatedPassword = u.password?.trim() || generatePin();
       const newUserId = crypto.randomUUID();
@@ -137,7 +149,7 @@ export async function POST(req: Request) {
         username: cleanUsername,
         full_name: u.fullName.trim(),
         role: u.role || 'teacher',
-        school_id: '11111111-1111-1111-1111-111111111111',
+        school_id: schoolObj.id,
         school_code: u.schoolCode || 'Porieng-2026',
         phone: u.phone || null,
         subject: u.subject || null,

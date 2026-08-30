@@ -163,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!authError && authData?.user) {
         // Fetch authoritative database profile
-        let { data: dbProfile } = await supabase
+        const { data: dbProfile } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', authData.user.id)

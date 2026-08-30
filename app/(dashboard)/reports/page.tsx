@@ -118,7 +118,7 @@ export default function ReportsPage() {
         .lte('date', `${monthPrefix}-31`);
 
       let homeVisits = 0;
-      let parentMeetings = 0;
+      const parentMeetings = 0;
       if (homeVisitsData && students) {
         const studentIds = students.map(s => s.id);
         homeVisits = homeVisitsData.filter(v => studentIds.includes(v.student_id)).length;

@@ -209,7 +209,7 @@ export async function exportGeipAssessmentToExcel({
     };
   }).sort((a, b) => b.totalScore - a.totalScore);
 
-  let startDataRow = 9;
+  const startDataRow = 9;
   computedStudents.forEach((std, index) => {
     const rowNum = startDataRow + index;
     const row = worksheet.getRow(rowNum);

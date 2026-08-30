@@ -44,7 +44,7 @@ export function VersionGuardian() {
             // Unregister service workers to clear PWA cache
             if ('serviceWorker' in navigator) {
               const registrations = await navigator.serviceWorker.getRegistrations();
-              for (let registration of registrations) {
+              for (const registration of registrations) {
                 await registration.unregister();
               }
             }

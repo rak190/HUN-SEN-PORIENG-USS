@@ -17,11 +17,17 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { fileName, fileType, category, classId } = body;
+    const { DocumentUploadSchema } = await import('@/lib/validations/schemas');
+    const validationResult = DocumentUploadSchema.safeParse(body);
 
-    if (!fileName || !fileType) {
-      return NextResponse.json({ error: 'Missing fileName or fileType' }, { status: 400 });
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { error: validationResult.error.errors[0].message },
+        { status: 400 }
+      );
     }
+
+    const { fileName, fileType, category, classId, scope } = validationResult.data;
 
     if (classId) {
       try {
@@ -64,7 +70,8 @@ export async function POST(req: NextRequest) {
       uploader_id: user.id,
       class_id: classId || null,
       size: '0',
-      status: 'pending'
+      status: 'pending',
+      scope: scope || 'class'
     });
 
     if (dbErr) {

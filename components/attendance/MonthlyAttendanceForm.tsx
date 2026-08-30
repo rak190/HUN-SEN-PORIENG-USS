@@ -119,7 +119,7 @@ export default function MonthlyAttendanceForm() {
         const allStudents = stdData && stdData.length > 0 ? stdData : [];
         const newMap: Record<string, any> = {};
         
-        let daysSubmitted = new Set<string>();
+        const daysSubmitted = new Set<string>();
         let totalAbsences = 0;
         let dropoutCount = 0;
 
@@ -365,7 +365,7 @@ export default function MonthlyAttendanceForm() {
   // Calculate Stats
   const stats = useMemo(() => {
     let totalAbsent = 0;
-    let ewsAlerts = 0;
+    const ewsAlerts = 0;
     
     Object.values(formData).forEach(data => {
       totalAbsent += (data.absent_count || 0);

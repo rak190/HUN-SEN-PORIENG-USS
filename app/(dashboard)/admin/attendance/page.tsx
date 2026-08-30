@@ -60,7 +60,7 @@ export default function MasterAttendancePage() {
         }
 
         // Fetch attendance
-        let query = supabase
+        const query = supabase
           .from('attendance_records')
           .select('*, students(full_name, student_id_number, gender)')
           .gte('date', startDateStr)
