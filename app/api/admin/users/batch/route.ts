@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   const validationResult = BatchUserSchema.safeParse(body);
   if (!validationResult.success) {
     return NextResponse.json(
-      { error: validationResult.error.errors[0].message },
+      { error: validationResult.error.issues[0].message },
       { status: 400 }
     );
   }
