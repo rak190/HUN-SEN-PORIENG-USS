@@ -125,7 +125,7 @@ export async function POST(req: Request) {
       const { data: schoolObj } = await adminClient
         .from('schools')
         .select('id')
-        .eq('school_code', u.schoolCode || 'Porieng-2026')
+        .eq('code', u.schoolCode || 'Porieng-2026')
         .maybeSingle();
 
       if (!schoolObj) {
