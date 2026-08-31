@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import {
   Users, Search, UserPlus, Download, Edit, MapPin, Heart, FileSpreadsheet, Table,
   Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp, AlertTriangle, LogOut, ChevronDown, Loader2, X, Check,
@@ -88,6 +89,8 @@ export default function StudentsPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isGridModalOpen, setIsGridModalOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeTableView, setActiveTableView] = useState(1);
   const [activeModalTab, setActiveModalTab] = useState(1);
   const [formData, setFormData] = useState<Partial<MassiveProfilingStudent>>({});
@@ -99,6 +102,9 @@ export default function StudentsPage() {
       const target = e.target as HTMLElement;
       if (!target.closest('#export-geip-dropdown')) {
         setIsExportMenuOpen(false);
+      }
+      if (!target.closest('#import-dropdown')) {
+        setIsImportMenuOpen(false);
       }
     };
     document.addEventListener('click', handleClickOutside);
@@ -710,6 +716,84 @@ export default function StudentsPage() {
     setStudents(prev => [...prev, ...newStudents]);
   };
 
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) setSelectedIds(filteredStudents.map(s => s.id));
+    else setSelectedIds([]);
+  };
+
+  const handleSelect = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!window.confirm(`តើអ្នកពិតជាចង់លុបសិស្សចំនួន ${selectedIds.length} នាក់នេះមែនទេ? (សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ)`)) return;
+    setIsSaving(true);
+    const { error } = await supabase.from('students').delete().in('id', selectedIds);
+    if (!error) {
+      setStudents(prev => prev.filter(s => !selectedIds.includes(s.id)));
+      setSelectedIds([]);
+    } else {
+      console.error(error);
+      alert('បរាជ័យក្នុងការលុបសិស្ស');
+    }
+    setIsSaving(false);
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('បញ្ជីឈ្មោះសិស្ស', { views: [{ showGridLines: false }] });
+
+      const headerFont = { name: 'Kantumruy Pro', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      const cellFont = { name: 'Khmer OS Siemreap', size: 10 };
+      const thinBorder = {
+        top: { style: 'thin' as any }, left: { style: 'thin' as any },
+        bottom: { style: 'thin' as any }, right: { style: 'thin' as any }
+      };
+
+      const headers = [
+        'ល.រ', 'អត្តលេខ', 'នាមត្រកូល និងនាមខ្លួន', 'ភេទ (M/F)', 'ថ្ងៃខែឆ្នាំកំណើត (DD/MM/YYYY)', 'លេខទូរស័ព្ទសិស្ស', 
+        'ស្ថានភាព (new/repeater/transfer)', 'សាលាមុន', 'អាហារូបករណ៍ (yes/no)', 'បណ្ណក្រីក្រ (none/level_1/level_2)', 'កំព្រា (yes/no)', 'ជនជាតិដើមភាគតិច (yes/no)', 'ចម្ងាយមកសាលា(គ.ម)',
+        'ទម្ងន់(គ.ក)', 'កម្ពស់(ម)', 'ពិការភាព (none/mild/severe)', 'បញ្ហាសុខភាព',
+        'ឈ្មោះឪពុក', 'មុខរបរឪពុក', 'ទូរស័ព្ទឪពុក',
+        'ឈ្មោះម្តាយ', 'មុខរបរម្តាយ', 'ទូរស័ព្ទម្តាយ',
+        'ឈ្មោះអាណាព្យាបាល', 'មុខរបរអាណាព្យាបាល', 'ទូរស័ព្ទអាណាព្យាបាល',
+        'ចំនួនបងប្អូន', 'ស្ថានភាពចំណាកស្រុក (none/parents/student)', 'ហិង្សាក្នុងគ្រួសារ (yes/no)', 'ទីជម្រក', 'ចំណូលប្រចាំខែ(រៀល)',
+        'អាសយដ្ឋានបច្ចុប្បន្ន'
+      ];
+
+      const headerRow = sheet.addRow(headers);
+      headerRow.height = 30;
+      headerRow.eachCell((cell, colNumber) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+        cell.font = headerFont;
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        cell.border = thinBorder;
+        sheet.getColumn(colNumber).width = colNumber === 1 ? 5 : 20;
+      });
+
+      for (let i = 1; i <= 10; i++) {
+        const row = sheet.addRow([i, `ID-${1000+i}`, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+        row.height = 25;
+        row.eachCell(cell => {
+          cell.font = cellFont;
+          cell.border = thinBorder;
+          cell.alignment = { vertical: 'middle' };
+        });
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `MoEYS_Master_Template_${activeClass?.name || 'Class'}.xlsx`;
+      link.click();
+    } catch (e) {
+      console.error(e);
+      alert('មានបញ្ហាក្នុងការទាញយកគំរូ');
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* Header */}
@@ -813,10 +897,30 @@ export default function StudentsPage() {
             <input type="text" placeholder="ស្វែងរកអត្តលេខ ឬឈ្មោះ..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:border-[#155EEF]" />
           </div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors">
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> នាំចូលឯកសារ
-          </button>
+        <div className="flex gap-2 relative">
+          {selectedIds.length > 0 && (
+            <button onClick={handleDeleteSelected} disabled={isSaving} className="px-4 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors mr-2">
+              <AlertCircle className="w-4 h-4" /> លុបសិស្សដែលជ្រើសរើស ({selectedIds.length})
+            </button>
+          )}
+          <div id="import-dropdown" className="relative">
+            <button onClick={() => setIsImportMenuOpen(!isImportMenuOpen)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors">
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> នាំចូលឯកសារ
+              <ChevronDown className={`w-3 h-3 transition-transform ${isImportMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isImportMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <button onClick={() => { setIsImportMenuOpen(false); setIsImportModalOpen(true); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-slate-50 text-left transition-colors">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs font-bold text-slate-700">នាំចូលទិន្នន័យ (Import)</span>
+                </button>
+                <button onClick={() => { setIsImportMenuOpen(false); handleDownloadTemplate(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-slate-50 text-left transition-colors">
+                  <Download className="w-4 h-4 text-blue-600" />
+                  <span className="text-xs font-bold text-slate-700">ទាញយកគំរូទិន្នន័យ (Template)</span>
+                </button>
+              </div>
+            )}
+          </div>
           <button onClick={() => setIsGridModalOpen(true)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors">
             <Table className="w-4 h-4 text-indigo-600" /> បញ្ចូលតាមតារាង
           </button>
@@ -844,6 +948,9 @@ export default function StudentsPage() {
           <table className="w-full text-left whitespace-nowrap">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase">
+                <th className="p-4 w-10">
+                  <input type="checkbox" className="w-4 h-4 rounded text-[#155EEF]" checked={selectedIds.length === filteredStudents.length && filteredStudents.length > 0} onChange={handleSelectAll} />
+                </th>
                 {renderSortHeader('អត្តលេខ', 'student_id_number')}
                 {renderSortHeader('ឈ្មោះ', 'full_name')}
                 
@@ -898,7 +1005,10 @@ export default function StudentsPage() {
             </thead>
             <tbody className="text-xs font-bold text-slate-700 divide-y divide-slate-100">
               {filteredStudents.map(std => (
-                <tr key={std.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={std.id} className={`transition-colors ${selectedIds.includes(std.id) ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
+                  <td className="p-4">
+                    <input type="checkbox" className="w-4 h-4 rounded text-[#155EEF]" checked={selectedIds.includes(std.id)} onChange={() => handleSelect(std.id)} />
+                  </td>
                   <td className="p-4 font-mono text-slate-400">{std.student_id_number}</td>
                   <td className="p-4">
                     <div className="flex items-center gap-2">
