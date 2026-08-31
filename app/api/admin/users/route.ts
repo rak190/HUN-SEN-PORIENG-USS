@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getServerAuth } from '@/lib/auth-server';
 import crypto from 'crypto';
+import { UserCreateSchema } from '@/lib/validations/schemas';
 
 const generatePin = () => crypto.randomInt(100000, 999999).toString();
 
@@ -91,13 +92,20 @@ export async function POST(req: Request) {
   const createdUsers = [];
   const errors = [];
 
-  for (const u of usersToCreate) {
+  for (const rawUser of usersToCreate) {
     try {
+      const validationResult = UserCreateSchema.safeParse(rawUser);
+      if (!validationResult.success) {
+        errors.push({ username: rawUser.username || 'មិនស្គាល់', error: validationResult.error.issues[0].message });
+        continue;
+      }
+
+      const u = validationResult.data;
       const cleanUsername = u.username.trim().toLowerCase();
       
       // Phase 2: Role Hierarchy Check
       if (u.role === 'admin' && role !== 'admin') {
-        errors.push({ username: u.username, error: 'Principal cannot create an admin account.' });
+        errors.push({ username: u.username, error: 'នាយកសាលាមិនអាចបង្កើតគណនីអ្នកគ្រប់គ្រង (Admin) បានទេ។' });
         continue;
       }
 
@@ -109,7 +117,7 @@ export async function POST(req: Request) {
         .maybeSingle();
         
       if (existingProfile) {
-        errors.push({ username: u.username, error: 'Username already exists.' });
+        errors.push({ username: u.username, error: 'ឈ្មោះគណនីមានរួចហើយ (Username taken)' });
         continue;
       }
 
@@ -121,7 +129,7 @@ export async function POST(req: Request) {
         .maybeSingle();
 
       if (!schoolObj) {
-        errors.push({ username: u.username, error: 'Invalid school code.' });
+        errors.push({ username: u.username, error: 'លេខកូដសាលាមិនត្រឹមត្រូវ (Invalid school code)' });
         continue;
       }
 
@@ -138,7 +146,10 @@ export async function POST(req: Request) {
       });
 
       if (createErr || !authCreated?.user) {
-        errors.push({ username: u.username, error: createErr?.message || 'Failed to create auth user.' });
+        const safeError = createErr?.message?.includes('password')
+          ? 'ពាក្យសម្ងាត់ខ្សោយពេក ឬមិនត្រឹមត្រូវ (Weak password)'
+          : createErr?.message || 'មានបញ្ហាក្នុងការបង្កើតគណនី (Auth Error)';
+        errors.push({ username: u.username, error: safeError });
         continue;
       }
       
@@ -159,7 +170,7 @@ export async function POST(req: Request) {
       if (insertProfileErr) {
         // Rollback Auth user creation
         await adminClient.auth.admin.deleteUser(authUserId);
-        errors.push({ username: u.username, error: 'Failed to create profile. Rolled back auth.' });
+        errors.push({ username: u.username, error: 'បរាជ័យក្នុងការរក្សាទុកទិន្នន័យទៅកាន់ Database (Profile error)' });
         continue;
       }
 
@@ -178,7 +189,7 @@ export async function POST(req: Request) {
         tempPassword: !u.password?.trim() ? generatedPassword : null
       });
     } catch (err: any) {
-      errors.push({ username: u.username, error: err.message });
+      errors.push({ username: rawUser.username || 'មិនស្គាល់', error: err.message });
     }
   }
 
