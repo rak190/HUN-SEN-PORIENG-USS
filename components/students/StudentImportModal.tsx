@@ -34,7 +34,7 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -47,28 +47,92 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
           return;
         }
 
+        let existingIds: string[] = [];
+        if (activeClass?.id) {
+          const { data: existingData } = await supabase
+            .from('students')
+            .select('student_id_number')
+            .eq('class_id', activeClass.id);
+          if (existingData) {
+            existingIds = existingData.map(d => String(d.student_id_number).trim().toLowerCase());
+          }
+        }
+
         // Map column variations to standard student format
         const students = json.map((row, idx) => {
-          const idNum = row['អត្តលេខ'] || row['ID'] || row['Student ID'] || `ID-${idx + 101}`;
-          const fullName = row['គោត្តនាម និងនាម'] || row['ឈ្មោះ'] || row['Full Name'] || row['Name'] || `សិស្សទី ${idx + 1}`;
-          let gender = row['ភេទ'] || row['Gender'] || 'M';
-          if (gender === 'ស្រី' || gender === 'f' || gender === 'F') gender = 'F';
+          const idNum = String(row['អត្តលេខ'] || row['ID'] || row['Student ID'] || '').trim();
+          if (!idNum) return null; // Skip empty rows
+          
+          const fullName = row['នាមត្រកូល និងនាមខ្លួន'] || row['គោត្តនាម និងនាម'] || row['ឈ្មោះ'] || row['Full Name'] || row['Name'] || '';
+          if (!fullName) return null;
+
+          let gender = row['ភេទ (M/F)'] || row['ភេទ'] || row['Gender'] || 'M';
+          if (String(gender).toLowerCase() === 'ស្រី' || String(gender).toLowerCase() === 'f') gender = 'F';
           else gender = 'M';
 
-          const phone = row['លេខទូរសព្ទ'] || row['Phone'] || row['Parent Phone'] || '';
-          const deskNumber = row['ប្លង់តុ'] || row['លេខតុ'] || row['Desk Number'] || row['Seat'] || null;
-          const roomNumber = row['លេខបន្ទប់'] || row['បន្ទប់'] || row['Room Number'] || row['Room'] || null;
+          const dob = row['ថ្ងៃខែឆ្នាំកំណើត (DD/MM/YYYY)'] || row['ថ្ងៃខែឆ្នាំកំណើត'] || row['Date of Birth'] || '';
+          let formattedDob = null;
+          if (dob) {
+            if (typeof dob === 'number') {
+               const excelEpoch = new Date(1899, 11, 30);
+               const parsedDate = new Date(excelEpoch.getTime() + dob * 86400000);
+               formattedDob = parsedDate.toISOString().split('T')[0];
+            } else if (typeof dob === 'string' && dob.includes('/')) {
+               const parts = dob.split('/');
+               if (parts.length === 3) {
+                 formattedDob = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+               }
+            } else {
+               const d = new Date(dob);
+               if (!isNaN(d.getTime())) formattedDob = d.toISOString().split('T')[0];
+            }
+          }
+
+          const phone = row['លេខទូរស័ព្ទសិស្ស'] || row['លេខទូរសព្ទ'] || row['Phone'] || '';
+          const status = row['ស្ថានភាព (new/repeater/transfer)'] || row['ស្ថានភាព'] || 'new';
+          const scholarship = row['អាហារូបករណ៍ (yes/no)'] || 'no';
+          const idPoor = row['បណ្ណក្រីក្រ (none/level_1/level_2)'] || 'none';
+          const orphan = row['កំព្រា (yes/no)'] || 'no';
+          const distance_km = row['ចម្ងាយមកសាលា(គ.ម)'] || '';
+          const weight = row['ទម្ងន់(គ.ក)'] || '';
+          const height = row['កម្ពស់(ម)'] || '';
+          const disability = row['ពិការភាព (none/mild/severe)'] || 'none';
+          const health_issues = row['បញ្ហាសុខភាព'] || '';
+          const income = row['ចំណូលប្រចាំខែ(រៀល)'] || '';
+          const siblings_count = row['ចំនួនបងប្អូន'] || '';
+          const address = row['អាសយដ្ឋានបច្ចុប្បន្ន'] || '';
+          
+          const fatherPhone = row['ទូរស័ព្ទឪពុក'] || '';
+          const motherPhone = row['ទូរស័ព្ទម្តាយ'] || '';
+          const guardianPhone = row['ទូរស័ព្ទអាណាព្យាបាល'] || '';
+          const parent_phone = fatherPhone || motherPhone || guardianPhone || phone;
 
           return {
-            student_id_number: String(idNum).trim(),
+            student_id_number: idNum,
             full_name: String(fullName).trim(),
             gender,
-            parent_phone: String(phone).trim(),
-            desk_number: deskNumber ? String(deskNumber).trim() : null,
-            room_number: roomNumber ? String(roomNumber).trim() : null,
+            dob: formattedDob,
+            parent_phone: String(parent_phone).trim(),
+            status: String(status).includes('repeater') ? 'repeater' : String(status).includes('transfer') ? 'transfer' : 'new',
+            scholarship: String(scholarship).toLowerCase().includes('yes') ? 'yes' : 'no',
+            id_poor: String(idPoor).includes('level_1') ? 'level_1' : String(idPoor).includes('level_2') ? 'level_2' : 'none',
+            orphan: String(orphan).toLowerCase().includes('yes') ? 'yes' : 'no',
+            distance_km: distance_km ? Number(distance_km) : null,
+            weight_kg: weight ? Number(weight) : null,
+            height_m: height ? Number(height) : null,
+            disability: String(disability).includes('mild') ? 'mild' : String(disability).includes('severe') ? 'severe' : 'none',
+            health_note: health_issues ? String(health_issues) : null,
+            income: income ? Number(income) : null,
+            siblings_count: siblings_count ? Number(siblings_count) : 0,
+            address: address ? String(address).trim() : null,
             is_active: true,
           };
-        }).filter(s => s.full_name !== '');
+        }).filter(s => s !== null && !existingIds.includes(s.student_id_number.toLowerCase()));
+
+        if (students.length === 0) {
+          setErrorMsg('សិស្សទាំងអស់នៅក្នុងឯកសារនេះត្រូវបានបញ្ចូលរួចហើយ (ស្ទួនអត្តលេខ)។');
+          return;
+        }
 
         setParsedData(students);
       } catch (err: any) {
@@ -78,27 +142,6 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
     };
     reader.readAsArrayBuffer(file);
   }
-
-  const handleDownloadTemplate = () => {
-    const wsData = [
-      { 'អត្តលេខ': 'ID-001', 'គោត្តនាម និងនាម': 'សុខ សាន្ត', 'ភេទ': 'M', 'ប្លង់តុ': '001', 'លេខបន្ទប់': '1', 'លេខទូរសព្ទ': '012345678' },
-      { 'អត្តលេខ': 'ID-002', 'គោត្តនាម និងនាម': 'កែវ ធីតា', 'ភេទ': 'F', 'ប្លង់តុ': '002', 'លេខបន្ទប់': '1', 'លេខទូរសព្ទ': '098765432' }
-    ];
-    const ws = XLSX.utils.json_to_sheet(wsData);
-    
-    ws['!cols'] = [
-      { wch: 15 },
-      { wch: 30 },
-      { wch: 10 },
-      { wch: 10 },
-      { wch: 12 },
-      { wch: 20 },
-    ];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Student_Template");
-    XLSX.writeFile(wb, "KruSmart_Student_Import_Template.xlsx");
-  };
 
   async function handleSave() {
     if (parsedData.length === 0) return;

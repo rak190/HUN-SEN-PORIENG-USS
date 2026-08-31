@@ -98,7 +98,7 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
       nutrition_status: nutritionStatus,
       disability,
       assistive_device: payload.assistive_device || null,
-      health_info: healthNotes,
+      health_note: healthNotes,
       siblings_count: payload.siblings_count ? Number(payload.siblings_count) : 0,
       income: payload.income ? Number(payload.income) : null,
       address: payload.address || null,
