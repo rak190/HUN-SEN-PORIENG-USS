@@ -84,7 +84,7 @@ export async function POST(req: Request) {
 
       if (!schoolObj) {
         failCount++;
-        results.push({ username: cleanUsername, error: 'Invalid school code.' });
+        results.push({ username: cleanUsername, error: 'លេខកូដសាលាមិនត្រឹមត្រូវ (Invalid school code)' });
         // Rollback Auth user creation
         await adminClient.auth.admin.deleteUser(authUserId).catch(() => {});
         continue;
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
 
       if (profileError) {
         failCount++;
-        results.push({ username: cleanUsername, error: profileError.message });
+        results.push({ username: cleanUsername, error: 'បរាជ័យក្នុងការរក្សាទុកទិន្នន័យទៅកាន់ Database (Profile error)' });
         // Rollback Auth user creation
         await adminClient.auth.admin.deleteUser(authUserId).catch(() => {});
       } else {
@@ -119,6 +119,7 @@ export async function POST(req: Request) {
           role: finalRole,
           school: finalSchool,
           status: 'ជោគជ័យ',
+          generatedPassword: !password ? finalPassword : null // only send if generated
         });
       }
     } catch (err: any) {
@@ -126,8 +127,10 @@ export async function POST(req: Request) {
       console.error(`[Batch Provisioning Error] username=${cleanUsername}:`, err);
       // Sanitize client error
       const safeError = err.message?.includes('already exists') 
-        ? 'ឈ្មោះគណនីមានរួចហើយ' 
-        : 'មានបញ្ហាក្នុងការបង្កើតគណនី (Server Error)';
+        ? 'ឈ្មោះគណនីមានរួចហើយ (Username taken)' 
+        : err.message?.includes('password')
+          ? 'ពាក្យសម្ងាត់ខ្សោយពេក ឬមិនត្រឹមត្រូវ (Weak password)'
+          : 'មានបញ្ហាក្នុងការបង្កើតគណនី (Server Error)';
       results.push({ username: cleanUsername, error: safeError });
     }
   }

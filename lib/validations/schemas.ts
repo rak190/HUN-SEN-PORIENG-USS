@@ -11,13 +11,16 @@ export const BaseUserSchema = z.object({
 });
 
 export const UserCreateSchema = BaseUserSchema.extend({
-  username: z.string().min(3, "ឈ្មោះគណនីត្រូវមានយ៉ាងហោចណាស់ ៣ តួអក្សរ"),
-  password: z.string().optional(), // Server generates PIN if omitted
+  username: z.string()
+    .min(3, "ឈ្មោះគណនីត្រូវមានយ៉ាងហោចណាស់ ៣ តួអក្សរ")
+    .regex(/^[a-z0-9._]+$/, "ឈ្មោះគណនីត្រូវតែជាអក្សរតូច គ្មានដកឃ្លា (ឧ. run.norak)"),
+  password: z.string().min(6, "ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៦ តួអក្សរ").optional().or(z.literal('')), // Server generates PIN if omitted or empty
   homeroomClassId: z.string().uuid("លេខសម្គាល់ថ្នាក់មិនត្រឹមត្រូវ").optional().nullable(),
 });
 
 export const UserUpdateSchema = BaseUserSchema.partial().extend({
-  password: z.string().optional(),
+  username: z.string().min(3, "ឈ្មោះគណនីត្រូវមានយ៉ាងហោចណាស់ ៣ តួអក្សរ").regex(/^[a-z0-9._]+$/, "ឈ្មោះគណនីត្រូវតែជាអក្សរតូច គ្មានដកឃ្លា (ឧ. run.norak)").optional(),
+  password: z.string().min(6, "ពាក្យសម្ងាត់ត្រូវមានយ៉ាងហោចណាស់ ៦ តួអក្សរ").optional().or(z.literal('')),
   homeroomClassId: z.string().uuid("លេខសម្គាល់ថ្នាក់មិនត្រឹមត្រូវ").optional().nullable(),
 });
 

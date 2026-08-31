@@ -213,7 +213,18 @@ export default function TeacherAccountsPage() {
               <option value="principal">នាយកសាលា (Principal)</option>
               <option value="monitor">ប្រធានថ្នាក់ (Monitor)</option>
             </select>
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+        </div>
+        
+        {/* Username & Password Instruction Banner */}
+        <div className="mb-4 bg-blue-50/50 border border-blue-100 rounded-2xl p-4 text-xs font-medium text-blue-800 flex items-start gap-3">
+          <div className="p-1.5 bg-blue-100 rounded-lg shrink-0 mt-0.5">
+            <ShieldCheck className="w-4 h-4 text-blue-600" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="font-bold text-blue-900 text-[13px] mb-1.5">គោលការណ៍បង្កើតគណនី (Account Rules)</h4>
+            <p><strong>ឈ្មោះគណនី (Username):</strong> ត្រូវមានយ៉ាងហោចណាស់ ៣ តួអក្សរ ជាអក្សរតូច (Lowercase) និងគ្មានដកឃ្លា ឬសញ្ញាពិសេស (ឧទាហរណ៍៖ <code className="bg-blue-200/50 text-blue-900 px-1.5 py-0.5 rounded-md font-mono font-bold tracking-tight">run.norak</code>)</p>
+            <p><strong>ពាក្យសម្ងាត់ (Password):</strong> ត្រូវមានយ៉ាងហោចណាស់ ៦ តួអក្សរ។ ប្រសិនបើទុកចោលទទេ ប្រព័ន្ធនឹងបង្កើតលេខកូដ PIN ៦ ខ្ទង់ដោយស្វ័យប្រវត្តិ។</p>
           </div>
         </div>
         
