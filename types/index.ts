@@ -143,6 +143,18 @@ export interface Student {
   special_needs_status?: string | null;
   transfer_history?: any[];
   giep_device_received?: boolean;
+  // Family Contacts Migration
+  father_name?: string | null;
+  father_job?: string | null;
+  father_phone?: string | null;
+  mother_name?: string | null;
+  mother_job?: string | null;
+  mother_phone?: string | null;
+  guardian_name?: string | null;
+  guardian_job?: string | null;
+  guardian_phone?: string | null;
+  emergency_contact_phone?: string | null;
+  current_address?: string | null;
 }
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'permission' | 'P' | 'A' | 'L' | 'E';

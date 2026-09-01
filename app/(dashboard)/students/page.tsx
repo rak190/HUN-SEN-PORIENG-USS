@@ -14,59 +14,13 @@ import {
 } from 'lucide-react';
 import StudentImportModal from '@/components/students/StudentImportModal';
 import StudentGridEntryModal from '@/components/students/StudentGridEntryModal';
+import StudentTable from '@/components/students/StudentTable';
+import StudentProfileDrawer from '@/components/students/StudentProfileDrawer';
+import StudentFilters from '@/components/students/StudentFilters';
 import { saveStudentAction } from './actions';
+import { useStudents } from '@/hooks/useStudents';
 
-interface MassiveProfilingStudent {
-  id: string;
-  // Tab 1: Basic
-  student_id_number: string;
-  desk_number?: string;
-  room_number?: string;
-  full_name: string;
-  gender: string;
-  date_of_birth: string;
-  age: number;
-  birth_cert_no: string;
-  student_phone: string;
-  // Tab 2: Academic
-  status: 'new' | 'repeater' | 'transfer';
-  prev_school: string;
-  scholarship: 'yes' | 'no';
-  id_poor: 'none' | 'level_1' | 'level_2';
-  orphan: 'yes' | 'no';
-  indigenous: 'yes' | 'no';
-  distance_km: number;
-  // Tab 3: Health
-  weight_kg: number;
-  height_m: number;
-  bmi: number;
-  nutrition_status: string;
-  disability: 'none' | 'mild' | 'severe';
-  assistive_device: string;
-  health_issues: string;
-  // Tab 4: Family
-  father_name: string; father_job: string; father_phone: string;
-  mother_name: string; mother_job: string; mother_phone: string;
-  guardian_name: string; guardian_job: string; guardian_phone: string;
-  siblings_count: number;
-  migrant_status: 'none' | 'parents' | 'student';
-  domestic_violence: 'yes' | 'no';
-  housing: string;
-  income: number;
-  // Tab 5: Address & Status
-  address: string;
-  current_status: 'active' | 'dropout' | 'deceased';
-  // Risk & Class tracking (from Mockup)
-  risk_level: 'low' | 'medium' | 'high';
-  attendance_rate: number;
-}
-
-const DEFAULT_FORM: Partial<MassiveProfilingStudent> = {
-  gender: 'M', status: 'new', prev_school: '', scholarship: 'no', id_poor: 'none', orphan: 'no', indigenous: 'no', distance_km: 0,
-  weight_kg: 40, height_m: 1.50, disability: 'none', assistive_device: '', health_issues: '',
-  siblings_count: 0, migrant_status: 'none', domestic_violence: 'no', housing: '', income: 0, current_status: 'active',
-  risk_level: 'low', attendance_rate: 100
-};
+import { MassiveProfilingStudent, DEFAULT_FORM } from './types';
 
 const VIEW_TABS = [
   { id: 1, label: 'មូលដ្ឋាន', icon: UserSquare2 },
@@ -78,87 +32,31 @@ const VIEW_TABS = [
 
 export default function StudentsPage() {
   const { activeClass } = useAuth();
-  const [students, setStudents] = useState<MassiveProfilingStudent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const supabase = createClient();
-  const [searchQuery, setSearchQuery] = useState('');
   
-  const [mainTab, setMainTab] = useState<'list' | 'at-risk' | 'transfer'>('list');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { 
+    students, setStudents, 
+    isLoading, 
+    searchQuery, setSearchQuery, 
+    sortState, handleSort, 
+    filteredStudents 
+  } = useStudents(activeClass?.id);
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [profileDrawerData, setProfileDrawerData] = useState<Partial<MassiveProfilingStudent> | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isGridModalOpen, setIsGridModalOpen] = useState(false);
+  const [activeTableView, setActiveTableView] = useState(1);
+  const [mounted, setMounted] = useState(false);
+  const [mainTab, setMainTab] = useState<'list' | 'at-risk' | 'transfer'>('list');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [activeTableView, setActiveTableView] = useState(1);
-  const [activeModalTab, setActiveModalTab] = useState(1);
-  const [formData, setFormData] = useState<Partial<MassiveProfilingStudent>>({});
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('#export-geip-dropdown')) {
-        setIsExportMenuOpen(false);
-      }
-      if (!target.closest('#import-dropdown')) {
-        setIsImportMenuOpen(false);
-      }
-    };
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const handleWeightChange = (val: number) => {
-    const h = formData.height_m || 0;
-    let bmi = 0;
-    let nutrition_status = 'ធម្មតា';
-    if (val > 0 && h > 0) {
-      bmi = parseFloat((val / (h * h)).toFixed(1));
-      if (bmi < 18.5) nutrition_status = 'ស្គម';
-      else if (bmi >= 25 && bmi < 30) nutrition_status = 'លើសទម្ងន់';
-      else if (bmi >= 30) nutrition_status = 'ធាត់';
-    }
-    setFormData(prev => ({ ...prev, weight_kg: val, bmi, nutrition_status }));
-  };
-
-  const handleHeightChange = (val: number) => {
-    const w = formData.weight_kg || 0;
-    let bmi = 0;
-    let nutrition_status = 'ធម្មតា';
-    if (w > 0 && val > 0) {
-      bmi = parseFloat((w / (val * val)).toFixed(1));
-      if (bmi < 18.5) nutrition_status = 'ស្គម';
-      else if (bmi >= 25 && bmi < 30) nutrition_status = 'លើសទម្ងន់';
-      else if (bmi >= 30) nutrition_status = 'ធាត់';
-    }
-    setFormData(prev => ({ ...prev, height_m: val, bmi, nutrition_status }));
-  };
-
-  useEffect(() => {
-    const fetchStudents = async () => {
-      if (!activeClass?.id) return;
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .eq('class_id', activeClass.id)
-        .order('student_id_number', { ascending: true });
-
-      if (data) {
-        setStudents(data.map(d => ({
-          ...DEFAULT_FORM,
-          ...d,
-          current_status: d.enrollment_status || 'active',
-        } as MassiveProfilingStudent)));
-      }
-      setIsLoading(false);
-    };
-    fetchStudents();
-  }, [activeClass?.id]);
-
+  const supabase = createClient();
   // Contact Modal State
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [contactStudent, setContactStudent] = useState<MassiveProfilingStudent | null>(null);
@@ -218,91 +116,7 @@ export default function StudentsPage() {
     });
   };
 
-  const [sortState, setSortState] = useState<{ field: string | null; direction: 'asc' | 'desc' | null }>({
-    field: null,
-    direction: null,
-  });
 
-  const handleSort = (field: string) => {
-    setSortState(prev => {
-      if (prev.field !== field) {
-        return { field, direction: 'asc' };
-      }
-      if (prev.direction === 'asc') {
-        return { field, direction: 'desc' };
-      }
-      return { field: null, direction: null };
-    });
-  };
-
-  const filteredStudents = useMemo<MassiveProfilingStudent[]>(() => {
-    let result = students.filter(s => 
-      s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      (s.student_id_number && s.student_id_number.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-
-    if (sortState.field && sortState.direction) {
-      const { field, direction } = sortState;
-      const factor = direction === 'asc' ? 1 : -1;
-
-      result = [...result].sort((a: any, b: any) => {
-        let valA = a[field];
-        let valB = b[field];
-
-        if (valA === undefined || valA === null) valA = '';
-        if (valB === undefined || valB === null) valB = '';
-
-        if (typeof valA === 'number' && typeof valB === 'number') {
-          return (valA - valB) * factor;
-        }
-
-        return String(valA).localeCompare(String(valB), 'km', { numeric: true }) * factor;
-      });
-    }
-
-    return result;
-  }, [students, searchQuery, sortState]);
-
-  const renderSortHeader = (label: string, field: string, align: 'left' | 'center' | 'right' = 'left') => {
-    const isActive = sortState.field === field && sortState.direction !== null;
-    return (
-      <th 
-        onClick={() => handleSort(field)}
-        className={`p-4 cursor-pointer select-none hover:bg-slate-100/80 transition-colors group ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`}
-      >
-        <div className={`inline-flex items-center gap-1.5 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
-          <span>{label}</span>
-          <span className="text-slate-400 group-hover:text-slate-600 transition-colors">
-            {isActive ? (
-              sortState.direction === 'asc' ? (
-                <ArrowUp className="w-3.5 h-3.5 text-[#155EEF] font-bold" />
-              ) : (
-                <ArrowDown className="w-3.5 h-3.5 text-[#155EEF] font-bold" />
-              )
-            ) : (
-              <ArrowUpDown className="w-3 h-3 text-slate-300 opacity-60 group-hover:opacity-100" />
-            )}
-          </span>
-        </div>
-      </th>
-    );
-  };
-
-  // Auto-calculate BMI
-  useEffect(() => {
-    if (formData.weight_kg && formData.height_m && formData.height_m > 0) {
-      const bmi = parseFloat((formData.weight_kg / (formData.height_m * formData.height_m)).toFixed(1));
-      let status = 'ធម្មតា';
-      if (bmi < 17) status = 'ស្គម';
-      else if (bmi < 18.5) status = 'ខ្វះគីឡូ';
-      else if (bmi >= 25 && bmi < 30) status = 'លើសគីឡូ';
-      else if (bmi >= 30) status = 'ធាត់';
-      
-      if (formData.bmi !== bmi || formData.nutrition_status !== status) {
-        setFormData(prev => ({ ...prev, bmi, nutrition_status: status }));
-      }
-    }
-  }, [formData.weight_kg, formData.height_m]);
 
   const handleExportGEIPExcel = () => {
     const wsData = students.map((std) => ({
@@ -637,25 +451,21 @@ export default function StudentsPage() {
   };
 
   const openAddModal = () => {
-    setFormData({ ...DEFAULT_FORM, student_id_number: `ID-${Math.floor(Math.random()*10000)}` });
-    setActiveModalTab(activeTableView); // Open modal to current table view
-    setIsModalOpen(true);
+    setProfileDrawerData({ ...DEFAULT_FORM, student_id_number: `ID-${Math.floor(Math.random()*10000)}` });
   };
 
   const openEditModal = (std: MassiveProfilingStudent) => {
-    setFormData(std);
-    setActiveModalTab(activeTableView); // Open modal exactly to what they are looking at
-    setIsModalOpen(true);
+    setProfileDrawerData(std);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (data: Partial<MassiveProfilingStudent>) => {
     setIsSaving(true);
     
     const payload = {
-      ...formData,
+      ...data,
       class_id: activeClass?.id,
-      current_status: formData.current_status || 'active',
-      is_active: (formData.current_status || 'active') === 'active',
+      current_status: data.current_status || 'active',
+      is_active: (data.current_status || 'active') === 'active',
     };
 
     try {
@@ -664,48 +474,48 @@ export default function StudentsPage() {
       if (res && res.success && res.student) {
         const savedStudent = {
           ...DEFAULT_FORM,
-          ...formData,
+          ...data,
           ...res.student,
-          current_status: res.student.enrollment_status || formData.current_status || 'active',
+          current_status: res.student.enrollment_status || data.current_status || 'active',
         } as MassiveProfilingStudent;
 
-        if (formData.id) {
-          setStudents(prev => prev.map(s => s.id === formData.id ? savedStudent : s));
+        if (data.id) {
+          setStudents(prev => prev.map(s => s.id === data.id ? savedStudent : s));
         } else {
           setStudents(prev => [savedStudent, ...prev]);
         }
-        setIsModalOpen(false);
+        setProfileDrawerData(null);
       } else {
         // Optimistic fallback update
         const fallbackStudent = {
           ...DEFAULT_FORM,
-          ...formData,
-          id: formData.id || `std-${Date.now()}`,
-          current_status: formData.current_status || 'active',
+          ...data,
+          id: data.id || `std-${Date.now()}`,
+          current_status: data.current_status || 'active',
         } as MassiveProfilingStudent;
 
-        if (formData.id) {
-          setStudents(prev => prev.map(s => s.id === formData.id ? fallbackStudent : s));
+        if (data.id) {
+          setStudents(prev => prev.map(s => s.id === data.id ? fallbackStudent : s));
         } else {
           setStudents(prev => [fallbackStudent, ...prev]);
         }
-        setIsModalOpen(false);
+        setProfileDrawerData(null);
       }
     } catch (err: any) {
       console.warn('handleSave error (applied local update):', err?.message);
       const fallbackStudent = {
         ...DEFAULT_FORM,
-        ...formData,
-        id: formData.id || `std-${Date.now()}`,
-        current_status: formData.current_status || 'active',
+        ...data,
+        id: data.id || `std-${Date.now()}`,
+        current_status: data.current_status || 'active',
       } as MassiveProfilingStudent;
 
-      if (formData.id) {
-        setStudents(prev => prev.map(s => s.id === formData.id ? fallbackStudent : s));
+      if (data.id) {
+        setStudents(prev => prev.map(s => s.id === data.id ? fallbackStudent : s));
       } else {
         setStudents(prev => [fallbackStudent, ...prev]);
       }
-      setIsModalOpen(false);
+      setProfileDrawerData(null);
     } finally {
       setIsSaving(false);
     }
@@ -887,48 +697,19 @@ export default function StudentsPage() {
       {mainTab === 'list' && (
         <div className="space-y-6 animate-fadeIn">
           {/* Toolbar & Add Button */}
-      <div className="bg-white p-4 rounded-[20px] border border-slate-200 shadow-2xs flex flex-wrap justify-between items-center gap-4">
-        <div className="flex gap-4 items-center">
-          <div className="text-sm font-extrabold text-slate-700">សិស្សសរុប៖ <span className="text-[#155EEF]">{students.length} នាក់</span></div>
-          {isLoading && <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />}
-          <div className="h-6 w-px bg-slate-200"></div>
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input type="text" placeholder="ស្វែងរកអត្តលេខ ឬឈ្មោះ..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:border-[#155EEF]" />
-          </div>
-        </div>
-        <div className="flex gap-2 relative">
-          {selectedIds.length > 0 && (
-            <button onClick={handleDeleteSelected} disabled={isSaving} className="px-4 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors mr-2">
-              <AlertCircle className="w-4 h-4" /> លុបសិស្សដែលជ្រើសរើស ({selectedIds.length})
-            </button>
-          )}
-          <div id="import-dropdown" className="relative">
-            <button onClick={() => setIsImportMenuOpen(!isImportMenuOpen)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors">
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> នាំចូលឯកសារ
-              <ChevronDown className={`w-3 h-3 transition-transform ${isImportMenuOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {isImportMenuOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
-                <button onClick={() => { setIsImportMenuOpen(false); setIsImportModalOpen(true); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-slate-50 text-left transition-colors">
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                  <span className="text-xs font-bold text-slate-700">នាំចូលទិន្នន័យ (Import)</span>
-                </button>
-                <button onClick={() => { setIsImportMenuOpen(false); handleDownloadTemplate(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-slate-50 text-left transition-colors">
-                  <Download className="w-4 h-4 text-blue-600" />
-                  <span className="text-xs font-bold text-slate-700">ទាញយកគំរូទិន្នន័យ (Template)</span>
-                </button>
-              </div>
-            )}
-          </div>
-          <button onClick={() => setIsGridModalOpen(true)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors">
-            <Table className="w-4 h-4 text-indigo-600" /> បញ្ចូលតាមតារាង
-          </button>
-          <button onClick={openAddModal} className="px-6 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-xs shadow-md shadow-blue-500/20 flex items-center gap-2">
-            <UserPlus className="w-4 h-4" /> បន្ថែមសិស្ស
-          </button>
-        </div>
-      </div>
+          <StudentFilters 
+            totalStudents={students.length}
+            isLoading={isLoading}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            selectedIdsCount={selectedIds.length}
+            onDeleteSelected={handleDeleteSelected}
+            isSaving={isSaving}
+            onOpenImport={() => setIsImportModalOpen(true)}
+            onDownloadTemplate={handleDownloadTemplate}
+            onOpenGrid={() => setIsGridModalOpen(true)}
+            onAddStudent={openAddModal}
+          />
 
       {/* Table View Filters */}
       <div className="bg-white rounded-t-[24px] border border-slate-200 shadow-2xs flex overflow-x-auto hide-scrollbar">
@@ -943,196 +724,21 @@ export default function StudentsPage() {
       </div>
 
       {/* Dynamic Table */}
-      <div className="bg-white rounded-b-[24px] border-x border-b border-slate-200 shadow-2xs -mt-6 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left whitespace-nowrap">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase">
-                <th className="p-4 w-10">
-                  <input type="checkbox" className="w-4 h-4 rounded text-[#155EEF]" checked={selectedIds.length === filteredStudents.length && filteredStudents.length > 0} onChange={handleSelectAll} />
-                </th>
-                {renderSortHeader('អត្តលេខ', 'student_id_number')}
-                {renderSortHeader('ឈ្មោះ', 'full_name')}
-                
-                {/* Dynamic Columns based on View Filter */}
-                {activeTableView === 1 && (
-                  <>
-                    {renderSortHeader('ភេទ', 'gender', 'center')}
-                    {renderSortHeader('ប្លង់តុ', 'desk_number', 'center')}
-                    {renderSortHeader('លេខបន្ទប់', 'room_number', 'center')}
-                    {renderSortHeader('ថ្ងៃខែឆ្នាំកំណើត', 'date_of_birth')}
-                    {renderSortHeader('អាយុ', 'age', 'center')}
-                    <th className="p-4">សំបុត្រកំណើត</th>
-                    <th className="p-4">ទូរស័ព្ទសិស្ស</th>
-                  </>
-                )}
-                {activeTableView === 2 && (
-                  <>
-                    {renderSortHeader('ស្ថានភាព', 'status', 'center')}
-                    <th className="p-4">សាលាមុន</th>
-                    {renderSortHeader('អាហារូបករណ៍', 'scholarship', 'center')}
-                    {renderSortHeader('ID Poor', 'id_poor', 'center')}
-                    {renderSortHeader('ចម្ងាយ(គ.ម)', 'distance_km', 'center')}
-                  </>
-                )}
-                {activeTableView === 3 && (
-                  <>
-                    {renderSortHeader('កម្ពស់', 'height_m', 'center')}
-                    {renderSortHeader('ទម្ងន់', 'weight_kg', 'center')}
-                    {renderSortHeader('BMI', 'bmi', 'center')}
-                    {renderSortHeader('ពិការភាព', 'disability', 'center')}
-                    <th className="p-4">បញ្ហាសុខភាព</th>
-                  </>
-                )}
-                {activeTableView === 4 && (
-                  <>
-                    <th className="p-4">ឪពុក/ម្តាយ</th>
-                    {renderSortHeader('បងប្អូន', 'siblings_count', 'center')}
-                    {renderSortHeader('ចំណូល/ខែ', 'income', 'center')}
-                    <th className="p-4">ផ្ទះសំបែង</th>
-                    {renderSortHeader('ចំណាកស្រុក', 'migrant_status', 'center')}
-                  </>
-                )}
-                {activeTableView === 5 && (
-                  <>
-                    {renderSortHeader('អាសយដ្ឋានបច្ចុប្បន្ន', 'address')}
-                    {renderSortHeader('ស្ថានភាពចុងក្រោយ', 'current_status', 'center')}
-                  </>
-                )}
-
-                <th className="p-4 text-right">សកម្មភាព</th>
-              </tr>
-            </thead>
-            <tbody className="text-xs font-bold text-slate-700 divide-y divide-slate-100">
-              {filteredStudents.map(std => (
-                <tr key={std.id} className={`transition-colors ${selectedIds.includes(std.id) ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
-                  <td className="p-4">
-                    <input type="checkbox" className="w-4 h-4 rounded text-[#155EEF]" checked={selectedIds.includes(std.id)} onChange={() => handleSelect(std.id)} />
-                  </td>
-                  <td className="p-4 font-mono text-slate-400">{std.student_id_number}</td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-900 font-black">{std.full_name}</span>
-                      {std.risk_level === 'high' && <span className="bg-rose-100 text-rose-700 text-[10px] px-2 py-0.5 rounded font-bold">ហានិភ័យខ្ពស់</span>}
-                      {std.risk_level === 'medium' && <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded font-bold">ហានិភ័យមធ្យម</span>}
-                    </div>
-                  </td>
-                  
-                  {activeTableView === 1 && (
-                    <>
-                      <td className="p-4 text-center">{std.gender === 'F' ? <span className="text-pink-600 bg-pink-50 px-2 py-0.5 rounded">ស្រី</span> : <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">ប្រុស</span>}</td>
-                      <td className="p-4 text-center">
-                        <input
-                          type="text"
-                          defaultValue={std.desk_number || ''}
-                          placeholder="A-01"
-                          onBlur={async (e) => {
-                            const val = e.target.value.trim();
-                            if (val !== (std.desk_number || '')) {
-                              setStudents(students.map(s => s.id === std.id ? { ...s, desk_number: val } : s));
-                              await supabase.from('students').update({ desk_number: val || null }).eq('id', std.id);
-                            }
-                          }}
-                          className="w-16 bg-transparent border border-transparent hover:border-slate-200 focus:border-[#155EEF] rounded-lg px-2 py-1 text-center text-xs font-bold font-mono outline-none transition-colors"
-                        />
-                      </td>
-                      <td className="p-4 text-center">
-                        <input
-                          type="text"
-                          defaultValue={std.room_number || ''}
-                          placeholder="បន្ទប់ ១"
-                          onBlur={async (e) => {
-                            const val = e.target.value.trim();
-                            if (val !== (std.room_number || '')) {
-                              setStudents(students.map(s => s.id === std.id ? { ...s, room_number: val } : s));
-                              await supabase.from('students').update({ room_number: val || null }).eq('id', std.id);
-                            }
-                          }}
-                          className="w-20 bg-transparent border border-transparent hover:border-slate-200 focus:border-[#155EEF] rounded-lg px-2 py-1 text-center text-xs font-bold font-mono outline-none transition-colors"
-                        />
-                      </td>
-                      <td className="p-4">{std.date_of_birth}</td>
-                      <td className="p-4 text-center">{std.age}</td>
-                      <td className="p-4 font-mono text-slate-500">{std.birth_cert_no || '-'}</td>
-                      <td className="p-4 font-mono">{std.student_phone || '-'}</td>
-                    </>
-                  )}
-                  {activeTableView === 2 && (
-                    <>
-                      <td className="p-4 text-center">
-                        <span className={`px-2 py-1 rounded text-[10px] ${std.status === 'new' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                          {std.status === 'new' ? 'ថ្មី' : 'ត្រួតថ្នាក់'}
-                        </span>
-                      </td>
-                      <td className="p-4">{std.prev_school || '-'}</td>
-                      <td className="p-4 text-center">{std.scholarship === 'yes' ? 'មាន' : '-'}</td>
-                      <td className="p-4 text-center">{std.id_poor !== 'none' ? <span className="text-rose-600 bg-rose-50 px-2 py-0.5 rounded flex items-center justify-center gap-1 w-max mx-auto"><Heart className="w-3 h-3"/> {std.id_poor === 'level_1' ? 'កម្រិត ១' : 'កម្រិត ២'}</span> : '-'}</td>
-                      <td className="p-4 text-center text-slate-500">{std.distance_km}</td>
-                    </>
-                  )}
-                  {activeTableView === 3 && (
-                    <>
-                      <td className="p-4 text-center text-slate-500">{std.height_m}m / {std.weight_kg}kg</td>
-                      <td className="p-4 text-center">
-                        <span className={`text-[10px] px-2 py-1 rounded-md ${std.nutrition_status === 'ធម្មតា' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                          {std.bmi} ({std.nutrition_status})
-                        </span>
-                      </td>
-                      <td className="p-4 text-center">{std.disability !== 'none' ? <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded flex items-center justify-center gap-1 w-max mx-auto"><AlertCircle className="w-3 h-3"/> មាន</span> : '-'}</td>
-                      <td className="p-4">{std.health_issues || '-'}</td>
-                    </>
-                  )}
-                  {activeTableView === 4 && (
-                    <>
-                      <td className="p-4">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-slate-900">{std.father_name}</span>
-                          <span className="text-[10px] text-slate-500">{std.mother_name}</span>
-                        </div>
-                      </td>
-                      <td className="p-4 text-center">{std.siblings_count}</td>
-                      <td className="p-4 text-center text-emerald-600">${std.income}</td>
-                      <td className="p-4 text-slate-500">{std.housing || '-'}</td>
-                      <td className="p-4 text-center">{std.migrant_status !== 'none' ? 'មាន' : '-'}</td>
-                    </>
-                  )}
-                  {activeTableView === 5 && (
-                    <>
-                      <td className="p-4 text-slate-600 truncate max-w-xs">{std.address}</td>
-                      <td className="p-4 text-center">
-                        <span className={`px-2 py-1 rounded text-[10px] ${std.current_status === 'active' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'}`}>
-                          {std.current_status === 'active' ? 'កំពុងរៀន' : 'បោះបង់'}
-                        </span>
-                      </td>
-                    </>
-                  )}
-
-                  <td className="p-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Link href={`/students/${std.id}`} className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors flex items-center gap-1.5">
-                        <UserSquare2 className="w-3.5 h-3.5" /> ប្រវត្តិ
-                      </Link>
-                      <button onClick={() => openEditModal(std)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors flex items-center gap-1.5">
-                        <Edit className="w-3.5 h-3.5" /> កែប្រែ
-                      </button>
-                      <button 
-                        onClick={() => {
-                          setStatusForm({ ...statusForm, studentId: std.id });
-                          setIsStatusModalOpen(true);
-                        }}
-                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors flex items-center gap-1.5 font-bold whitespace-nowrap"
-                      >
-                        <LogOut className="w-3.5 h-3.5" /> ផ្ទេរ/បោះបង់
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredStudents.length === 0 && <div className="py-12 text-center text-slate-500 font-bold">មិនមានទិន្នន័យសិស្សទេ</div>}
-        </div>
-      </div>
+      <StudentTable 
+        students={students}
+        setStudents={setStudents}
+        filteredStudents={filteredStudents}
+        activeTableView={activeTableView}
+        sortState={sortState}
+        handleSort={handleSort}
+        selectedIds={selectedIds}
+        setSelectedIds={setSelectedIds}
+        openEditModal={openEditModal}
+        openStatusModal={(std) => {
+          setStatusForm({ ...statusForm, studentId: std.id });
+          setIsStatusModalOpen(true);
+        }}
+      />
       </div>
       )}
 
@@ -1252,269 +858,7 @@ export default function StudentsPage() {
          </div>
       )}
 
-      {/* Massive Modal (Synchronized with activeModalTab) */}
-      {mounted && isModalOpen && createPortal(
-        <div 
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fadeIn"
-          onClick={() => setIsModalOpen(false)}
-        >
-          <div 
-            className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 border border-slate-100"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="px-6 py-4 bg-white border-b border-slate-100 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-[#155EEF] flex items-center justify-center font-black">
-                  <UserSquare2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-black text-slate-800">
-                    {formData.id ? 'កែប្រែប្រវត្តិរូបសិស្ស' : 'បង្កើតប្រវត្តិរូបសិស្សថ្មី'}
-                  </h2>
-                  <p className="text-xs font-bold text-[#64748B]">
-                    {formData.full_name ? `${formData.full_name} (${formData.student_id_number || 'គ្មានអត្តលេខ'})` : 'បញ្ចូលព័ត៌មានលម្អិតសិស្ស'}
-                  </p>
-                </div>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setIsModalOpen(false)} 
-                className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-full transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            {/* Tabs Navigation */}
-            <div className="flex px-6 border-b border-slate-100 bg-slate-50/70 overflow-x-auto hide-scrollbar shrink-0 gap-1.5 py-1.5">
-              {VIEW_TABS.map(tab => (
-                <button 
-                  key={tab.id} 
-                  type="button"
-                  onClick={() => setActiveModalTab(tab.id)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-extrabold text-xs whitespace-nowrap transition-all cursor-pointer ${
-                    activeModalTab === tab.id 
-                      ? 'bg-white text-[#155EEF] shadow-xs border border-slate-200/60 font-black' 
-                      : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
-                  }`}
-                >
-                  <tab.icon className="w-3.5 h-3.5" /> 
-                  <span>{tab.label}</span>
-                </button>
-              ))}
-            </div>
 
-            {/* Form Body */}
-            <div className="p-6 sm:p-8 overflow-y-auto flex-1 bg-slate-50/30 custom-scrollbar">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {activeModalTab === 1 && (
-                  <>
-                    <label className="block text-xs font-bold text-slate-700">
-                      អត្តលេខ
-                      <input type="text" value={formData.student_id_number || ''} onChange={e=>setFormData({...formData, student_id_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ឈ្មោះពេញ
-                      <input type="text" value={formData.full_name || ''} onChange={e=>setFormData({...formData, full_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ភេទ
-                      <select value={formData.gender || 'M'} onChange={e=>setFormData({...formData, gender:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
-                        <option value="M">ប្រុស</option>
-                        <option value="F">ស្រី</option>
-                      </select>
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ថ្ងៃខែឆ្នាំកំណើត
-                      <input type="date" value={formData.date_of_birth || ''} onChange={e=>setFormData({...formData, date_of_birth:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      អាយុ
-                      <input type="number" value={formData.age || ''} onChange={e=>setFormData({...formData, age:Number(e.target.value)})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      លេខសំបុត្រកំណើត
-                      <input type="text" value={formData.birth_cert_no || ''} onChange={e=>setFormData({...formData, birth_cert_no:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ប្លង់តុ (Desk Number)
-                      <input type="text" placeholder="A-01" value={formData.desk_number || ''} onChange={e=>setFormData({...formData, desk_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      លេខបន្ទប់ប្រឡង (Exam Room)
-                      <input type="text" placeholder="បន្ទប់ ១" value={formData.room_number || ''} onChange={e=>setFormData({...formData, room_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                  </>
-                )}
-                {activeModalTab === 2 && (
-                  <>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ស្ថានភាព
-                      <select value={formData.status||'new'} onChange={e=>setFormData({...formData, status:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
-                        <option value="new">ថ្មី</option>
-                        <option value="repeater">ត្រួត</option>
-                      </select>
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      សាលាមុន (បើមាន)
-                      <input type="text" value={formData.prev_school||''} onChange={e=>setFormData({...formData, prev_school:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      បណ្ណក្រីក្រ
-                      <select value={formData.id_poor||'none'} onChange={e=>setFormData({...formData, id_poor:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
-                        <option value="none">គ្មាន</option>
-                        <option value="level_1">ក្រីក្រ ១</option>
-                        <option value="level_2">ក្រីក្រ ២</option>
-                      </select>
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      អាហារូបករណ៍
-                      <select value={formData.scholarship||'no'} onChange={e=>setFormData({...formData, scholarship:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
-                        <option value="no">គ្មាន</option>
-                        <option value="yes">មាន</option>
-                      </select>
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ចម្ងាយពីផ្ទះ (គ.ម)
-                      <input type="number" value={formData.distance_km||0} onChange={e=>setFormData({...formData, distance_km:Number(e.target.value)})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      កុមារកំព្រា
-                      <select value={formData.orphan||'no'} onChange={e=>setFormData({...formData, orphan:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
-                        <option value="no">ទេ</option>
-                        <option value="yes">បាទ/ចាស</option>
-                      </select>
-                    </label>
-                  </>
-                )}
-                {activeModalTab === 3 && (
-                  <>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ទម្ងន់ (គ.ក្រ)
-                      <input type="number" value={formData.weight_kg||0} onChange={e=>handleWeightChange(Number(e.target.value))} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      កម្ពស់ (ម៉ែត្រ ឧ. 1.55)
-                      <input type="number" step="0.01" value={formData.height_m||0} onChange={e=>handleHeightChange(Number(e.target.value))} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <div className="sm:col-span-2 p-4 bg-emerald-50 border border-emerald-200/80 rounded-2xl flex justify-between items-center shadow-xs">
-                      <div>
-                        <span className="text-xs font-bold text-emerald-800">សន្ទស្សន៍ម៉ាសរាងកាយ (BMI)</span>
-                        <div className="text-lg font-black text-emerald-950">{formData.bmi || 0}</div>
-                      </div>
-                      <span className={`px-4 py-1.5 rounded-full text-xs font-black shadow-xs ${formData.nutrition_status==='ធម្មតា'?'bg-emerald-600 text-white':'bg-rose-500 text-white'}`}>
-                        {formData.nutrition_status || 'ធម្មតា'}
-                      </span>
-                    </div>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ពិការភាព
-                      <select value={formData.disability||'none'} onChange={e=>setFormData({...formData, disability:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
-                        <option value="none">គ្មាន</option>
-                        <option value="mild">ស្រាល</option>
-                        <option value="severe">ធ្ងន់</option>
-                      </select>
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      បញ្ហាសុខភាព
-                      <input type="text" value={formData.health_issues||''} onChange={e=>setFormData({...formData, health_issues:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                  </>
-                )}
-                {activeModalTab === 4 && (
-                  <>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ឈ្មោះឪពុក
-                      <input type="text" value={formData.father_name||''} onChange={e=>setFormData({...formData, father_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      មុខរបរឪពុក
-                      <input type="text" value={formData.father_job||''} onChange={e=>setFormData({...formData, father_job:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ឈ្មោះម្តាយ
-                      <input type="text" value={formData.mother_name||''} onChange={e=>setFormData({...formData, mother_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      មុខរបរម្តាយ
-                      <input type="text" value={formData.mother_job||''} onChange={e=>setFormData({...formData, mother_job:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ចំណូលគ្រួសារ ($)
-                      <input type="number" value={formData.income||0} onChange={e=>setFormData({...formData, income:Number(e.target.value)})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ចំណាកស្រុក
-                      <select value={formData.migrant_status||'none'} onChange={e=>setFormData({...formData, migrant_status:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
-                        <option value="none">គ្មាន</option>
-                        <option value="parents">ឪពុកម្តាយ</option>
-                      </select>
-                    </label>
-                  </>
-                )}
-                {activeModalTab === 5 && (
-                  <>
-                    <label className="block text-xs font-bold text-slate-700 sm:col-span-2">
-                      អាសយដ្ឋានបច្ចុប្បន្ន
-                      <input type="text" value={formData.address||''} onChange={e=>setFormData({...formData, address:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ទូរស័ព្ទឪពុកម្តាយ
-                      <input type="text" value={formData.father_phone||''} onChange={e=>setFormData({...formData, father_phone:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ទូរស័ព្ទសិស្ស
-                      <input type="text" value={formData.student_phone||''} onChange={e=>setFormData({...formData, student_phone:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
-                    </label>
-                    <label className="block text-xs font-bold text-slate-700">
-                      ស្ថានភាពចុងក្រោយ
-                      <select value={formData.current_status||'active'} onChange={e=>setFormData({...formData, current_status:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
-                        <option value="active">កំពុងរៀន</option>
-                        <option value="dropout">បោះបង់</option>
-                      </select>
-                    </label>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-4 bg-white border-t border-slate-100 flex items-center justify-between gap-3 shrink-0 rounded-b-3xl">
-              <span className="text-xs font-bold text-slate-400 hidden sm:inline">
-                * រាល់ការកែប្រែនឹងត្រូវធ្វើសមកាលកម្មទៅប្រព័ន្ធកណ្តាលភ្លាមៗ
-              </span>
-              <div className="flex gap-2.5 ml-auto">
-                <button 
-                  type="button" 
-                  onClick={() => setIsModalOpen(false)} 
-                  className="px-5 py-2.5 rounded-xl font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-                >
-                  បោះបង់
-                </button>
-                <button 
-                  type="button" 
-                  onClick={handleSave} 
-                  disabled={isSaving}
-                  className="px-6 py-2.5 rounded-xl bg-[#155EEF] hover:bg-blue-700 text-white font-black text-xs shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>កំពុងរក្សាទុក...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      <span>រក្សាទុកទិន្នន័យ</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* Import Modal */}
       <StudentImportModal 

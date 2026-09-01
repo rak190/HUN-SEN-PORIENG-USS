@@ -6,6 +6,8 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Upload, FileSpreadsheet, Check, AlertTriangle, X, Loader2, Info } from 'lucide-react';
+import { applySchema } from '@/lib/import/schema';
+import { detectDuplicate } from '@/lib/import/duplicate-detector';
 
 interface StudentImportModalProps {
   isOpen: boolean;
@@ -110,140 +112,64 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
         const headers = allRows[headerRowIdx];
         const dataRows = allRows.slice(headerRowIdx + 1);
 
-        let existingIds: string[] = [];
+        let existingStudentsInDb: any[] = [];
         if (activeClass?.id) {
           const { data: existingData } = await supabase
             .from('students')
-            .select('student_id_number')
+            .select('*')
             .eq('class_id', activeClass.id);
           if (existingData) {
-            existingIds = existingData.map(d => String(d.student_id_number).trim().toLowerCase());
+            existingStudentsInDb = existingData;
           }
         }
 
         const results: ParsedStudent[] = [];
         const seenIdsInFile = new Set<string>();
 
-        dataRows.forEach((rowArr, rowIdx) => {
+        for (let rowIdx = 0; rowIdx < dataRows.length; rowIdx++) {
+          const rowArr = dataRows[rowIdx];
           // If the row is completely empty, skip it.
-          if (rowArr.every(cell => !String(cell).trim())) return;
+          if (rowArr.every((cell: any) => !String(cell).trim())) continue;
 
           // Convert array to object based on headers
-          const row: Record<string, any> = {};
-          headers.forEach((h, i) => {
+          const rowObj: Record<string, any> = {};
+          headers.forEach((h: any, i: number) => {
              if (h) {
-                // If there are duplicate headers, keep the first or append index
                 const key = String(h).trim();
-                if (!row[key]) {
-                   row[key] = rowArr[i];
+                if (!rowObj[key]) {
+                   rowObj[key] = rowArr[i];
                 } else {
-                   row[`${key}_${i}`] = rowArr[i];
+                   rowObj[`${key}_${i}`] = rowArr[i];
                 }
              }
           });
 
-          // Also map by index for absolute certainty based on Phase 3 analysis:
-          // Col 3 = អត្តលេខ
-          // Col 4 = នាមត្រកូល, Col 5 = នាមខ្លួន
-          // Col 6 = ភេទ
-          // Col 10 = (DD/MM/YYYY) 22/01/2001
-          // Col 30 = លេខទូរស័ព្ទសិស្ស, Col 43 = ម្តាយ, Col 47 = អាណាព្យាបាល
+          const { result: mappedData, warnings, errors } = applySchema(rowObj, rowArr, headers);
 
-          const idNumRaw = row['អត្តលេខ'] || rowArr[3] || '';
-          const idNum = String(idNumRaw).trim();
-          
-          const lastName = String(row['នាមត្រកូល'] || rowArr[4] || '').trim();
-          const firstName = String(row['នាមខ្លួន'] || rowArr[5] || '').trim();
-          const fullName = (lastName + ' ' + firstName).trim() || String(row['នាមត្រកូល និងនាមខ្លួន'] || '').trim();
-
-          const genderRaw = row['ភេទ'] || rowArr[6] || '';
-          let gender = 'M';
-          if (String(genderRaw).toLowerCase() === 'ស្រី' || String(genderRaw).toLowerCase() === 'f') gender = 'F';
-
-          const dobRaw = row['(DD/MM/YYYY) 22/01/2001'] || row['ថ្ងៃខែឆ្នាំកំណើត'] || rowArr[10] || '';
-          const formattedDob = parseDate(dobRaw);
-
-          const phoneRaw1 = row['លេខទូរស័ព្ទសិស្ស'] || rowArr[30] || '';
-          const phoneRaw2 = row['លេខទូស័ព្ទ_40'] || rowArr[40] || ''; // Father
-          const phoneRaw3 = row['លេខទូស័ព្ទ_43'] || rowArr[43] || ''; // Mother
-          const phoneRaw4 = row['លេខទូរស័ព្ទ_47'] || rowArr[47] || ''; // Guardian
-          const parent_phone = cleanString(phoneRaw1) || cleanString(phoneRaw2) || cleanString(phoneRaw3) || cleanString(phoneRaw4);
-
-          const addressRaw = row['អាសយដ្ឋានបច្ចុប្បន្ន'] || rowArr[44] || rowArr[48] || '';
-          const address = cleanString(addressRaw);
-
-          const weightRaw = row['ទម្ងន់ (គីឡូក្រាម)'] || rowArr[72] || '';
-          const heightRaw = row['កម្ពស់ (ម៉ែត្រ)'] || rowArr[73] || '';
-          
-          const errors: any[] = [];
-          const warnings: any[] = [];
           let status: ValidationStatus = 'valid';
 
-          if (!idNum) {
-            errors.push({ column: 'អត្តលេខ', problem: 'បាត់អត្តលេខសិស្ស', suggestion: 'សូមបំពេញអត្តលេខ' });
+          if (errors.length > 0) {
             status = 'invalid';
-          }
-          if (!fullName) {
-             errors.push({ column: 'ឈ្មោះ', problem: 'បាត់ឈ្មោះសិស្ស', suggestion: 'សូមបំពេញនាមត្រកូល និងនាមខ្លួន' });
-             status = 'invalid';
+          } else if (warnings.length > 0) {
+            status = 'missing_optional';
           }
 
-          if (idNum) {
-            if (existingIds.includes(idNum.toLowerCase()) || seenIdsInFile.has(idNum.toLowerCase())) {
-               errors.push({ column: 'អត្តលេខ', problem: 'អត្តលេខស្ទួន', suggestion: 'សិស្សនេះមានរួចហើយនៅក្នុងប្រព័ន្ធ ឬឯកសារនេះ' });
-               status = 'duplicate';
+          if (status !== 'invalid') {
+            const dupResult = await detectDuplicate(mappedData, existingStudentsInDb, results.map(r => r.data));
+            if (dupResult.status === 'matched_existing' || dupResult.status === 'possible_duplicate' || dupResult.status === 'duplicate_within_file') {
+              errors.push({ column: 'អត្តលេខ/ឈ្មោះ', problem: dupResult.reason || 'ស្ទួន', suggestion: 'សិស្សនេះមានរួចហើយ' });
+              status = 'duplicate';
             }
-            seenIdsInFile.add(idNum.toLowerCase());
           }
-
-          if (status !== 'invalid' && status !== 'duplicate') {
-             if (!parent_phone) {
-                warnings.push({ column: 'លេខទូរស័ព្ទ', problem: 'មិនមានលេខទូរស័ព្ទទំនាក់ទំនង' });
-                status = 'missing_optional';
-             }
-             if (!formattedDob) {
-                warnings.push({ column: 'ថ្ងៃខែឆ្នាំកំណើត', problem: 'ទម្រង់ថ្ងៃខែមិនត្រឹមត្រូវ ឬបាត់' });
-                status = 'missing_optional';
-             }
-          }
-
-          const scholarship = cleanString(rowArr[27]) ? 'yes' : 'no';
-          const orphan = cleanString(rowArr[25]) ? 'yes' : 'no';
-          
-          let disability = 'none';
-          const disStr = String(rowArr[23] || '').trim();
-          if (disStr && disStr !== 'មិនមាន' && disStr !== 'គ្មាន') {
-             disability = 'mild'; // map any disability text to mild or track it in health notes
-          }
-          
-          let idPoor = 'none';
-          const poorStr = String(rowArr[26] || '').trim();
-          if (poorStr && poorStr !== 'មិនមាន' && poorStr !== 'គ្មាន') idPoor = 'level_1';
 
           results.push({
             rowNumber: headerRowIdx + 1 + rowIdx + 1, // Excel row number
             status,
             errors,
             warnings,
-            data: {
-              student_id_number: idNum,
-              full_name: fullName,
-              gender,
-              dob: formattedDob,
-              parent_phone,
-              address,
-              weight_kg: cleanString(weightRaw) ? Number(weightRaw) : null,
-              height_m: cleanString(heightRaw) ? Number(heightRaw) : null,
-              status: 'new',
-              scholarship,
-              id_poor: idPoor,
-              orphan,
-              disability,
-              is_active: true,
-              health_note: cleanString(rowArr[62]) || cleanString(rowArr[59]) || null,
-            }
+            data: { ...mappedData, status: 'new', is_active: true }
           });
-        });
+        }
 
         if (results.length === 0) {
           setErrorMsg('មិនមានទិន្នន័យត្រឹមត្រូវដែលអាចទាញយកបានទេ។');

@@ -125,8 +125,8 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
         .single();
 
       if (error) {
-        console.warn('Supabase update warning (fallback applied):', error.message);
-        savedStudent = { ...payload, ...dbRecord, id: payload.id };
+        console.error('Supabase update error:', error.message);
+        return { success: false, error: error.message };
       } else {
         savedStudent = { ...payload, ...(data || dbRecord) };
       }
@@ -139,9 +139,8 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
         .single();
 
       if (error) {
-        console.warn('Supabase insert warning (fallback applied):', error.message);
-        const newId = payload.id || `std-${Date.now()}`;
-        savedStudent = { ...payload, ...dbRecord, id: newId };
+        console.error('Supabase insert error:', error.message);
+        return { success: false, error: error.message };
       } else {
         savedStudent = { ...payload, ...(data || dbRecord) };
       }
@@ -187,8 +186,7 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
 
     return { success: true, student: savedStudent };
   } catch (err: any) {
-    console.warn('Save student action caught error:', err?.message);
-    const fallbackId = payload.id || `std-${Date.now()}`;
-    return { success: true, student: { ...payload, id: fallbackId }, fallback: true };
+    console.error('Save student action caught error:', err?.message);
+    return { success: false, error: err?.message || 'Unknown error occurred while saving student' };
   }
 }
