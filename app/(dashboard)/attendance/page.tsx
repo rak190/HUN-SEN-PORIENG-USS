@@ -5,62 +5,15 @@ import MonthlyAttendanceForm from '@/components/attendance/MonthlyAttendanceForm
 import AttendanceInsights from '@/components/attendance/AttendanceInsights';
 import { ClipboardCheck, Users, CalendarDays, LayoutList, Printer, Download, AlertTriangle, History } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
-import { createClient } from '@/lib/supabase/client';
-import * as XLSX from 'xlsx';
 
 export default function AttendancePage() {
   const { activeClass } = useAuth();
   const [activeTab, setActiveTab] = useState<'ews' | 'history' | 'monthly'>('ews');
-  const [exporting, setExporting] = useState(false);
-  const supabase = createClient();
-
-  const handleExportExcel = async () => {
-    if (!activeClass?.id) {
-      alert('សូមជ្រើសរើសថ្នាក់រៀនជាមុនសិន');
-      return;
-    }
-
-    setExporting(true);
-    try {
-      const { data: records, error } = await supabase
-        .from('attendance_records')
-        .select('date, status, note, students(full_name, gender, student_id_number)')
-        .eq('class_id', activeClass.id)
-        .order('date', { ascending: false });
-
-      if (error) throw error;
-
-      if (!records || records.length === 0) {
-        alert('មិនទាន់មានទិន្នន័យវត្តមានសម្រាប់ទាញយកទេ');
-        return;
-      }
-
-      const rows = records.map((r: any, idx: number) => ({
-        'ល.រ': idx + 1,
-        'កាលបរិច្ឆេទ': r.date,
-        'អត្តលេខ': r.students?.student_id_number || 'N/A',
-        'ឈ្មោះសិស្ស': r.students?.full_name || 'N/A',
-        'ភេទ': r.students?.gender === 'F' ? 'ស្រី' : 'ប្រុស',
-        'ស្ថានភាពវត្តមាន': r.status === 'present' ? 'មានវត្តមាន' : r.status === 'permission' ? 'ច្បាប់' : r.status === 'late' ? 'យឺត' : 'អវត្តមាន',
-        'កំណត់ចំណាំ': r.note || ''
-      }));
-
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'វត្តមាន');
-      XLSX.writeFile(wb, `វត្តមាន_${activeClass.name || 'ថ្នាក់'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    } catch (err: any) {
-      console.error('Error exporting attendance:', err);
-      alert(`មានបញ្ហាក្នុងការទាញយក Excel: ${err?.message || 'Error'}`);
-    } finally {
-      setExporting(false);
-    }
-  };
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       {/* Modern Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100 print:hidden">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 flex items-center gap-2.5">
             <ClipboardCheck className="w-8 h-8 text-[#155EEF]" />
@@ -73,22 +26,6 @@ export default function AttendancePage() {
             </span>
             <span>• គ្រប់គ្រងអវត្តមាន និងប្រព័ន្ធប្រកាសអាសន្នទប់ស្កាត់ការបោះបង់ការសិក្សា</span>
           </p>
-        </div>
-        
-        <div className="flex items-center gap-2 print:hidden shrink-0 mt-4 sm:mt-0">
-          <button 
-            onClick={handleExportExcel}
-            disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold rounded-xl text-sm transition-colors border border-slate-200 cursor-pointer disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" /> {exporting ? 'កំពុងទាញយក...' : 'ទាញយក Excel'}
-          </button>
-          <button 
-            onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors shadow-sm cursor-pointer"
-          >
-            <Printer className="w-4 h-4" /> បោះពុម្ព
-          </button>
         </div>
       </div>
 

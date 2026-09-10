@@ -19,9 +19,12 @@ import {
   Smartphone,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Printer,
+  Download
 } from 'lucide-react';
 import Link from 'next/link';
+import * as XLSX from 'xlsx';
 
 const ROOT_CAUSE_OPTIONS: { value: RootCauseAbsence; label: string }[] = [
   { value: 'farming', label: '🌾 ជួយការងារស្រែចម្ការ' },
@@ -51,6 +54,67 @@ export default function MonthlyAttendanceForm() {
   const [monitorDaysSubmitted, setMonitorDaysSubmitted] = useState<number>(0);
   const [totalMonthlyAbsences, setTotalMonthlyAbsences] = useState<number>(0);
   const [dropoutAlertsCount, setDropoutAlertsCount] = useState<number>(0);
+
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (!activeClass?.id) {
+      alert('សូមជ្រើសរើសថ្នាក់រៀនជាមុនសិន');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      if (!students || students.length === 0) {
+        alert('មិនទាន់មានទិន្នន័យសិស្សសម្រាប់ទាញយកទេ');
+        return;
+      }
+
+      // Build rows for the monthly grid
+      const rows = students.map((s, idx) => {
+        const row: any = {
+          'ល.រ': idx + 1,
+          'អត្តលេខ': s.student_id_number || 'N/A',
+          'ឈ្មោះសិស្ស': s.full_name || 'N/A',
+          'ភេទ': s.gender === 'F' || s.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស',
+        };
+
+        // Add 31 days columns
+        for (let day = 1; day <= 31; day++) {
+          const dayStr = day.toString().padStart(2, '0');
+          const fullDate = `${selectedMonth}-${dayStr}`;
+          
+          // Find if this student has a record for this date
+          const record = rawDailyRecords.find(r => r.student_id === s.id && r.date === fullDate);
+          
+          let displayChar = '';
+          if (record) {
+            if (record.status === 'absent') displayChar = 'អ';
+            else if (record.status === 'permission') displayChar = 'ច';
+            else if (record.status === 'late') displayChar = 'យ';
+            else if (record.status === 'present') displayChar = 'វ';
+          }
+          row[`ថ្ងៃទី ${dayStr}`] = displayChar;
+        }
+
+        row['សរុបអវត្តមាន'] = formData[s.id]?.absent_count || 0;
+        row['សរុបច្បាប់'] = formData[s.id]?.permission_count || 0;
+        row['សរុបយឺត'] = formData[s.id]?.late_count || 0;
+
+        return row;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'បញ្ជីវត្តមាន');
+      XLSX.writeFile(wb, `បញ្ជីវត្តមាន_ខែ_${selectedMonth}_ថ្នាក់_${activeClass.name || 'N_A'}.xlsx`);
+    } catch (err: any) {
+      console.error('Error exporting attendance:', err);
+      alert(`មានបញ្ហាក្នុងការទាញយក Excel: ${err?.message || 'Error'}`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -466,11 +530,11 @@ export default function MonthlyAttendanceForm() {
       </div>
 
       {/* Main Controls Card */}
-      <div className="bg-white p-5 rounded-[24px] border border-slate-200 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-4">
-        <h2 className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
-          <Calendar className="w-4 h-4" /> ជ្រើសរើសខែ
-        </h2>
+      <div className="bg-white p-5 rounded-[24px] border border-slate-200 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-4 print:hidden">
         <div className="flex items-center gap-4">
+          <h2 className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
+            <Calendar className="w-4 h-4" /> ជ្រើសរើសខែ
+          </h2>
           <div className="flex items-center gap-2 text-xs font-bold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
             <span>ចំនួនថ្ងៃរៀនសរុប៖</span>
             <input 
@@ -489,9 +553,26 @@ export default function MonthlyAttendanceForm() {
             className="bg-transparent border-none text-sm font-bold text-slate-700 focus:ring-0 cursor-pointer"
           />
         </div>
+        
+        {/* Export Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button 
+            onClick={handleExportExcel}
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold rounded-xl text-sm transition-colors border border-slate-200 cursor-pointer disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" /> {exporting ? 'កំពុងទាញយក...' : 'ទាញយក Excel (Matrix)'}
+          </button>
+          <button 
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-4 py-2 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors shadow-sm cursor-pointer"
+          >
+            <Printer className="w-4 h-4" /> បោះពុម្ពបញ្ជីវត្តមាន (A4)
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:hidden">
         <div className="bg-white p-4 rounded-[20px] border border-slate-200 shadow-sm flex flex-col justify-center">
           <div className="flex items-center gap-2 text-[11px] font-extrabold text-rose-600 uppercase">
             <AlertCircle className="w-3.5 h-3.5" /> ឥតច្បាប់សរុប
@@ -756,6 +837,83 @@ export default function MonthlyAttendanceForm() {
           </div>
         </div>
       )}
+
+      {/* ================= PDF PRINT MATRIX (A4) ================= */}
+      <div className="hidden print:block w-full bg-white text-black p-4">
+        <style dangerouslySetInnerHTML={{__html: `
+          @media print {
+            @page { size: A4 landscape; margin: 15mm; }
+            body, * {
+              font-family: 'Khmer OS Siemreap', 'Siemreap', sans-serif !important;
+              color: black !important;
+            }
+            h1, h2, h3, h4, .font-moul, [class*="font-extrabold"], [class*="font-black"] {
+              font-family: 'Khmer OS Moul Light', 'Khmer OS Moul', 'Moul', cursive !important;
+            }
+            .print-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+            .print-table th, .print-table td { border: 1px solid #000; padding: 2px 4px; text-align: center; }
+            .print-table th { background-color: #f1f5f9 !important; font-weight: bold; }
+            .text-left { text-align: left !important; }
+          }
+        `}} />
+        
+        <div className="text-center mb-6">
+          <h1 className="text-xl font-moul mb-2">បញ្ជីវត្តមានប្រចាំខែ {selectedMonth}</h1>
+          <h2 className="text-lg font-bold">ថ្នាក់ទី៖ {activeClass?.name} | សរុបថ្ងៃរៀន៖ {totalSchoolDays} ថ្ងៃ</h2>
+        </div>
+
+        <table className="print-table">
+          <thead>
+            <tr>
+              <th rowSpan={2} className="w-8">ល.រ</th>
+              <th rowSpan={2} className="w-40 text-left">ឈ្មោះសិស្ស</th>
+              <th rowSpan={2} className="w-12">ភេទ</th>
+              <th colSpan={31}>ថ្ងៃទី / Date</th>
+              <th colSpan={3}>សរុប (Total)</th>
+            </tr>
+            <tr>
+              {Array.from({ length: 31 }, (_, i) => (
+                <th key={i} className="w-6 text-[9px]">{i + 1}</th>
+              ))}
+              <th className="w-10">អ</th>
+              <th className="w-10">ច</th>
+              <th className="w-10">យ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {students.map((std, idx) => {
+              const absent = formData[std.id]?.absent_count || 0;
+              const perm = formData[std.id]?.permission_count || 0;
+              const late = formData[std.id]?.late_count || 0;
+              
+              return (
+                <tr key={std.id}>
+                  <td>{idx + 1}</td>
+                  <td className="text-left font-bold">{std.full_name}</td>
+                  <td>{std.gender === 'F' || std.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស'}</td>
+                  
+                  {Array.from({ length: 31 }, (_, i) => {
+                    const dayStr = `${selectedMonth}-${String(i + 1).padStart(2, '0')}`;
+                    const record = rawDailyRecords.find(r => r.student_id === std.id && r.date === dayStr);
+                    let char = '';
+                    if (record) {
+                      if (record.status === 'absent') char = 'អ';
+                      else if (record.status === 'permission') char = 'ច';
+                      else if (record.status === 'late') char = 'យ';
+                      else if (record.status === 'present') char = 'វ';
+                    }
+                    return <td key={dayStr} className="text-[10px]">{char}</td>;
+                  })}
+                  
+                  <td className="font-bold">{absent || ''}</td>
+                  <td className="font-bold">{perm || ''}</td>
+                  <td className="font-bold">{late || ''}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
