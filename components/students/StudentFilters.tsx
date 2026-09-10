@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, AlertCircle, FileSpreadsheet, ChevronDown, Download, Table, UserPlus, Loader2 } from 'lucide-react';
+import { Search, AlertCircle, FileSpreadsheet, ChevronDown, Download, Table, UserPlus, Loader2, Image as ImageIcon } from 'lucide-react';
 
 interface StudentFiltersProps {
   totalStudents: number;
@@ -13,6 +13,7 @@ interface StudentFiltersProps {
   onDownloadTemplate: () => void;
   onOpenGrid: () => void;
   onAddStudent: () => void;
+  onOpenBulkImage: () => void;
 }
 
 export default function StudentFilters({
@@ -26,7 +27,8 @@ export default function StudentFilters({
   onOpenImport,
   onDownloadTemplate,
   onOpenGrid,
-  onAddStudent
+  onAddStudent,
+  onOpenBulkImage
 }: StudentFiltersProps) {
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
 
@@ -90,6 +92,13 @@ export default function StudentFilters({
           )}
         </div>
         
+        <button 
+          onClick={onOpenBulkImage} 
+          className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors cursor-pointer"
+        >
+          <ImageIcon className="w-4 h-4 text-amber-600" /> បញ្ចូលរូបភាពច្រើន
+        </button>
+
         <button 
           onClick={onOpenGrid} 
           className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors cursor-pointer"

@@ -17,6 +17,7 @@ import StudentGridEntryModal from '@/components/students/StudentGridEntryModal';
 import StudentTable from '@/components/students/StudentTable';
 import StudentProfileDrawer from '@/components/students/StudentProfileDrawer';
 import StudentFilters from '@/components/students/StudentFilters';
+import BulkImageUploadModal from '@/components/students/BulkImageUploadModal';
 import { saveStudentAction } from './actions';
 import { useStudents } from '@/hooks/useStudents';
 
@@ -45,6 +46,7 @@ export default function StudentsPage() {
   const [profileDrawerData, setProfileDrawerData] = useState<Partial<MassiveProfilingStudent> | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isGridModalOpen, setIsGridModalOpen] = useState(false);
+  const [isBulkImageModalOpen, setIsBulkImageModalOpen] = useState(false);
   const [activeTableView, setActiveTableView] = useState(1);
   const [mounted, setMounted] = useState(false);
   const [mainTab, setMainTab] = useState<'list' | 'at-risk' | 'transfer'>('list');
@@ -678,6 +680,7 @@ export default function StudentsPage() {
             onDownloadTemplate={handleDownloadTemplate}
             onOpenGrid={() => setIsGridModalOpen(true)}
             onAddStudent={openAddModal}
+            onOpenBulkImage={() => setIsBulkImageModalOpen(true)}
           />
 
       {/* Table View Filters */}
@@ -1008,14 +1011,23 @@ export default function StudentsPage() {
       )}
 
       {/* Student Profile Drawer */}
-      {profileDrawerData && (
-        <StudentProfileDrawer
-          isOpen={!!profileDrawerData}
-          onClose={() => setProfileDrawerData(null)}
-          initialData={profileDrawerData}
-          onSave={handleSave}
-        />
-      )}
+      <StudentProfileDrawer 
+        isOpen={!!profileDrawerData}
+        initialData={profileDrawerData || {}}
+        onClose={() => setProfileDrawerData(null)}
+        onSave={handleSave}
+      />
+      
+      {/* Bulk Image Upload Modal */}
+      <BulkImageUploadModal 
+        isOpen={isBulkImageModalOpen}
+        onClose={() => setIsBulkImageModalOpen(false)}
+        students={students}
+        onComplete={() => {
+          // Re-fetch or just let the local state update handle it
+          console.log('Bulk image upload completed');
+        }}
+      />
     </div>
   );
 }
