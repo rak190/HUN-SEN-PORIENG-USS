@@ -6,6 +6,8 @@ export interface MassiveProfilingStudent {
   desk_number?: string;
   room_number?: string;
   full_name: string;
+  english_name?: string;
+  photo_url?: string;
   gender: string;
   date_of_birth?: string;
   age?: number;
