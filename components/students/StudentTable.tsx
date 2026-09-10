@@ -49,43 +49,6 @@ export default function StudentTable({
     );
   };
 
-  const handleBulkPaste = async (e: React.ClipboardEvent<HTMLInputElement>, field: 'desk_number' | 'room_number', startIndex: number) => {
-    e.preventDefault();
-    const pasteData = e.clipboardData.getData('text');
-    if (!pasteData) return;
-
-    const rows = pasteData.split(/\r?\n/).filter(r => r.trim() !== '');
-    if (rows.length === 0) return;
-
-    // Create a copy of the students array to update
-    let updatedStudents = [...students];
-    const studentsToUpdate = [];
-
-    // Apply pasted data starting from the current row
-    for (let i = 0; i < rows.length; i++) {
-      const targetIndex = startIndex + i;
-      if (targetIndex >= filteredStudents.length) break; // Don't overflow beyond filtered view
-      
-      const targetStudent = filteredStudents[targetIndex];
-      const val = rows[i].trim();
-      
-      // Update in our temp array
-      const studentIndex = updatedStudents.findIndex(s => s.id === targetStudent.id);
-      if (studentIndex !== -1) {
-        updatedStudents[studentIndex] = { ...updatedStudents[studentIndex], [field]: val };
-        studentsToUpdate.push({ id: targetStudent.id, [field]: val || null });
-      }
-    }
-
-    // Update local state instantly
-    setStudents(updatedStudents);
-
-    // Update Supabase in bulk
-    for (const update of studentsToUpdate) {
-      await supabase.from('students').update(update).eq('id', update.id);
-    }
-  };
-
   return (
     <div className="bg-white rounded-b-[24px] border-x border-b border-slate-200 shadow-2xs -mt-6 overflow-hidden">
       <div className="overflow-x-auto">
@@ -180,7 +143,19 @@ export default function StudentTable({
                         type="text"
                         defaultValue={std.desk_number || ''}
                         placeholder="A-01"
-                        onPaste={(e) => handleBulkPaste(e, 'desk_number', index)}
+                        data-row={index}
+                        data-col="desk"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            const nextInput = document.querySelector(`input[data-row="${index + 1}"][data-col="desk"]`) as HTMLInputElement;
+                            if (nextInput) { nextInput.focus(); nextInput.select(); }
+                          } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            const prevInput = document.querySelector(`input[data-row="${index - 1}"][data-col="desk"]`) as HTMLInputElement;
+                            if (prevInput) { prevInput.focus(); prevInput.select(); }
+                          }
+                        }}
                         onBlur={async (e) => {
                           const val = e.target.value.trim();
                           if (val !== (std.desk_number || '')) {
@@ -196,7 +171,19 @@ export default function StudentTable({
                         type="text"
                         defaultValue={std.room_number || ''}
                         placeholder="បន្ទប់ ១"
-                        onPaste={(e) => handleBulkPaste(e, 'room_number', index)}
+                        data-row={index}
+                        data-col="room"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            const nextInput = document.querySelector(`input[data-row="${index + 1}"][data-col="room"]`) as HTMLInputElement;
+                            if (nextInput) { nextInput.focus(); nextInput.select(); }
+                          } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            const prevInput = document.querySelector(`input[data-row="${index - 1}"][data-col="room"]`) as HTMLInputElement;
+                            if (prevInput) { prevInput.focus(); prevInput.select(); }
+                          }
+                        }}
                         onBlur={async (e) => {
                           const val = e.target.value.trim();
                           if (val !== (std.room_number || '')) {
