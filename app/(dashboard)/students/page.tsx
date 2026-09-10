@@ -554,7 +554,7 @@ export default function StudentsPage() {
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet('បញ្ជីឈ្មោះសិស្ស', { views: [{ showGridLines: false }] });
 
-      const headerFont = { name: 'Kantumruy Pro', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      const headerFont = { name: 'Khmer OS Siemreap', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
       const cellFont = { name: 'Khmer OS Siemreap', size: 10 };
       const thinBorder = {
         top: { style: 'thin' as any }, left: { style: 'thin' as any },
@@ -562,14 +562,10 @@ export default function StudentsPage() {
       };
 
       const headers = [
-        'ល.រ', 'អត្តលេខ', 'នាមត្រកូល និងនាមខ្លួន', 'ភេទ (M/F)', 'ថ្ងៃខែឆ្នាំកំណើត (DD/MM/YYYY)', 'លេខទូរស័ព្ទសិស្ស', 
-        'ស្ថានភាព (new/repeater/transfer)', 'សាលាមុន', 'អាហារូបករណ៍ (yes/no)', 'បណ្ណក្រីក្រ (none/level_1/level_2)', 'កំព្រា (yes/no)', 'ជនជាតិដើមភាគតិច (yes/no)', 'ចម្ងាយមកសាលា(គ.ម)',
-        'ទម្ងន់(គ.ក)', 'កម្ពស់(ម)', 'ពិការភាព (none/mild/severe)', 'បញ្ហាសុខភាព',
-        'ឈ្មោះឪពុក', 'មុខរបរឪពុក', 'ទូរស័ព្ទឪពុក',
-        'ឈ្មោះម្តាយ', 'មុខរបរម្តាយ', 'ទូរស័ព្ទម្តាយ',
-        'ឈ្មោះអាណាព្យាបាល', 'មុខរបរអាណាព្យាបាល', 'ទូរស័ព្ទអាណាព្យាបាល',
-        'ចំនួនបងប្អូន', 'ស្ថានភាពចំណាកស្រុក (none/parents/student)', 'ហិង្សាក្នុងគ្រួសារ (yes/no)', 'ទីជម្រក', 'ចំណូលប្រចាំខែ(រៀល)',
-        'អាសយដ្ឋានបច្ចុប្បន្ន'
+        'ល.រ', 'អត្តលេខ', 'គោត្តនាម និងនាម', 'អក្សរឡាតាំង', 'ភេទ', 'ថ្ងៃខែឆ្នាំកំណើត', 'អាយុ',
+        'ជនជាតិដើមភាគតិច', 'ពិការភាព', 'ប្រភេទពិការភាព', 'ឧបករណ៍ជំនួយ', 'កំព្រា', 'ប័ណ្ណក្រីក្រ', 'អាហារូបករណ៍',
+        'លេខប័ណ្ណធានារ៉ាប់រង', 'លេខសំបុត្រកំណើត', 'លេខទូរស័ព្ទសិស្ស', 'ទីកន្លែងកំណើតរបស់សិស្ស', 'លេខតុ', 'លេខបន្ទប់',
+        'មណ្ឌលប្រឡង', 'សម័យប្រឡង', 'ឈ្មោះឪពុក', 'មុខរបរ', 'លេខទូរស័ព្ទ', 'ឈ្មោះម្ដាយ', 'មុខរបរ', 'លេខទូរស័ព្ទ', 'អាសយដ្ឋានបច្ចុប្បន្ន'
       ];
 
       const headerRow = sheet.addRow(headers);
@@ -583,7 +579,9 @@ export default function StudentsPage() {
       });
 
       for (let i = 1; i <= 10; i++) {
-        const row = sheet.addRow([i, `ID-${1000+i}`, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']);
+        // First element is index, rest is empty
+        const rowData = [i, ...Array(headers.length - 1).fill('')];
+        const row = sheet.addRow(rowData);
         row.height = 25;
         row.eachCell(cell => {
           cell.font = cellFont;
