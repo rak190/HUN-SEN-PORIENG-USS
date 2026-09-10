@@ -211,12 +211,26 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
 }
 
 export async function bulkQuickRegisterAction(payload: {
-  records: Array<{ student_id_number: string; full_name: string; gender: string; class_id: string; status: string; }>;
+  records: Array<{ 
+    student_id_number: string; 
+    full_name: string; 
+    gender: string; 
+    class_id: string; 
+    status: string; 
+    dob?: string | null;
+    address?: string | null;
+    father_name?: string | null;
+    father_job?: string | null;
+    father_phone?: string | null;
+    mother_name?: string | null;
+    mother_job?: string | null;
+    mother_phone?: string | null;
+  }>;
   academic_year_id: string;
 }) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    const { user } = await requireAdmin(); // Just require admin for bulk imports for safety
+    const { requireTeacher } = await import('@/lib/auth-server');
+    const { user } = await requireTeacher(); // allow teachers to bulk register their students
     const supabase = createAdminClient();
 
     const { data, error } = await supabase.rpc('bulk_quick_register_students', {

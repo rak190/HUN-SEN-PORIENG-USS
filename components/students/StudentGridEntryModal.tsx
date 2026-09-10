@@ -23,17 +23,21 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
     setMounted(true);
   }, []);
 
-  // We start with 5 empty rows
   const generateEmptyRow = () => ({
     student_id_number: '',
     full_name: '',
     gender: 'M',
-    desk_number: '',
-    room_number: '',
-    parent_phone: '',
+    dob: '',
+    address: '',
+    father_name: '',
+    father_job: '',
+    father_phone: '',
+    mother_name: '',
+    mother_job: '',
+    mother_phone: '',
   });
 
-  const [gridData, setGridData] = useState<any[]>(Array(10).fill(null).map(generateEmptyRow));
+  const [gridData, setGridData] = useState<any[]>(Array(15).fill(null).map(generateEmptyRow));
 
   if (!isOpen || !mounted) return null;
 
@@ -41,7 +45,6 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
     const newData = [...gridData];
     newData[index][field] = value;
     
-    // Automatically add a new row if we're typing in the very last row
     if (index === gridData.length - 1 && value.trim() !== '') {
       newData.push(generateEmptyRow());
     }
@@ -56,14 +59,67 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number, field: string) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      // Move down one row
       const nextRow = tableRef.current?.querySelector(`input[data-row="${index + 1}"][data-col="${field}"]`) as HTMLInputElement;
       if (nextRow) nextRow.focus();
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>, startIndex: number, startField: string) => {
+    e.preventDefault();
+    const pasteData = e.clipboardData.getData('text');
+    if (!pasteData) return;
+
+    const rows = pasteData.split('\n').filter(r => r.trim() !== '');
+    if (rows.length === 0) return;
+
+    const columns = [
+      'no', 'student_id_number', 'full_name', 'gender', 'dob', 'address',
+      'father_name', 'father_job', 'father_phone',
+      'mother_name', 'mother_job', 'mother_phone'
+    ];
+
+    const startColIndex = columns.indexOf(startField);
+    if (startColIndex === -1) return;
+
+    const newData = [...gridData];
+
+    rows.forEach((rowStr, rIdx) => {
+      const cells = rowStr.split('\t');
+      const targetRowIdx = startIndex + rIdx;
+
+      if (targetRowIdx >= newData.length) {
+        newData.push(generateEmptyRow());
+      }
+
+      cells.forEach((cellVal, cIdx) => {
+        const targetColIdx = startColIndex + cIdx;
+        if (targetColIdx < columns.length) {
+          const colName = columns[targetColIdx];
+          if (colName !== 'no') {
+            let val = cellVal.trim();
+            // Handle Excel serial dates for dob if copied from Excel without formatting
+            if (colName === 'dob' && val && !isNaN(Number(val)) && Number(val) > 30000) {
+               // Excel epoch is roughly Dec 30, 1899. 25569 days until Jan 1, 1970
+               const dateObj = new Date((Number(val) - 25569) * 86400 * 1000);
+               if (!isNaN(dateObj.getTime())) {
+                 val = dateObj.toISOString().split('T')[0];
+               }
+            }
+            newData[targetRowIdx][colName] = val;
+          }
+        }
+      });
+    });
+
+    // Add extra empty rows at the end just in case
+    while (newData.length < startIndex + rows.length + 5) {
+      newData.push(generateEmptyRow());
+    }
+
+    setGridData(newData);
+  };
+
   const handleSave = async () => {
-    // Filter out completely empty rows
     const validData = gridData.filter(row => row.student_id_number.trim() !== '' || row.full_name.trim() !== '');
     
     if (validData.length === 0) {
@@ -79,13 +135,34 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
     setLoading(true);
     setErrorMsg('');
 
-    const payload = validData.map(s => ({
-      class_id: activeClass?.id || 'demo-class',
-      status: 'new',
-      gender: s.gender === 'F' || s.gender === 'ស្រី' ? 'F' : 'M',
-      student_id_number: s.student_id_number.trim() || `ID-${Math.floor(Math.random() * 10000)}`,
-      full_name: s.full_name.trim() || 'គ្មានឈ្មោះ',
-    }));
+    const payload = validData.map(s => {
+      // Basic formatting cleanup
+      const isFemale = ['f', 'ស្រី', 'ស្ត្រី'].includes((s.gender || '').toLowerCase().trim());
+      
+      let dobStr = s.dob?.trim();
+      // Validate dob is roughly a date if possible, else null
+      if (dobStr) {
+        const d = new Date(dobStr);
+        if (isNaN(d.getTime())) dobStr = null;
+        else dobStr = d.toISOString().split('T')[0];
+      }
+
+      return {
+        class_id: activeClass?.id || 'demo-class',
+        status: 'new',
+        gender: isFemale ? 'F' : 'M',
+        student_id_number: s.student_id_number.trim() || `ID-${Math.floor(Math.random() * 10000)}`,
+        full_name: s.full_name.trim() || 'គ្មានឈ្មោះ',
+        dob: dobStr || null,
+        address: s.address?.trim() || null,
+        father_name: s.father_name?.trim() || null,
+        father_job: s.father_job?.trim() || null,
+        father_phone: s.father_phone?.trim() || null,
+        mother_name: s.mother_name?.trim() || null,
+        mother_job: s.mother_job?.trim() || null,
+        mother_phone: s.mother_phone?.trim() || null,
+      };
+    });
 
     if (isDemoMode || !activeClass) {
       setTimeout(() => {
@@ -107,7 +184,6 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
         throw new Error(res.error || 'បរាជ័យក្នុងការរក្សាទុក។');
       }
 
-      // Instead of relying purely on returned data for optimist update, we tell parent to refresh
       onSuccess(payload);
       onClose();
     } catch (err: any) {
@@ -128,8 +204,8 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
               <TableIcon className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900">បញ្ចូលតាមតារាង</h2>
-              <p className="text-xs font-bold text-slate-500">វាយបញ្ចូលទិន្នន័យបានលឿនដូច Excel។ ចុច <span className="bg-slate-200 px-1.5 py-0.5 rounded">Enter</span> ដើម្បីចុះបន្ទាត់។</p>
+              <h2 className="text-lg font-black text-slate-900">បញ្ចូលតាមតារាង (Copy-Paste ពី Excel)</h2>
+              <p className="text-xs font-bold text-slate-500">Copy ជួរពី Excel រួច Paste ចូលក្នុងក្រឡាណាមួយដើម្បីបំពេញដោយស្វ័យប្រវត្តិ។</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer">
@@ -139,25 +215,30 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
 
         {/* Body - Spreadsheet Grid */}
         <div className="flex-1 overflow-auto bg-[#F8FAFC] relative">
-          <table ref={tableRef} className="w-full text-sm text-left border-collapse bg-white">
+          <table ref={tableRef} className="w-max text-sm text-left border-collapse bg-white">
             <thead className="bg-slate-100 sticky top-0 z-10 shadow-sm font-black text-slate-600 text-xs uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-3 border border-slate-200 w-12 text-center text-slate-400">ល.រ</th>
-                <th className="px-4 py-3 border border-slate-200 w-36">អត្តលេខ*</th>
-                <th className="px-4 py-3 border border-slate-200">ឈ្មោះពេញ*</th>
-                <th className="px-4 py-3 border border-slate-200 w-24 text-center">ភេទ (M/F)*</th>
-                <th className="px-4 py-3 border border-slate-200 w-28 text-center">ប្លង់តុ</th>
-                <th className="px-4 py-3 border border-slate-200 w-32 text-center">លេខបន្ទប់</th>
-                <th className="px-4 py-3 border border-slate-200 w-40">លេខទូរសព្ទ</th>
+                <th className="px-4 py-3 border border-slate-200 w-12 text-center text-slate-400 sticky left-0 bg-slate-100 z-20">ល.រ</th>
+                <th className="px-4 py-3 border border-slate-200 w-32 sticky left-12 bg-slate-100 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">អត្តលេខ</th>
+                <th className="px-4 py-3 border border-slate-200 w-48">គោត្តនាម និងនាម</th>
+                <th className="px-4 py-3 border border-slate-200 w-24 text-center">ភេទ</th>
+                <th className="px-4 py-3 border border-slate-200 w-36">ថ្ងៃខែឆ្នាំកំណើត</th>
+                <th className="px-4 py-3 border border-slate-200 w-48">ទីកន្លែងកំណើត</th>
+                <th className="px-4 py-3 border border-slate-200 w-40">ឈ្មោះឪពុក</th>
+                <th className="px-4 py-3 border border-slate-200 w-32">មុខរបរឪពុក</th>
+                <th className="px-4 py-3 border border-slate-200 w-36">លេខទូរសព្ទឪពុក</th>
+                <th className="px-4 py-3 border border-slate-200 w-40">ឈ្មោះម្តាយ</th>
+                <th className="px-4 py-3 border border-slate-200 w-32">មុខរបរម្តាយ</th>
+                <th className="px-4 py-3 border border-slate-200 w-36">លេខទូរសព្ទម្តាយ</th>
               </tr>
             </thead>
             <tbody>
               {gridData.map((row, idx) => (
                 <tr key={idx} className="hover:bg-indigo-50/30 transition-colors group">
-                  <td className="border border-slate-200 text-center font-bold text-slate-400 bg-slate-50 group-hover:bg-indigo-50/50">
+                  <td className="border border-slate-200 text-center font-bold text-slate-400 bg-slate-50 group-hover:bg-indigo-50/50 sticky left-0 z-10">
                     {idx + 1}
                   </td>
-                  <td className="border border-slate-200 p-0 relative">
+                  <td className="border border-slate-200 p-0 relative sticky left-12 bg-white group-hover:bg-indigo-50/30 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                     <input
                       data-row={idx}
                       data-col="student_id_number"
@@ -166,7 +247,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
                       value={row.student_id_number}
                       onChange={(e) => handleChange(idx, 'student_id_number', e.target.value)}
                       onKeyDown={(e) => handleKeyDown(e, idx, 'student_id_number')}
-                      placeholder={idx === 0 ? "ឧ. ID-001" : ""}
+                      onPaste={(e) => handlePaste(e, idx, 'student_id_number')}
                     />
                   </td>
                   <td className="border border-slate-200 p-0 relative">
@@ -178,7 +259,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
                       value={row.full_name}
                       onChange={(e) => handleChange(idx, 'full_name', e.target.value)}
                       onKeyDown={(e) => handleKeyDown(e, idx, 'full_name')}
-                      placeholder={idx === 0 ? "ឧ. សុខ ចិន្តា" : ""}
+                      onPaste={(e) => handlePaste(e, idx, 'full_name')}
                     />
                   </td>
                   <td className="border border-slate-200 p-0 relative">
@@ -190,43 +271,104 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
                       value={row.gender}
                       onChange={(e) => handleChange(idx, 'gender', e.target.value)}
                       onKeyDown={(e) => handleKeyDown(e, idx, 'gender')}
-                      maxLength={1}
+                      onPaste={(e) => handlePaste(e, idx, 'gender')}
                     />
                   </td>
                   <td className="border border-slate-200 p-0 relative">
                     <input
                       data-row={idx}
-                      data-col="desk_number"
+                      data-col="dob"
                       type="text"
-                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-center font-mono text-sm"
-                      value={row.desk_number}
-                      onChange={(e) => handleChange(idx, 'desk_number', e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(e, idx, 'desk_number')}
-                      placeholder={idx === 0 ? "A-01" : ""}
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-sm"
+                      value={row.dob}
+                      onChange={(e) => handleChange(idx, 'dob', e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'dob')}
+                      onPaste={(e) => handlePaste(e, idx, 'dob')}
+                      placeholder="YYYY-MM-DD"
                     />
                   </td>
                   <td className="border border-slate-200 p-0 relative">
                     <input
                       data-row={idx}
-                      data-col="room_number"
+                      data-col="address"
                       type="text"
-                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-center font-mono text-sm"
-                      value={row.room_number}
-                      onChange={(e) => handleChange(idx, 'room_number', e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(e, idx, 'room_number')}
-                      placeholder={idx === 0 ? "1" : ""}
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-sm"
+                      value={row.address}
+                      onChange={(e) => handleChange(idx, 'address', e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'address')}
+                      onPaste={(e) => handlePaste(e, idx, 'address')}
                     />
                   </td>
                   <td className="border border-slate-200 p-0 relative">
                     <input
                       data-row={idx}
-                      data-col="parent_phone"
+                      data-col="father_name"
+                      type="text"
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-sm"
+                      value={row.father_name}
+                      onChange={(e) => handleChange(idx, 'father_name', e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'father_name')}
+                      onPaste={(e) => handlePaste(e, idx, 'father_name')}
+                    />
+                  </td>
+                  <td className="border border-slate-200 p-0 relative">
+                    <input
+                      data-row={idx}
+                      data-col="father_job"
+                      type="text"
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-sm"
+                      value={row.father_job}
+                      onChange={(e) => handleChange(idx, 'father_job', e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'father_job')}
+                      onPaste={(e) => handlePaste(e, idx, 'father_job')}
+                    />
+                  </td>
+                  <td className="border border-slate-200 p-0 relative">
+                    <input
+                      data-row={idx}
+                      data-col="father_phone"
                       type="text"
                       className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-sm font-mono"
-                      value={row.parent_phone}
-                      onChange={(e) => handleChange(idx, 'parent_phone', e.target.value)}
-                      onKeyDown={(e) => handleKeyDown(e, idx, 'parent_phone')}
-                      placeholder={idx === 0 ? "012 345 678" : ""}
+                      value={row.father_phone}
+                      onChange={(e) => handleChange(idx, 'father_phone', e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'father_phone')}
+                      onPaste={(e) => handlePaste(e, idx, 'father_phone')}
+                    />
+                  </td>
+                  <td className="border border-slate-200 p-0 relative">
+                    <input
+                      data-row={idx}
+                      data-col="mother_name"
+                      type="text"
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-sm"
+                      value={row.mother_name}
+                      onChange={(e) => handleChange(idx, 'mother_name', e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'mother_name')}
+                      onPaste={(e) => handlePaste(e, idx, 'mother_name')}
+                    />
+                  </td>
+                  <td className="border border-slate-200 p-0 relative">
+                    <input
+                      data-row={idx}
+                      data-col="mother_job"
+                      type="text"
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-sm"
+                      value={row.mother_job}
+                      onChange={(e) => handleChange(idx, 'mother_job', e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'mother_job')}
+                      onPaste={(e) => handlePaste(e, idx, 'mother_job')}
+                    />
+                  </td>
+                  <td className="border border-slate-200 p-0 relative">
+                    <input
+                      data-row={idx}
+                      data-col="mother_phone"
+                      type="text"
+                      className="w-full h-10 px-3 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500 bg-transparent text-sm font-mono"
+                      value={row.mother_phone}
+                      onChange={(e) => handleChange(idx, 'mother_phone', e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, idx, 'mother_phone')}
+                      onPaste={(e) => handlePaste(e, idx, 'mother_phone')}
                     />
                   </td>
                 </tr>
