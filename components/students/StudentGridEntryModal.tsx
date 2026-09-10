@@ -184,7 +184,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
         throw new Error(res.error || 'បរាជ័យក្នុងការរក្សាទុក។');
       }
 
-      onSuccess(payload);
+      onSuccess(payload.map((s, i) => ({ ...s, id: `grid-${Date.now()}-${i}` })));
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'បរាជ័យក្នុងការរក្សាទុក។');
