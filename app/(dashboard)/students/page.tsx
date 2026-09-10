@@ -1042,7 +1042,6 @@ export default function StudentsPage() {
           isOpen={!!profileDrawerData}
           onClose={() => setProfileDrawerData(null)}
           initialData={profileDrawerData}
-          activeTab={profileDrawerActiveTab}
           onSave={handleSave}
         />
       )}
