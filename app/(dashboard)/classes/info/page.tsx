@@ -94,7 +94,19 @@ export default function ClassInfoPage() {
   const boysCount = students.filter(s => s.gender === 'M' || s.gender === 'ប្រុស').length;
 
   return (
-    <div className="p-6 space-y-6 animate-fadeIn pb-12 print:p-0 print:space-y-0 print:pb-0 print:font-siemreap [&_h1]:print:font-moul [&_h2]:print:font-moul [&_h3]:print:font-moul [&_h4]:print:font-moul">
+    <div className="p-6 space-y-6 animate-fadeIn pb-12 print:p-0 print:space-y-0 print:pb-0">
+      {/* Explicit Print Styles to guarantee Khmer fonts for PDF Export */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          body, * {
+            font-family: 'Khmer OS Siemreap', 'Siemreap', sans-serif !important;
+          }
+          h1, h2, h3, h4, .font-moul, [class*="font-extrabold"] {
+            font-family: 'Khmer OS Moul Light', 'Khmer OS Moul', 'Moul', cursive !important;
+          }
+        }
+      `}} />
+
       {/* Header with Sub-tabs and Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-6 print:hidden">
         <div className="flex flex-col gap-3">
