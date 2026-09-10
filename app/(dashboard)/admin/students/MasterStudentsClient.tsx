@@ -477,7 +477,7 @@ export default function MasterStudentsClient({
         isOpen={isMigrationModalOpen}
         onClose={() => setIsMigrationModalOpen(false)}
         selectedStudentIds={selectedStudents}
-        onSuccess={() => {
+        onComplete={() => {
           setIsMigrationModalOpen(false);
           setSelectedStudents([]);
           // Force refresh
