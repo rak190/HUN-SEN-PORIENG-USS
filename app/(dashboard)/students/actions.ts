@@ -109,7 +109,7 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
     if (healthNotes !== null) dbRecord.health_note = healthNotes;
     if (payload.siblings_count !== undefined) dbRecord.siblings_count = payload.siblings_count ? Number(payload.siblings_count) : 0;
     if (payload.income !== undefined) dbRecord.income = payload.income ? Number(payload.income) : null;
-    if (payload.address !== undefined) dbRecord.address = payload.address || null;
+    if (payload.address !== undefined) dbRecord.current_address = payload.address || null;
     if (payload.father_phone || payload.mother_phone || payload.parent_phone || payload.student_phone) {
       dbRecord.parent_phone = payload.father_phone || payload.mother_phone || payload.parent_phone || payload.student_phone || null;
     }
