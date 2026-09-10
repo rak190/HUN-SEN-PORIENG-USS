@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 export interface SaveStudentPayload {
   id?: string;
   class_id?: string;
+  academic_year_id?: string;
   student_id_number?: string;
   full_name?: string;
   gender?: string;
@@ -81,37 +82,39 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
 
     const healthNotes = payload.health_issues || null;
 
+    // Use progressive updating: only overwrite fields if they are explicitly sent as non-empty in the payload
+    // or if they are required core fields.
     const dbRecord: Record<string, any> = {
-      full_name: payload.full_name || 'គ្មានឈ្មោះ',
-      student_id_number: payload.student_id_number || `ID-${Date.now().toString().slice(-4)}`,
+      full_name: payload.full_name,
+      student_id_number: payload.student_id_number,
       gender: normalizedGender,
-      dob: payload.date_of_birth || null,
-      age: payload.age ? Number(payload.age) : null,
       status,
-      scholarship,
-      id_poor: idPoor,
-      orphan,
-      distance_km: payload.distance_km ? Number(payload.distance_km) : null,
-      weight_kg: payload.weight_kg ? Number(payload.weight_kg) : null,
-      height_m: payload.height_m ? Number(payload.height_m) : null,
-      bmi: calculatedBmi,
-      nutrition_status: nutritionStatus,
-      disability,
-      assistive_device: payload.assistive_device || null,
-      health_note: healthNotes,
-      siblings_count: payload.siblings_count ? Number(payload.siblings_count) : 0,
-      income: payload.income ? Number(payload.income) : null,
-      address: payload.address || null,
-      parent_phone: payload.father_phone || payload.mother_phone || payload.parent_phone || payload.student_phone || null,
-      desk_number: payload.desk_number || null,
-      room_number: payload.room_number || null,
       enrollment_status: enrollmentStatus,
       is_active: isActive,
     };
 
-    if (payload.class_id) {
-      dbRecord.class_id = payload.class_id;
+    if (payload.class_id) dbRecord.class_id = payload.class_id;
+    if (payload.date_of_birth !== undefined) dbRecord.dob = payload.date_of_birth || null;
+    if (payload.age !== undefined) dbRecord.age = payload.age ? Number(payload.age) : null;
+    if (payload.scholarship !== undefined) dbRecord.scholarship = scholarship;
+    if (payload.id_poor !== undefined) dbRecord.id_poor = idPoor;
+    if (payload.orphan !== undefined) dbRecord.orphan = orphan;
+    if (payload.distance_km !== undefined) dbRecord.distance_km = payload.distance_km ? Number(payload.distance_km) : null;
+    if (payload.weight_kg !== undefined) dbRecord.weight_kg = payload.weight_kg ? Number(payload.weight_kg) : null;
+    if (payload.height_m !== undefined) dbRecord.height_m = payload.height_m ? Number(payload.height_m) : null;
+    if (calculatedBmi !== null) dbRecord.bmi = calculatedBmi;
+    if (nutritionStatus !== null) dbRecord.nutrition_status = nutritionStatus;
+    if (payload.disability !== undefined) dbRecord.disability = disability;
+    if (payload.assistive_device !== undefined) dbRecord.assistive_device = payload.assistive_device || null;
+    if (healthNotes !== null) dbRecord.health_note = healthNotes;
+    if (payload.siblings_count !== undefined) dbRecord.siblings_count = payload.siblings_count ? Number(payload.siblings_count) : 0;
+    if (payload.income !== undefined) dbRecord.income = payload.income ? Number(payload.income) : null;
+    if (payload.address !== undefined) dbRecord.address = payload.address || null;
+    if (payload.father_phone || payload.mother_phone || payload.parent_phone || payload.student_phone) {
+      dbRecord.parent_phone = payload.father_phone || payload.mother_phone || payload.parent_phone || payload.student_phone || null;
     }
+    if (payload.desk_number !== undefined) dbRecord.desk_number = payload.desk_number || null;
+    if (payload.room_number !== undefined) dbRecord.room_number = payload.room_number || null;
 
     let savedStudent = null;
 
@@ -132,6 +135,10 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
       }
     } else {
       // Insert new student
+      // Ensure required core fields have fallbacks for creation only if they are missing
+      if (!dbRecord.full_name) dbRecord.full_name = 'មិនមានឈ្មោះ';
+      if (!dbRecord.student_id_number) dbRecord.student_id_number = `ID-${Date.now().toString().slice(-4)}`;
+      
       const { data, error } = await supabase
         .from('students')
         .insert([dbRecord])
@@ -144,6 +151,18 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
       } else {
         savedStudent = { ...payload, ...(data || dbRecord) };
       }
+    }
+
+    // Attempt to update enrollment record if academic_year_id is provided
+    if (payload.academic_year_id && savedStudent?.id && payload.class_id) {
+       await supabase.from('student_enrollments').upsert({
+          student_id: savedStudent.id,
+          class_id: payload.class_id,
+          academic_year_id: payload.academic_year_id,
+          enrollment_status: enrollmentStatus,
+          desk_number: dbRecord.desk_number || null,
+          room_number: dbRecord.room_number || null,
+       }, { onConflict: 'student_id,academic_year_id' });
     }
 
     // Bidirectional sync: If health data was entered in /students, sync into student_health_records
@@ -190,3 +209,33 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
     return { success: false, error: err?.message || 'Unknown error occurred while saving student' };
   }
 }
+
+export async function bulkQuickRegisterAction(payload: {
+  records: Array<{ student_id_number: string; full_name: string; gender: string; class_id: string; status: string; }>;
+  academic_year_id: string;
+}) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    const { user } = await requireAdmin(); // Just require admin for bulk imports for safety
+    const supabase = createAdminClient();
+
+    const { data, error } = await supabase.rpc('bulk_quick_register_students', {
+      student_records: payload.records,
+      target_year_id: payload.academic_year_id,
+      admin_user_id: user?.id
+    });
+
+    if (error) {
+      console.error('Bulk quick register error:', error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath('/students');
+    revalidatePath('/classes/info');
+    return { success: true, count: data?.count || 0 };
+  } catch (err: any) {
+    console.error('Bulk register action caught error:', err?.message);
+    return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
+

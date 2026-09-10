@@ -71,17 +71,20 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
       return;
     }
 
+    if (!activeClass?.academic_year_id) {
+      setErrorMsg('រកមិនឃើញឆ្នាំសិក្សា។ សូមផ្ទុកទំព័រម្តងទៀត។');
+      return;
+    }
+
     setLoading(true);
     setErrorMsg('');
 
     const payload = validData.map(s => ({
-      ...s,
       class_id: activeClass?.id || 'demo-class',
-      is_active: true,
+      status: 'new',
+      gender: s.gender === 'F' || s.gender === 'ស្រី' ? 'F' : 'M',
       student_id_number: s.student_id_number.trim() || `ID-${Math.floor(Math.random() * 10000)}`,
       full_name: s.full_name.trim() || 'គ្មានឈ្មោះ',
-      desk_number: s.desk_number?.trim() || null,
-      room_number: s.room_number?.trim() || null,
     }));
 
     if (isDemoMode || !activeClass) {
@@ -94,11 +97,18 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
     }
 
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.from('students').insert(payload).select();
-      if (error) throw error;
+      const { bulkQuickRegisterAction } = await import('@/app/(dashboard)/students/actions');
+      const res = await bulkQuickRegisterAction({
+        records: payload,
+        academic_year_id: activeClass.academic_year_id
+      });
+      
+      if (!res.success) {
+        throw new Error(res.error || 'បរាជ័យក្នុងការរក្សាទុក។');
+      }
 
-      onSuccess(data || payload);
+      // Instead of relying purely on returned data for optimist update, we tell parent to refresh
+      onSuccess(payload);
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'បរាជ័យក្នុងការរក្សាទុក។');

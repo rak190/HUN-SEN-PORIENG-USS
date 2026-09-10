@@ -18,9 +18,9 @@ export function useStudents(activeClassId: string | undefined) {
       if (!activeClassId) return;
       setIsLoading(true);
       const { data, error } = await supabase
-        .from('students')
+        .from('active_class_rosters')
         .select('*')
-        .eq('class_id', activeClassId)
+        .eq('enrollment_class_id', activeClassId)
         .order('student_id_number', { ascending: true });
 
       if (data) {

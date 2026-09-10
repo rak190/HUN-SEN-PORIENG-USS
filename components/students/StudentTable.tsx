@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
-import { MassiveProfilingStudent } from '@/app/(dashboard)/students/types';
-import { UserSquare2, Edit, LogOut, ArrowUpDown, ArrowUp, ArrowDown, Heart, AlertCircle } from 'lucide-react';
+import { MassiveProfilingStudent, calculateProfileCompleteness } from '@/app/(dashboard)/students/types';
+import { UserSquare2, Edit, LogOut, ArrowUpDown, ArrowUp, ArrowDown, Heart, AlertCircle, AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 interface StudentTableProps {
@@ -111,7 +111,9 @@ export default function StudentTable({
             </tr>
           </thead>
           <tbody className="text-xs font-bold text-slate-700 divide-y divide-slate-100">
-            {filteredStudents.map(std => (
+            {filteredStudents.map(std => {
+              const completeness = calculateProfileCompleteness(std);
+              return (
               <tr key={std.id} className={`transition-colors ${selectedIds.includes(std.id) ? 'bg-blue-50/50' : 'hover:bg-slate-50'}`}>
                 <td className="p-4">
                   <input type="checkbox" className="w-4 h-4 rounded text-[#155EEF]" checked={selectedIds.includes(std.id)} onChange={() => handleSelect(std.id)} />
@@ -122,6 +124,14 @@ export default function StudentTable({
                     <span className="text-slate-900 font-black">{std.full_name}</span>
                     {std.risk_level === 'high' && <span className="bg-rose-100 text-rose-700 text-[10px] px-2 py-0.5 rounded font-bold">ហានិភ័យខ្ពស់</span>}
                     {std.risk_level === 'medium' && <span className="bg-amber-100 text-amber-700 text-[10px] px-2 py-0.5 rounded font-bold">ហានិភ័យមធ្យម</span>}
+                    {completeness < 100 && (
+                      <div className="group relative flex items-center cursor-help">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-max bg-slate-800 text-white text-[10px] py-1 px-2 rounded">
+                          ខ្វះព័ត៌មានលម្អិត ({completeness}%)
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </td>
                 
@@ -227,11 +237,12 @@ export default function StudentTable({
                       className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors flex items-center gap-1.5 font-bold whitespace-nowrap"
                     >
                       <LogOut className="w-3.5 h-3.5" /> ផ្ទេរ/បោះបង់
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {filteredStudents.length === 0 && <div className="py-12 text-center text-slate-500 font-bold">មិនមានទិន្នន័យសិស្សទេ</div>}
