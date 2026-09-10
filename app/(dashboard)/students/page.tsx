@@ -787,7 +787,7 @@ export default function StudentsPage() {
                            </span>
                          </td>
                          <td className="px-6 py-4">
-                            <span className={s.attendance_rate < 90 ? 'text-rose-600' : 'text-slate-700'}>{s.attendance_rate}%</span>
+                            <span className={(s.attendance_rate ?? 100) < 90 ? 'text-rose-600' : 'text-slate-700'}>{s.attendance_rate ?? 100}%</span>
                          </td>
                          <td className="px-6 py-4 flex gap-2">
                            <button 
