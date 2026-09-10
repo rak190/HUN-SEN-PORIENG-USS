@@ -110,11 +110,22 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
     if (payload.siblings_count !== undefined) dbRecord.siblings_count = payload.siblings_count ? Number(payload.siblings_count) : 0;
     if (payload.income !== undefined) dbRecord.income = payload.income ? Number(payload.income) : null;
     if (payload.address !== undefined) dbRecord.current_address = payload.address || null;
+    if (payload.father_name !== undefined) dbRecord.father_name = payload.father_name || null;
+    if (payload.father_job !== undefined) dbRecord.father_job = payload.father_job || null;
+    if (payload.mother_name !== undefined) dbRecord.mother_name = payload.mother_name || null;
+    if (payload.mother_job !== undefined) dbRecord.mother_job = payload.mother_job || null;
+    if (payload.guardian_name !== undefined) dbRecord.guardian_name = payload.guardian_name || null;
+    if (payload.guardian_job !== undefined) dbRecord.guardian_job = payload.guardian_job || null;
     if (payload.father_phone || payload.mother_phone || payload.parent_phone || payload.student_phone) {
       dbRecord.parent_phone = payload.father_phone || payload.mother_phone || payload.parent_phone || payload.student_phone || null;
     }
+    if (payload.father_phone !== undefined) dbRecord.father_phone = payload.father_phone || null;
+    if (payload.mother_phone !== undefined) dbRecord.mother_phone = payload.mother_phone || null;
+    if (payload.guardian_phone !== undefined) dbRecord.guardian_phone = payload.guardian_phone || null;
     if (payload.desk_number !== undefined) dbRecord.desk_number = payload.desk_number || null;
     if (payload.room_number !== undefined) dbRecord.room_number = payload.room_number || null;
+    if (payload.birth_cert_no !== undefined) dbRecord.birth_cert_no = payload.birth_cert_no || null;
+    if (payload.migrant_status !== undefined) dbRecord.migrant_status = payload.migrant_status || null;
 
     let savedStudent = null;
 

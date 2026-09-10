@@ -1035,6 +1035,17 @@ export default function StudentsPage() {
           onSuccess={handleBulkSuccess} 
         />
       )}
+
+      {/* Student Profile Drawer */}
+      {profileDrawerData && (
+        <StudentProfileDrawer
+          isOpen={!!profileDrawerData}
+          onClose={() => setProfileDrawerData(null)}
+          initialData={profileDrawerData}
+          activeTab={profileDrawerActiveTab}
+          onSave={handleSave}
+        />
+      )}
     </div>
   );
 }
