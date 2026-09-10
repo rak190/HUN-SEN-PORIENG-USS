@@ -118,7 +118,128 @@ export function GeipExportModal({
   };
 
   const handlePrintPDF = () => {
-    window.print();
+    const rowsHtml = computedStudents.map((std, idx) => `
+      <tr style="background-color: ${idx % 2 === 1 ? '#f8fafc' : '#ffffff'};">
+        <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; font-weight: bold;">${idx + 1}</td>
+        <td style="border: 1px solid #94a3b8; padding: 4px 2px; font-family: monospace; font-size: 9px; text-align: center;">${std.student_id_number || '-'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 4px 4px; font-weight: bold; text-align: left; color: #0f172a;">${std.full_name}</td>
+        <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center;">${std.gender === 'F' || std.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស'}</td>
+        <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; color: ${std.isDropoutOrInactive ? '#e11d48' : '#15803d'}; font-weight: bold;">
+          ${std.isDropoutOrInactive ? 'បោះបង់' : 'កំពុងរៀន'}
+        </td>
+        ${subjects.map(sub => `<td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; font-weight: bold;">${std.subjectScores[sub.id]}</td>`).join('')}
+        <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; font-weight: black; color: #1e3a8a; background-color: #eff6ff;">${std.totalScore}</td>
+        <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; font-weight: black; color: #1e3a8a; background-color: #eff6ff;">${std.average}</td>
+        <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; font-weight: black; color: #b45309; background-color: #fffbeb;">${idx + 1}</td>
+        <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; font-weight: black; color: ${std.grade === 'F' ? '#e11d48' : '#15803d'}; background-color: ${std.grade === 'F' ? '#fff1f2' : '#f0fdf4'};">${std.grade}</td>
+      </tr>
+    `).join('');
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>MoEYS_GEIP_Standard_Test_Report_${className}_${periodLabel}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&family=Moul&family=Siemreap&display=swap" rel="stylesheet">
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          * { box-sizing: border-box; }
+          body {
+            font-family: 'Kantumruy Pro', 'Siemreap', sans-serif;
+            font-size: 10px; color: #0f172a; margin: 0; padding: 0; background-color: #fff;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .font-muol { font-family: 'Moul', serif; }
+          .header-grid { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; }
+          .header-left { text-align: left; line-height: 1.5; font-size: 11px; }
+          .header-right { text-align: center; line-height: 1.5; font-size: 11px; }
+          .main-title { text-align: center; margin: 10px 0 15px; }
+          .main-title h1 { font-family: 'Moul', serif; font-size: 16px; margin: 0 0 5px; color: #1e3a8a; }
+          .main-title p { font-size: 11px; margin: 0; color: #475569; font-weight: 600; }
+          .alert-note { background-color: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 8px 12px; border-radius: 6px; font-size: 10px; font-weight: 600; margin-bottom: 15px; }
+          table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+          th { border: 1px solid #94a3b8; padding: 6px 4px; font-weight: 700; text-align: center; color: #1e293b; }
+          .signatures { margin-top: 30px; display: flex; justify-content: space-between; text-align: center; font-size: 11px; page-break-inside: avoid; }
+          .signature-col { width: 250px; }
+          .signature-space { height: 60px; }
+        </style>
+      </head>
+      <body>
+        <div class="header-grid">
+          <div class="header-left">
+            <div>ក្រសួងអប់រំ យុវជន និងកីឡា</div>
+            <div style="font-weight: bold; color: #1e3a8a;">គម្រោងកែលម្អការអប់រំចំណេះទូទៅ (GEIP)</div>
+            <div style="font-weight: bold;">វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</div>
+          </div>
+          <div class="header-right">
+            <div class="font-muol">ព្រះរាជាណាចក្រកម្ពុជា</div>
+            <div class="font-muol" style="font-size: 10px;">ជាតិ សាសនា ព្រះមហាក្សត្រ</div>
+            <div style="letter-spacing: 2px;">***</div>
+          </div>
+        </div>
+
+        <div class="main-title">
+          <h1>តារាងលទ្ធផលតេស្តស្តង់ដា និងការវាយតម្លៃ GEIP ៣.១.៤</h1>
+          <p>ថ្នាក់ទី៖ <strong style="color: #1e3a8a;">${className}</strong> • សម័យប្រឡង/តេស្ត៖ <strong>${periodLabel}</strong></p>
+        </div>
+
+        <div class="alert-note">
+          * សម្គាល់៖ សិស្សអវត្តមាន បោះបង់ ឬមិនបានប្រឡង ត្រូវបានជំនួសដោយពិន្ទុ <strong>0</strong> គ្រប់មុខវិជ្ជា ដើម្បីធានាបាននូវភាពពេញលេញនៃទិន្នន័យគម្រោង GEIP។
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th rowspan="2" style="width: 25px; background-color: #f1f5f9;">ល.រ</th>
+              <th rowspan="2" style="width: 60px; background-color: #f1f5f9;">អត្តលេខ</th>
+              <th rowspan="2" style="min-width: 120px; text-align: left; padding-left: 6px; background-color: #f1f5f9;">គោត្តនាម និងនាម</th>
+              <th rowspan="2" style="width: 35px; background-color: #f1f5f9;">ភេទ</th>
+              <th rowspan="2" style="width: 55px; background-color: #f1f5f9;">ស្ថានភាព</th>
+              ${subjects.map(sub => `<th style="background-color: #eff6ff; color: #1e3a8a;">${sub.label}<br/><span style="font-size: 8px; font-weight: normal; color: #64748b;">(${sub.maxScore})</span></th>`).join('')}
+              <th style="width: 60px; background-color: #dbeafe; color: #1e3a8a; font-weight: 900;">សរុប<br/>(${maxTotalScore})</th>
+              <th style="width: 55px; background-color: #dbeafe; color: #1e3a8a; font-weight: 900;">មធ្យម<br/>(50)</th>
+              <th style="width: 45px; background-color: #fef3c7; color: #92400e; font-weight: 900;">ចំណាត់<br/>ថ្នាក់</th>
+              <th style="width: 45px; background-color: #f1f5f9;">និទ្ទេស</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="signatures">
+          <div class="signature-col">
+            <div class="font-muol">បានឃើញ និងឯកភាព</div>
+            <div style="font-weight: bold; margin-top: 2px;">នាយកសាលា</div>
+            <div class="signature-space"></div>
+            <div style="font-weight: bold;">................................................</div>
+          </div>
+          <div class="signature-col">
+            <div style="color: #64748b; font-size: 10px;">ថ្ងៃទី......... ខែ......... ឆ្នាំ២០២...</div>
+            <div class="font-muol" style="margin-top: 2px;">គ្រូបន្ទុកថ្នាក់</div>
+            <div class="signature-space"></div>
+            <div style="font-weight: bold;">................................................</div>
+          </div>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=1200,height=850');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+    }
   };
 
   return (
