@@ -78,12 +78,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   // 2. Fetch basic stats (only active students)
 
-  let studentsQuery = supabase.from('active_students').select('id, gender', { count: 'exact' });
-  studentsQuery = scopeQueryToYear(studentsQuery);
+  let studentsQuery = supabase.from('active_class_rosters').select('id, gender', { count: 'exact' });
+  studentsQuery = scopeQueryToYear(studentsQuery, 'enrollment_class_id');
   const { data: studentsData, count: studentsCount } = await studentsQuery;
 
-  let remediationQuery = supabase.from('active_students').select('id', { count: 'exact' }).eq('is_slow_learner', true);
-  remediationQuery = scopeQueryToYear(remediationQuery);
+  let remediationQuery = supabase.from('active_class_rosters').select('id', { count: 'exact' }).eq('is_slow_learner', true);
+  remediationQuery = scopeQueryToYear(remediationQuery, 'enrollment_class_id');
   const { data: remData, count: remCount } = await remediationQuery;
   const remediationCount = remCount ?? remData?.length ?? 0;
 
