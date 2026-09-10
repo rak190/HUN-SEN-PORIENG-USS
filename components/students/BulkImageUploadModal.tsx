@@ -336,6 +336,7 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, onComp
 
         <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
