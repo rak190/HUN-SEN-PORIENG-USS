@@ -27,6 +27,7 @@ export function useStudents(activeClassId: string | undefined) {
         setStudents(data.map(d => ({
           ...DEFAULT_FORM,
           ...d,
+          date_of_birth: d.dob,
           current_status: d.enrollment_status || 'active',
         } as MassiveProfilingStudent)));
       }

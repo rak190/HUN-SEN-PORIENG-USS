@@ -142,7 +142,19 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
       let dobStr = s.dob?.trim();
       // Validate dob is roughly a date if possible, else null
       if (dobStr) {
-        const d = new Date(dobStr);
+        let parsedDateStr = dobStr;
+        // Handle DD/MM/YYYY or DD-MM-YYYY
+        const parts = dobStr.split(/[\/\-]/);
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+             // YYYY-MM-DD
+             parsedDateStr = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+          } else {
+             // DD/MM/YYYY
+             parsedDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          }
+        }
+        const d = new Date(parsedDateStr);
         if (isNaN(d.getTime())) dobStr = null;
         else dobStr = d.toISOString().split('T')[0];
       }
