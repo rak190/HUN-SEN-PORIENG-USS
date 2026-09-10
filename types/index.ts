@@ -110,8 +110,10 @@ export interface Student {
   class_id: string | null;
   student_id_number: string | null;
   full_name: string;
+  english_name?: string | null;
   gender: string | null;
   date_of_birth?: string | null;
+  photo_url?: string | null;
   status?: 'new' | 'repeater' | 'transfer';
   disability?: 'none' | 'mild' | 'severe';
   distance_km?: number | null;

@@ -21,7 +21,8 @@ import {
   TrendingUp,
   Download,
   Calendar,
-  Briefcase
+  Briefcase,
+  UserSquare2
 } from 'lucide-react';
 
 interface StudentProfile {
@@ -153,8 +154,12 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
         <div className="relative p-8 md:p-12 flex flex-col md:flex-row gap-8 items-center md:items-end">
           {/* Avatar with Status Overlays */}
           <div className="relative shrink-0 z-10 group">
-            <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2rem] border-4 border-white object-cover shadow-2xl bg-white overflow-hidden transition-transform duration-300 group-hover:scale-105 print:border-slate-300">
-              <img src={student.photo_url} alt={student.full_name} className="w-full h-full object-cover" />
+            <div className="w-32 h-32 md:w-40 md:h-40 rounded-[2rem] border-4 border-white object-cover shadow-2xl bg-white flex items-center justify-center overflow-hidden transition-transform duration-300 group-hover:scale-105 print:border-slate-300">
+              {student.photo_url ? (
+                <img src={student.photo_url} alt={student.full_name} className="w-full h-full object-cover" />
+              ) : (
+                <UserSquare2 className="w-20 h-20 text-slate-300" />
+              )}
             </div>
             {student.risk_level !== 'low' && (
               <div className={`absolute -top-3 -right-3 w-12 h-12 rounded-2xl flex items-center justify-center shadow-xl border-4 border-white ${

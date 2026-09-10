@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { MassiveProfilingStudent, DEFAULT_FORM } from '@/app/(dashboard)/students/types';
-import { UserSquare2, FileText, Heart, Users, MapPin, X, Loader2, Check } from 'lucide-react';
+import { UserSquare2, FileText, Heart, Users, MapPin, X, Loader2, Check, Camera } from 'lucide-react';
 
 const VIEW_TABS = [
   { id: 1, label: 'មូលដ្ឋាន', icon: UserSquare2 },
@@ -24,10 +24,97 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
   const [activeModalTab, setActiveModalTab] = useState(activeTab);
   const [isSaving, setIsSaving] = useState(false);
   const [mounted, setMounted] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Zero-dependency native image compression
+  const compressImage = (file: File, maxWidth: number, maxHeight: number, quality: number): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(img.src);
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Canvas ctx null'));
+        
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Blob failed'));
+        }, 'image/webp', quality);
+      };
+      img.onerror = reject;
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingImage(true);
+
+      // 1. Client-side compression with Canvas
+      const compressedBlob = await compressImage(file, 500, 500, 0.8);
+
+      // 2. Request Presigned URL
+      const res = await fetch('/api/s3-presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name.replace(/\.[^/.]+$/, "") + ".webp", // force webp extension
+          fileType: 'image/webp'
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to get presigned URL');
+      const { presignedUrl, publicUrl } = await res.json();
+
+      // 3. Upload directly to Cloudflare R2
+      const uploadRes = await fetch(presignedUrl, {
+        method: 'PUT',
+        body: compressedBlob,
+        headers: {
+          'Content-Type': 'image/webp',
+        }
+      });
+
+      if (!uploadRes.ok) throw new Error('Failed to upload image to R2');
+
+      // 4. Update local form state
+      setFormData(prev => ({ ...prev, photo_url: publicUrl }));
+
+    } catch (err) {
+      console.error(err);
+      alert('បរាជ័យក្នុងការបញ្ចូលរូបភាព។ សូមសាកល្បងម្តងទៀត។');
+    } finally {
+      setIsUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -142,13 +229,44 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {activeModalTab === 1 && (
               <>
+                <div className="col-span-1 sm:col-span-2 flex justify-center mb-2">
+                  <div className="relative group cursor-pointer" onClick={() => !isUploadingImage && fileInputRef.current?.click()}>
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-[2rem] border-4 border-white bg-slate-100 object-cover shadow-xl flex items-center justify-center overflow-hidden transition-transform duration-300 group-hover:scale-105">
+                      {formData.photo_url ? (
+                        <img src={formData.photo_url} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <UserSquare2 className="w-10 h-10 text-slate-300" />
+                      )}
+                      
+                      <div className={`absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity ${formData.photo_url ? 'opacity-0 group-hover:opacity-100' : ''}`}>
+                        {isUploadingImage ? (
+                          <Loader2 className="w-6 h-6 text-white animate-spin" />
+                        ) : (
+                          <Camera className="w-6 h-6 text-white" />
+                        )}
+                      </div>
+                    </div>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      ref={fileInputRef} 
+                      onChange={handleImageUpload} 
+                    />
+                  </div>
+                </div>
+
                 <label className="block text-xs font-bold text-slate-700">
                   អត្តលេខ
                   <input type="text" value={formData.student_id_number || ''} onChange={e=>setFormData({...formData, student_id_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
-                  ឈ្មោះពេញ
+                  ឈ្មោះពេញ (Khmer)
                   <input type="text" value={formData.full_name || ''} onChange={e=>setFormData({...formData, full_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                </label>
+                <label className="block text-xs font-bold text-slate-700">
+                  ឈ្មោះឡាតាំង (English)
+                  <input type="text" value={formData.english_name || ''} onChange={e=>setFormData({...formData, english_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
                   ភេទ
