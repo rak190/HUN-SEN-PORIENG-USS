@@ -6,7 +6,7 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, role: userRole } = await getServerAuth();
+  const { user, role: userRole, profile } = await getServerAuth();
 
   if (!user || (userRole !== 'admin' && userRole !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
@@ -24,6 +24,10 @@ export async function PATCH(
 
   try {
     const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active, school_id').eq('id', id).single();
+
+    if (userRole === 'principal' && targetProfile?.school_id !== profile?.school_id) {
+      return NextResponse.json({ error: 'Forbidden: User belongs to another school.' }, { status: 403 });
+    }
 
     if (targetProfile?.role === 'admin' && userRole !== 'admin') {
       return NextResponse.json({ error: 'Principal cannot modify an admin account.' }, { status: 403 });
@@ -137,9 +141,9 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { user, role: userRole } = await getServerAuth();
+  const { user, role: userRole, profile } = await getServerAuth();
 
-  if (!user || userRole !== 'admin') {
+  if (!user || (userRole !== 'admin' && userRole !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -151,8 +155,12 @@ export async function DELETE(
   }
 
   try {
-    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active').eq('id', id).single();
+    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active, school_id').eq('id', id).single();
     
+    if (userRole === 'principal' && targetProfile?.school_id !== profile?.school_id) {
+      return NextResponse.json({ error: 'Forbidden: User belongs to another school.' }, { status: 403 });
+    }
+
     if (targetProfile?.role === 'admin' && userRole !== 'admin') {
       return NextResponse.json({ error: 'Principal cannot delete an admin account.' }, { status: 403 });
     }

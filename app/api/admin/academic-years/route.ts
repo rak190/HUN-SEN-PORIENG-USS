@@ -35,8 +35,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const { user, role } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
+  if (!user || role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized. Only Admins can modify academic years.' }, { status: 403 });
   }
 
   const body = await req.json();
@@ -72,8 +72,8 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const { user, role } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
+  if (!user || role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized. Only Admins can modify academic years.' }, { status: 403 });
   }
 
   const body = await req.json();
@@ -137,8 +137,8 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   const { user, role } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
+  if (!user || role !== 'admin') {
+    return NextResponse.json({ error: 'Unauthorized. Only Admins can delete academic years.' }, { status: 403 });
   }
 
   const { searchParams } = new URL(req.url);

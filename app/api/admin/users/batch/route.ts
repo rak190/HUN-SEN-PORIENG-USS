@@ -5,9 +5,9 @@ import crypto from 'crypto';
 import { BatchUserSchema } from '@/lib/validations/schemas';
 
 export async function POST(req: Request) {
-  const { user, role: userRole } = await getServerAuth();
+  const { user, role: userRole, profile } = await getServerAuth();
 
-  if (!user || userRole !== 'admin') {
+  if (!user || (userRole !== 'admin' && userRole !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -76,18 +76,28 @@ export async function POST(req: Request) {
         continue;
       }
 
-      const { data: schoolObj } = await adminClient
-        .from('schools')
-        .select('id')
-        .eq('code', finalSchool)
-        .maybeSingle();
+      let resolvedSchoolId = null;
+      let resolvedSchoolCode = null;
 
-      if (!schoolObj) {
-        failCount++;
-        results.push({ username: cleanUsername, error: 'លេខកូដសាលាមិនត្រឹមត្រូវ (Invalid school code)' });
-        // Rollback Auth user creation
-        await adminClient.auth.admin.deleteUser(authUserId).catch(() => {});
-        continue;
+      if (userRole === 'principal' && profile?.school_id) {
+        resolvedSchoolId = profile.school_id;
+        resolvedSchoolCode = profile.school_code || 'Porieng-2026';
+      } else {
+        const { data: schoolObj } = await adminClient
+          .from('schools')
+          .select('id, code')
+          .eq('code', finalSchool)
+          .maybeSingle();
+
+        if (!schoolObj) {
+          failCount++;
+          results.push({ username: cleanUsername, error: 'លេខកូដសាលាមិនត្រឹមត្រូវ (Invalid school code)' });
+          // Rollback Auth user creation
+          await adminClient.auth.admin.deleteUser(authUserId).catch(() => {});
+          continue;
+        }
+        resolvedSchoolId = schoolObj.id;
+        resolvedSchoolCode = schoolObj.code;
       }
 
       const { error: profileError } = await adminClient.from('profiles').upsert([
@@ -96,8 +106,8 @@ export async function POST(req: Request) {
           username: cleanUsername,
           full_name: fullName.trim(),
           role: finalRole,
-          school_id: schoolObj.id,
-          school_code: finalSchool,
+          school_id: resolvedSchoolId,
+          school_code: resolvedSchoolCode,
           phone: phone || null,
           subject: subject || null,
           is_active: true,

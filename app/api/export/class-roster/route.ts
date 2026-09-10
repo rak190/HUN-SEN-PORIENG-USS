@@ -21,15 +21,23 @@ export async function GET(request: Request) {
     const supabase = createAdminClient();
 
     // Verify access
+    const { data: classData } = await supabase
+      .from('classes')
+      .select('id, teacher_id, school_id')
+      .eq('id', classId)
+      .single();
+
+    if (!classData) {
+      return new NextResponse('Class not found', { status: 404 });
+    }
+
     if (profile?.role === 'teacher') {
-      const { data: classData } = await supabase
-        .from('classes')
-        .select('id, teacher_id')
-        .eq('id', classId)
-        .single();
-        
-      if (!classData || classData.teacher_id !== user.id) {
+      if (classData.teacher_id !== user.id) {
         return new NextResponse('Forbidden: You do not own this class', { status: 403 });
+      }
+    } else if (profile?.role === 'principal') {
+      if (classData.school_id !== profile?.school_id) {
+        return new NextResponse('Forbidden: Class belongs to another school', { status: 403 });
       }
     }
 

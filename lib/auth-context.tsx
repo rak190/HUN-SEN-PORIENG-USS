@@ -168,8 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select('*')
           .eq('id', authData.user.id)
           .single();
-
-        const effectiveRole = dbProfile?.role || expectedRole || 'teacher';
+        const effectiveRole = dbProfile?.role || 'teacher';
 
         if (expectedRole && effectiveRole !== expectedRole) {
           const roleLabel = expectedRole === 'admin' ? 'អ្នកគ្រប់គ្រង' : expectedRole === 'principal' ? 'នាយកសាលា' : expectedRole === 'monitor' ? 'ប្រធានថ្នាក់' : 'គ្រូបន្ទុកថ្នាក់';

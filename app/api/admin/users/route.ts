@@ -11,7 +11,7 @@ const getRoleKh = (role: string) => {
 };
 
 export async function GET() {
-  const { user, role } = await getServerAuth();
+  const { user, role, profile } = await getServerAuth();
 
   if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
@@ -24,11 +24,17 @@ export async function GET() {
   }
 
   try {
-    const { data: profiles, error: profileError } = await adminClient
+    let query = adminClient
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(500);
+      
+    if (role === 'principal' && profile?.school_id) {
+      query = query.eq('school_id', profile.school_id);
+    }
+
+    const { data: profiles, error: profileError } = await query;
 
     if (profileError) throw profileError;
 
@@ -67,9 +73,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { user, role } = await getServerAuth();
+  const { user, role, profile } = await getServerAuth();
 
-  if (!user || role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -121,16 +127,26 @@ export async function POST(req: Request) {
         continue;
       }
 
-      // Resolve school UUID from code
-      const { data: schoolObj } = await adminClient
-        .from('schools')
-        .select('id')
-        .eq('code', u.schoolCode || 'Porieng-2026')
-        .maybeSingle();
+      // Resolve school UUID from code (or enforce Principal's school)
+      let resolvedSchoolId = null;
+      let resolvedSchoolCode = null;
 
-      if (!schoolObj) {
-        errors.push({ username: u.username, error: 'លេខកូដសាលាមិនត្រឹមត្រូវ (Invalid school code)' });
-        continue;
+      if (role === 'principal' && profile?.school_id) {
+        resolvedSchoolId = profile.school_id;
+        resolvedSchoolCode = profile.school_code || 'Porieng-2026';
+      } else {
+        const { data: schoolObj } = await adminClient
+          .from('schools')
+          .select('id, code')
+          .eq('code', u.schoolCode || 'Porieng-2026')
+          .maybeSingle();
+
+        if (!schoolObj) {
+          errors.push({ username: u.username, error: 'លេខកូដសាលាមិនត្រឹមត្រូវ (Invalid school code)' });
+          continue;
+        }
+        resolvedSchoolId = schoolObj.id;
+        resolvedSchoolCode = schoolObj.code;
       }
 
       const email = `${cleanUsername}@kruai.app`;
@@ -160,8 +176,8 @@ export async function POST(req: Request) {
         username: cleanUsername,
         full_name: u.fullName.trim(),
         role: u.role || 'teacher',
-        school_id: schoolObj.id,
-        school_code: u.schoolCode || 'Porieng-2026',
+        school_id: resolvedSchoolId,
+        school_code: resolvedSchoolCode,
         phone: u.phone || null,
         subject: u.subject || null,
         is_active: true,

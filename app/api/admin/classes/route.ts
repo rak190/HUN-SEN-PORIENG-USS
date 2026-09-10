@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getServerAuth } from '@/lib/auth-server';
 
 export async function GET(req: Request) {
-  const { user, role } = await getServerAuth();
+  const { user, role, profile } = await getServerAuth();
 
   if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
@@ -26,6 +26,10 @@ export async function GET(req: Request) {
 
     if (academicYearId) {
       query = query.eq('academic_year_id', academicYearId);
+    }
+    
+    if (role === 'principal' && profile?.school_id) {
+      query = query.eq('school_id', profile.school_id);
     }
 
     const { data: classesData, error } = await query;
@@ -55,9 +59,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { user, role } = await getServerAuth();
+  const { user, role, profile } = await getServerAuth();
 
-  if (!user || role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -71,6 +75,8 @@ export async function POST(req: Request) {
   // Batch insert support (e.g. from Bulk Generate or Excel Import)
   if (Array.isArray(body.classes)) {
     try {
+      const resolvedSchoolId = role === 'principal' ? profile?.school_id : null;
+      
       const records = body.classes.map((c: any) => ({
         name: c.name,
         grade: String(c.grade),
@@ -78,7 +84,8 @@ export async function POST(req: Request) {
         teacher_id: c.teacher_id || null,
         shift: c.shift || (['10', '11', '12'].includes(String(c.grade)) ? 'ព្រឹក' : 'រសៀល'),
         room_number: c.room_number || null,
-        track: c.track || 'ទូទៅ'
+        track: c.track || 'ទូទៅ',
+        ...(resolvedSchoolId ? { school_id: resolvedSchoolId } : {})
       }));
 
       const { data: inserted, error } = await adminClient
@@ -117,6 +124,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `ថ្នាក់ឈ្មោះ "${name}" មានរួចហើយនៅក្នុងឆ្នាំសិក្សានេះ!` }, { status: 400 });
     }
 
+    const resolvedSchoolId = role === 'principal' ? profile?.school_id : null;
+    
     const { data: newClass, error } = await adminClient
       .from('classes')
       .insert([{ 
@@ -126,7 +135,8 @@ export async function POST(req: Request) {
         teacher_id: teacher_id || null,
         shift: shift || (['10', '11', '12'].includes(String(grade)) ? 'ព្រឹក' : 'រសៀល'),
         room_number: room_number || null,
-        track: track || 'ទូទៅ'
+        track: track || 'ទូទៅ',
+        ...(resolvedSchoolId ? { school_id: resolvedSchoolId } : {})
       }])
       .select('*, profiles:teacher_id(id, full_name)')
       .single();
@@ -143,9 +153,9 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const { user, role } = await getServerAuth();
+  const { user, role, profile } = await getServerAuth();
 
-  if (!user || role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -167,10 +177,16 @@ export async function PATCH(req: Request) {
     if (room_number !== undefined) updateData.room_number = room_number || null;
     if (track !== undefined) updateData.track = track;
 
-    const { error } = await adminClient
+    let updateQuery = adminClient
       .from('classes')
       .update(updateData)
       .eq('id', id);
+
+    if (role === 'principal' && profile?.school_id) {
+      updateQuery = updateQuery.eq('school_id', profile.school_id);
+    }
+
+    const { error } = await updateQuery;
 
     if (error) throw error;
 
@@ -181,9 +197,9 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const { user, role } = await getServerAuth();
+  const { user, role, profile } = await getServerAuth();
 
-  if (!user || role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -214,10 +230,16 @@ export async function DELETE(req: Request) {
       }, { status: 400 });
     }
 
-    const { error } = await adminClient
+    let deleteQuery = adminClient
       .from('classes')
       .delete()
       .eq('id', id);
+
+    if (role === 'principal' && profile?.school_id) {
+      deleteQuery = deleteQuery.eq('school_id', profile.school_id);
+    }
+
+    const { error } = await deleteQuery;
 
     if (error) throw error;
 
@@ -227,6 +249,7 @@ export async function DELETE(req: Request) {
         action: `បានលុបថ្នាក់លេខសម្គាល់ ${id}`,
         type: 'warn',
         user_id: user.id,
+        ...(profile?.school_id ? { school_id: profile.school_id } : {})
       }
     ]);
 

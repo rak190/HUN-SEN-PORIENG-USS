@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getServerAuth } from '@/lib/auth-server';
 
 export async function GET() {
-  const { user, role } = await getServerAuth();
+  const { user, role, profile } = await getServerAuth();
 
   if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
@@ -12,12 +12,17 @@ export async function GET() {
   const adminClient = createAdminClient();
   if (!adminClient) return NextResponse.json({ logs: [] });
 
-  // Fetch the latest 200 logs with user profile
-  const { data, error } = await adminClient
+  let query = adminClient
     .from('audit_logs')
     .select('id, action, type, created_at, profiles:user_id(full_name, username)')
     .order('created_at', { ascending: false })
     .limit(200);
+
+  if (role === 'principal' && profile?.school_id) {
+    query = query.eq('school_id', profile.school_id);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -36,9 +41,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { user, role } = await getServerAuth();
+  const { user, role, profile } = await getServerAuth();
 
-  if (!user || role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -58,7 +63,8 @@ export async function POST(req: Request) {
       {
         action,
         type,
-        user_id: user.id
+        user_id: user.id,
+        ...(profile?.school_id ? { school_id: profile.school_id } : {})
       }
     ])
     .select()

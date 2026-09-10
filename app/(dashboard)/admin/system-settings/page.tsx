@@ -47,14 +47,14 @@ export default function MergedSystemPage() {
     e.preventDefault();
     setIsUnlocking(true);
     setTimeout(() => {
-      if (passwordInput === 'admin') {
+      if (passwordInput === 'CONFIRM') {
         setIsSystemUnlocked(true);
       } else {
-        alert('ពាក្យសម្ងាត់មិនត្រឹមត្រូវ!');
+        alert('សូមវាយពាក្យ CONFIRM ដើម្បីបន្ត!');
       }
       setIsUnlocking(false);
       setPasswordInput('');
-    }, 1000);
+    }, 500);
   };
 
   const handleBackup = () => {
@@ -165,13 +165,13 @@ export default function MergedSystemPage() {
                   <Shield className="w-8 h-8 text-rose-500" />
                 </div>
                 <h2 className="text-xl font-extrabold text-slate-800 mb-2">តំបន់គ្រោះថ្នាក់ (Danger Zone)</h2>
-                <p className="text-xs font-bold text-slate-500 mb-6">សូមបញ្ចូលពាក្យសម្ងាត់អ្នកគ្រប់គ្រងដើម្បីចូលប្រើប្រាស់</p>
+                <p className="text-xs font-bold text-slate-500 mb-6">មុខងារនេះមានហានិភ័យខ្ពស់។ សូមវាយពាក្យ CONFIRM ដើម្បីបន្ត</p>
                 <form onSubmit={handleUnlockSystem} className="space-y-4">
                   <div className="relative">
                     <Lock className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input 
-                      type="password" 
-                      placeholder="ពាក្យសម្ងាត់ (admin)"
+                      type="text" 
+                      placeholder="វាយពាក្យ CONFIRM"
                       value={passwordInput}
                       onChange={(e) => setPasswordInput(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-11 pr-4 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none transition-all"
