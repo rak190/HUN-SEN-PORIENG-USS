@@ -2,139 +2,145 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
-export interface SaveStudentPayload {
-  id?: string;
-  class_id?: string;
-  academic_year_id?: string;
-  student_id_number?: string;
-  full_name?: string;
-  gender?: string;
-  date_of_birth?: string;
-  age?: number;
-  birth_cert_no?: string;
-  status?: string;
-  scholarship?: string;
-  id_poor?: string;
-  orphan?: string;
-  indigenous?: string;
-  distance_km?: number;
-  weight_kg?: number;
-  height_m?: number;
-  bmi?: number;
-  nutrition_status?: string;
-  disability?: string;
-  assistive_device?: string;
-  health_issues?: string;
-  father_name?: string;
-  father_job?: string;
-  father_phone?: string;
-  mother_name?: string;
-  mother_job?: string;
-  mother_phone?: string;
-  guardian_name?: string;
-  guardian_job?: string;
-  guardian_phone?: string;
-  siblings_count?: number;
-  migrant_status?: string;
-  domestic_violence?: string;
-  housing?: string;
-  income?: number;
-  address?: string;
-  desk_number?: string;
-  room_number?: string;
-  student_phone?: string;
-  parent_phone?: string;
-  current_status?: string;
-  enrollment_status?: string;
-  is_active?: boolean;
-}
+const StudentSchema = z.object({
+  id: z.string().optional(),
+  class_id: z.string().optional(),
+  academic_year_id: z.string().optional(),
+  student_id_number: z.string().optional(),
+  full_name: z.string().optional(),
+  gender: z.string().optional(),
+  date_of_birth: z.string().optional(),
+  age: z.coerce.number().optional(),
+  birth_cert_no: z.string().optional(),
+  status: z.string().optional(),
+  scholarship: z.string().optional(),
+  id_poor: z.string().optional(),
+  orphan: z.string().optional(),
+  indigenous: z.string().optional(),
+  distance_km: z.coerce.number().optional(),
+  weight_kg: z.coerce.number().optional(),
+  height_m: z.coerce.number().optional(),
+  bmi: z.coerce.number().optional(),
+  nutrition_status: z.string().optional(),
+  disability: z.string().optional(),
+  assistive_device: z.string().optional(),
+  health_issues: z.string().optional(),
+  father_name: z.string().optional(),
+  father_job: z.string().optional(),
+  father_phone: z.string().optional(),
+  mother_name: z.string().optional(),
+  mother_job: z.string().optional(),
+  mother_phone: z.string().optional(),
+  guardian_name: z.string().optional(),
+  guardian_job: z.string().optional(),
+  guardian_phone: z.string().optional(),
+  siblings_count: z.coerce.number().optional(),
+  migrant_status: z.string().optional(),
+  domestic_violence: z.string().optional(),
+  housing: z.string().optional(),
+  income: z.coerce.number().optional(),
+  address: z.string().optional(),
+  desk_number: z.string().optional(),
+  room_number: z.string().optional(),
+  student_phone: z.string().optional(),
+  parent_phone: z.string().optional(),
+  current_status: z.string().optional(),
+  enrollment_status: z.string().optional(),
+  is_active: z.boolean().optional(),
+}).passthrough();
+
+export type SaveStudentPayload = z.infer<typeof StudentSchema>;
 
 export async function saveStudentAction(payload: SaveStudentPayload) {
   try {
+    const validatedPayload = StudentSchema.parse(payload);
+    
     const { requireClassAccess, requireAdmin } = await import('@/lib/auth-server');
-    if (payload.class_id) {
-      await requireClassAccess(payload.class_id);
+    if (validatedPayload.class_id) {
+      await requireClassAccess(validatedPayload.class_id);
     } else {
       await requireAdmin();
     }
     const supabase = createAdminClient();
 
-    const normalizedGender = payload.gender === 'F' || payload.gender === 'ស្រី' ? 'F' : 'M';
-    const status = payload.status === 'repeater' ? 'repeater' : payload.status === 'transfer' ? 'transfer' : 'new';
-    const scholarship = payload.scholarship === 'yes' ? 'yes' : 'no';
-    const idPoor = payload.id_poor === 'level_1' ? 'level_1' : payload.id_poor === 'level_2' ? 'level_2' : 'none';
-    const orphan = payload.orphan === 'yes' ? 'yes' : 'no';
-    const disability = payload.disability === 'mild' ? 'mild' : payload.disability === 'severe' ? 'severe' : 'none';
-    const enrollmentStatus = payload.current_status || payload.enrollment_status || 'active';
+
+    const normalizedGender = validatedPayload.gender === 'F' || validatedPayload.gender === 'ស្រី' ? 'F' : 'M';
+    const status = validatedPayload.status === 'repeater' ? 'repeater' : validatedPayload.status === 'transfer' ? 'transfer' : 'new';
+    const scholarship = validatedPayload.scholarship === 'yes' ? 'yes' : 'no';
+    const idPoor = validatedPayload.id_poor === 'level_1' ? 'level_1' : validatedPayload.id_poor === 'level_2' ? 'level_2' : 'none';
+    const orphan = validatedPayload.orphan === 'yes' ? 'yes' : 'no';
+    const disability = validatedPayload.disability === 'mild' ? 'mild' : validatedPayload.disability === 'severe' ? 'severe' : 'none';
+    const enrollmentStatus = validatedPayload.current_status || validatedPayload.enrollment_status || 'active';
     const isActive = enrollmentStatus === 'active';
 
     // Calculate BMI & Nutrition Status if weight and height are provided
-    let calculatedBmi = payload.bmi ? Number(payload.bmi) : null;
-    let nutritionStatus = payload.nutrition_status || null;
-    if (payload.weight_kg && payload.height_m && payload.height_m > 0) {
-      calculatedBmi = parseFloat((Number(payload.weight_kg) / (Number(payload.height_m) * Number(payload.height_m))).toFixed(1));
+    let calculatedBmi = validatedPayload.bmi ? Number(validatedPayload.bmi) : null;
+    let nutritionStatus = validatedPayload.nutrition_status || null;
+    if (validatedPayload.weight_kg && validatedPayload.height_m && validatedPayload.height_m > 0) {
+      calculatedBmi = parseFloat((Number(validatedPayload.weight_kg) / (Number(validatedPayload.height_m) * Number(validatedPayload.height_m))).toFixed(1));
       if (calculatedBmi < 18.5) nutritionStatus = 'ស្គម';
       else if (calculatedBmi >= 25 && calculatedBmi < 30) nutritionStatus = 'លើសទម្ងន់';
       else if (calculatedBmi >= 30) nutritionStatus = 'ធាត់';
       else nutritionStatus = 'ធម្មតា';
     }
 
-    const healthNotes = payload.health_issues || null;
+    const healthNotes = validatedPayload.health_issues || null;
 
     // Use progressive updating: only overwrite fields if they are explicitly sent as non-empty in the payload
     // or if they are required core fields.
     const dbRecord: Record<string, any> = {
-      full_name: payload.full_name,
-      student_id_number: payload.student_id_number,
+      full_name: validatedPayload.full_name,
+      student_id_number: validatedPayload.student_id_number,
       gender: normalizedGender,
       status,
       enrollment_status: enrollmentStatus,
       is_active: isActive,
     };
 
-    if (payload.class_id) dbRecord.class_id = payload.class_id;
-    if (payload.date_of_birth !== undefined) dbRecord.dob = payload.date_of_birth || null;
-    if (payload.age !== undefined) dbRecord.age = payload.age ? Number(payload.age) : null;
-    if (payload.scholarship !== undefined) dbRecord.scholarship = scholarship;
-    if (payload.id_poor !== undefined) dbRecord.id_poor = idPoor;
-    if (payload.orphan !== undefined) dbRecord.orphan = orphan;
-    if (payload.distance_km !== undefined) dbRecord.distance_km = payload.distance_km ? Number(payload.distance_km) : null;
-    if (payload.weight_kg !== undefined) dbRecord.weight_kg = payload.weight_kg ? Number(payload.weight_kg) : null;
-    if (payload.height_m !== undefined) dbRecord.height_m = payload.height_m ? Number(payload.height_m) : null;
+    if (validatedPayload.class_id) dbRecord.class_id = validatedPayload.class_id;
+    if (validatedPayload.date_of_birth !== undefined) dbRecord.dob = validatedPayload.date_of_birth || null;
+    if (validatedPayload.age !== undefined) dbRecord.age = validatedPayload.age ? Number(validatedPayload.age) : null;
+    if (validatedPayload.scholarship !== undefined) dbRecord.scholarship = scholarship;
+    if (validatedPayload.id_poor !== undefined) dbRecord.id_poor = idPoor;
+    if (validatedPayload.orphan !== undefined) dbRecord.orphan = orphan;
+    if (validatedPayload.distance_km !== undefined) dbRecord.distance_km = validatedPayload.distance_km ? Number(validatedPayload.distance_km) : null;
+    if (validatedPayload.weight_kg !== undefined) dbRecord.weight_kg = validatedPayload.weight_kg ? Number(validatedPayload.weight_kg) : null;
+    if (validatedPayload.height_m !== undefined) dbRecord.height_m = validatedPayload.height_m ? Number(validatedPayload.height_m) : null;
     if (calculatedBmi !== null) dbRecord.bmi = calculatedBmi;
     if (nutritionStatus !== null) dbRecord.nutrition_status = nutritionStatus;
-    if (payload.disability !== undefined) dbRecord.disability = disability;
-    if (payload.assistive_device !== undefined) dbRecord.assistive_device = payload.assistive_device || null;
+    if (validatedPayload.disability !== undefined) dbRecord.disability = disability;
+    if (validatedPayload.assistive_device !== undefined) dbRecord.assistive_device = validatedPayload.assistive_device || null;
     if (healthNotes !== null) dbRecord.health_note = healthNotes;
-    if (payload.siblings_count !== undefined) dbRecord.siblings_count = payload.siblings_count ? Number(payload.siblings_count) : 0;
-    if (payload.income !== undefined) dbRecord.income = payload.income ? Number(payload.income) : null;
-    if (payload.address !== undefined) dbRecord.current_address = payload.address || null;
-    if (payload.father_name !== undefined) dbRecord.father_name = payload.father_name || null;
-    if (payload.father_job !== undefined) dbRecord.father_job = payload.father_job || null;
-    if (payload.mother_name !== undefined) dbRecord.mother_name = payload.mother_name || null;
-    if (payload.mother_job !== undefined) dbRecord.mother_job = payload.mother_job || null;
-    if (payload.guardian_name !== undefined) dbRecord.guardian_name = payload.guardian_name || null;
-    if (payload.guardian_job !== undefined) dbRecord.guardian_job = payload.guardian_job || null;
-    if (payload.father_phone || payload.mother_phone || payload.parent_phone || payload.student_phone) {
-      dbRecord.parent_phone = payload.father_phone || payload.mother_phone || payload.parent_phone || payload.student_phone || null;
+    if (validatedPayload.siblings_count !== undefined) dbRecord.siblings_count = validatedPayload.siblings_count ? Number(validatedPayload.siblings_count) : 0;
+    if (validatedPayload.income !== undefined) dbRecord.income = validatedPayload.income ? Number(validatedPayload.income) : null;
+    if (validatedPayload.address !== undefined) dbRecord.current_address = validatedPayload.address || null;
+    if (validatedPayload.father_name !== undefined) dbRecord.father_name = validatedPayload.father_name || null;
+    if (validatedPayload.father_job !== undefined) dbRecord.father_job = validatedPayload.father_job || null;
+    if (validatedPayload.mother_name !== undefined) dbRecord.mother_name = validatedPayload.mother_name || null;
+    if (validatedPayload.mother_job !== undefined) dbRecord.mother_job = validatedPayload.mother_job || null;
+    if (validatedPayload.guardian_name !== undefined) dbRecord.guardian_name = validatedPayload.guardian_name || null;
+    if (validatedPayload.guardian_job !== undefined) dbRecord.guardian_job = validatedPayload.guardian_job || null;
+    if (validatedPayload.father_phone || validatedPayload.mother_phone || validatedPayload.parent_phone || validatedPayload.student_phone) {
+      dbRecord.parent_phone = validatedPayload.father_phone || validatedPayload.mother_phone || validatedPayload.parent_phone || validatedPayload.student_phone || null;
     }
-    if (payload.father_phone !== undefined) dbRecord.father_phone = payload.father_phone || null;
-    if (payload.mother_phone !== undefined) dbRecord.mother_phone = payload.mother_phone || null;
-    if (payload.guardian_phone !== undefined) dbRecord.guardian_phone = payload.guardian_phone || null;
-    if (payload.desk_number !== undefined) dbRecord.desk_number = payload.desk_number || null;
-    if (payload.room_number !== undefined) dbRecord.room_number = payload.room_number || null;
-    if (payload.birth_cert_no !== undefined) dbRecord.birth_cert_no = payload.birth_cert_no || null;
-    if (payload.migrant_status !== undefined) dbRecord.migrant_status = payload.migrant_status || null;
+    if (validatedPayload.father_phone !== undefined) dbRecord.father_phone = validatedPayload.father_phone || null;
+    if (validatedPayload.mother_phone !== undefined) dbRecord.mother_phone = validatedPayload.mother_phone || null;
+    if (validatedPayload.guardian_phone !== undefined) dbRecord.guardian_phone = validatedPayload.guardian_phone || null;
+    if (validatedPayload.desk_number !== undefined) dbRecord.desk_number = validatedPayload.desk_number || null;
+    if (validatedPayload.room_number !== undefined) dbRecord.room_number = validatedPayload.room_number || null;
+    if (validatedPayload.birth_cert_no !== undefined) dbRecord.birth_cert_no = validatedPayload.birth_cert_no || null;
+    if (validatedPayload.migrant_status !== undefined) dbRecord.migrant_status = validatedPayload.migrant_status || null;
 
     let savedStudent = null;
 
-    if (payload.id && payload.id.length > 20 && !payload.id.startsWith('std-') && !payload.id.startsWith('mock-')) {
+    if (validatedPayload.id && validatedPayload.id.length > 20 && !validatedPayload.id.startsWith('std-') && !validatedPayload.id.startsWith('mock-')) {
       // Update existing student
       const { data, error } = await supabase
         .from('students')
         .update(dbRecord)
-        .eq('id', payload.id)
+        .eq('id', validatedPayload.id)
         .select()
         .single();
 
@@ -165,11 +171,11 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
     }
 
     // Attempt to update enrollment record if academic_year_id is provided
-    if (payload.academic_year_id && savedStudent?.id && payload.class_id) {
+    if (validatedPayload.academic_year_id && savedStudent?.id && validatedPayload.class_id) {
        await supabase.from('student_enrollments').upsert({
           student_id: savedStudent.id,
-          class_id: payload.class_id,
-          academic_year_id: payload.academic_year_id,
+          class_id: validatedPayload.class_id,
+          academic_year_id: validatedPayload.academic_year_id,
           enrollment_status: enrollmentStatus,
           desk_number: dbRecord.desk_number || null,
           room_number: dbRecord.room_number || null,
@@ -177,26 +183,26 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
     }
 
     // Bidirectional sync: If health data was entered in /students, sync into student_health_records
-    const studentId = payload.id || savedStudent?.id;
-    if (studentId && (payload.weight_kg || payload.height_m || healthNotes || payload.assistive_device)) {
+    const studentId = validatedPayload.id || savedStudent?.id;
+    if (studentId && (validatedPayload.weight_kg || validatedPayload.height_m || healthNotes || validatedPayload.assistive_device)) {
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
-      const heightCm = payload.height_m ? Math.round(Number(payload.height_m) * 100) : null;
+      const heightCm = validatedPayload.height_m ? Math.round(Number(validatedPayload.height_m) * 100) : null;
       
       let vision = '6/6';
-      if (payload.assistive_device === 'glasses' || healthNotes?.includes('ភ្នែក')) {
+      if (validatedPayload.assistive_device === 'glasses' || healthNotes?.includes('ភ្នែក')) {
         vision = '6/12';
       }
       let hearing = 'ធម្មតា';
-      if (payload.assistive_device === 'hearing_aid' || healthNotes?.includes('ស្តាប់')) {
+      if (validatedPayload.assistive_device === 'hearing_aid' || healthNotes?.includes('ស្តាប់')) {
         hearing = 'ខ្សោយ';
       }
 
       try {
         await supabase.from('student_health_records').upsert({
           student_id: studentId,
-          class_id: payload.class_id || dbRecord.class_id,
+          class_id: validatedPayload.class_id || dbRecord.class_id,
           recorded_date: today,
-          weight_kg: payload.weight_kg ? Number(payload.weight_kg) : null,
+          weight_kg: validatedPayload.weight_kg ? Number(validatedPayload.weight_kg) : null,
           height_cm: heightCm,
           bmi: calculatedBmi,
           vision_left: vision,

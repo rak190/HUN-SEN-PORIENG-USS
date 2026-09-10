@@ -57,7 +57,7 @@ export default function StudentFilters({
             disabled={isSaving} 
             className="px-4 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors mr-2 disabled:opacity-50"
           >
-            <AlertCircle className="w-4 h-4" /> លុបសិស្សដែលជ្រើសរើស ({selectedIdsCount})
+            <AlertCircle className="w-4 h-4" /> បោះបង់សិស្សដែលជ្រើសរើស ({selectedIdsCount})
           </button>
         )}
         

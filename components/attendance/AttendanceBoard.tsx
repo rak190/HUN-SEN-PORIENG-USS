@@ -56,9 +56,9 @@ export default function AttendanceBoard() {
       setLoading(true);
       try {
         const { data: stdData } = await supabase
-          .from('students')
+          .from('active_class_rosters')
           .select('*')
-          .eq('class_id', activeClass?.id || '')
+          .eq('enrollment_class_id', activeClass?.id || '')
           .order('full_name', { ascending: true });
 
         if (stdData && stdData.length > 0) {

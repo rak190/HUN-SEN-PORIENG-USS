@@ -43,21 +43,47 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   let effectiveClassId: string | null = null;
   if (profile?.role === 'teacher') {
     effectiveClassId = teacherClassId;
-  } else if (classId !== 'all') {
+  } else if (classId && classId !== 'all') {
     effectiveClassId = classId;
   }
 
-  // 2. Fetch basic stats (only active students)
-  let studentsQuery = supabase.from('active_students').select('id, gender', { count: 'exact' });
-  if (effectiveClassId) {
-    studentsQuery = studentsQuery.eq('class_id', effectiveClassId);
+  // Fetch active academic year
+  const { data: activeYear } = await supabase
+    .from('academic_years')
+    .select('id')
+    .eq('is_active', true)
+    .single();
+    
+  let activeClassIds: string[] = [];
+  if (!effectiveClassId && activeYear) {
+    const { data: classes } = await supabase
+      .from('classes')
+      .select('id')
+      .eq('academic_year_id', activeYear.id);
+    activeClassIds = classes?.map(c => c.id) || [];
   }
+
+  // Helper to scope queries to the active academic year
+  const scopeQueryToYear = (query: any, classCol: string = 'class_id') => {
+    if (effectiveClassId) {
+      return query.eq(classCol, effectiveClassId);
+    } else if (activeClassIds.length > 0) {
+      return query.in(classCol, activeClassIds);
+    } else if (activeYear) {
+      // fallback to return nothing if no classes in year but they are an admin
+      return query.eq(classCol, '00000000-0000-0000-0000-000000000000');
+    }
+    return query;
+  };
+
+  // 2. Fetch basic stats (only active students)
+
+  let studentsQuery = supabase.from('active_students').select('id, gender', { count: 'exact' });
+  studentsQuery = scopeQueryToYear(studentsQuery);
   const { data: studentsData, count: studentsCount } = await studentsQuery;
 
   let remediationQuery = supabase.from('active_students').select('id', { count: 'exact' }).eq('is_slow_learner', true);
-  if (effectiveClassId) {
-    remediationQuery = remediationQuery.eq('class_id', effectiveClassId);
-  }
+  remediationQuery = scopeQueryToYear(remediationQuery);
   const { data: remData, count: remCount } = await remediationQuery;
   const remediationCount = remCount ?? remData?.length ?? 0;
 
@@ -67,9 +93,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .select('id, title, description, activity_type, class_id, created_at')
     .order('created_at', { ascending: false })
     .limit(20);
-  if (effectiveClassId) {
-    activityQuery = activityQuery.eq('class_id', effectiveClassId);
-  }
+  activityQuery = scopeQueryToYear(activityQuery);
   const { data: activityData } = await activityQuery;
 
   // 4. Fetch Weekly Attendance (Current Week: Mon-Fri)
@@ -89,9 +113,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .from('attendance_records')
     .select('date, status')
     .in('date', weekDates);
-  if (effectiveClassId) {
-    weeklyQuery = weeklyQuery.eq('class_id', effectiveClassId);
-  }
+  weeklyQuery = scopeQueryToYear(weeklyQuery);
   const { data: weeklyDataRaw } = await weeklyQuery;
 
   const weeklyData = weekDates.map((date, index) => {
@@ -137,18 +159,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .from('monthly_attendance_summaries')
     .select('month, absent_count, permission_count')
     .in('month', trendMonthStrs);
-  if (effectiveClassId) {
-    monthlyAttQuery = monthlyAttQuery.eq('class_id', effectiveClassId);
-  }
+  monthlyAttQuery = scopeQueryToYear(monthlyAttQuery);
   const { data: monthlyAttRaw } = await monthlyAttQuery;
 
   let gradesQuery = supabase
     .from('grades')
     .select('period, total_score')
     .in('period', trendPeriodIds);
-  if (effectiveClassId) {
-    gradesQuery = gradesQuery.eq('class_id', effectiveClassId);
-  }
+  gradesQuery = scopeQueryToYear(gradesQuery);
   const { data: gradesRaw } = await gradesQuery;
 
   const assumedDaysPerMonth = 20;

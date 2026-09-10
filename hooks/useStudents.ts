@@ -28,6 +28,7 @@ export function useStudents(activeClassId: string | undefined) {
           ...DEFAULT_FORM,
           ...d,
           date_of_birth: d.dob,
+          address: d.current_address,
           current_status: d.enrollment_status || 'active',
         } as MassiveProfilingStudent)));
       }

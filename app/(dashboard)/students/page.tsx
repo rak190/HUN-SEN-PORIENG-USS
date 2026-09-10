@@ -119,45 +119,16 @@ export default function StudentsPage() {
 
 
   const handleExportGEIPExcel = () => {
-    const wsData = students.map((std) => ({
-      'អត្តលេខ': std.student_id_number,
-      'ប្លង់តុ': std.desk_number || '',
-      'លេខបន្ទប់ប្រឡង': std.room_number || '',
-      'នាមត្រកូល និងនាមខ្លួន': std.full_name,
-      'ភេទ': std.gender === 'F' ? 'ស្រី' : 'ប្រុស',
-      'ថ្ងៃខែឆ្នាំកំណើត': std.date_of_birth,
-      'អាយុ': std.age,
-      'លេខសំបុត្រកំណើត': std.birth_cert_no,
-      'ស្ថានភាពសិស្ស': std.status === 'new' ? 'ថ្មី' : std.status === 'repeater' ? 'ត្រួតថ្នាក់' : 'ផ្ទេរចូល',
-      'សាលាចំណុះឬក្រៅចំណុះ': std.prev_school,
-      'ជនជាតិដើមភាគតិច': std.indigenous === 'yes' ? 'បាទ/ចាស' : 'ទេ',
-      'ប្រភេទពិការភាព': std.disability === 'none' ? 'គ្មាន' : std.disability === 'mild' ? 'ស្រាល' : 'ធ្ងន់ធ្ងរ',
-      'ឧបករណ៍ជំនួយ': std.assistive_device,
-      'កំព្រា': std.orphan === 'yes' ? 'បាទ/ចាស' : 'ទេ',
-      'បណ្ណក្រីក្រ': std.id_poor === 'none' ? 'គ្មាន' : std.id_poor === 'level_1' ? 'កម្រិត ១' : 'កម្រិត ២',
-      'អាហារូបករណ៍': std.scholarship === 'yes' ? 'បាទ/ចាស' : 'ទេ',
-      'ចម្ងាយ (គ.ម)': std.distance_km,
-      'ទម្ងន់ (kg)': std.weight_kg,
-      'កម្ពស់ (m)': std.height_m,
-      'BMI': std.bmi,
-      'លទ្ធផលវាយតម្លៃសុខភាព': std.nutrition_status,
-      'បញ្ហាសុខភាព': std.health_issues,
-      'ឈ្មោះឪពុក': std.father_name, 'មុខរបរឪពុក': std.father_job, 'ទូរស័ព្ទឪពុក': std.father_phone,
-      'ឈ្មោះម្តាយ': std.mother_name, 'មុខរបរម្តាយ': std.mother_job, 'ទូរស័ព្ទម្តាយ': std.mother_phone,
-      'ចំណាកស្រុក': std.migrant_status,
-      'ហឹង្សាក្នុងគ្រួសារ': std.domestic_violence === 'yes' ? 'មាន' : 'គ្មាន',
-      'ជម្រក': std.housing,
-      'ប្រាក់ចំណូល/ខែ': `$${std.income}`,
-      'បងប្អូនបង្កើត': std.siblings_count,
-      'អាសយដ្ឋានបច្ចុប្បន្ន': std.address,
-      'លេខទូរស័ព្ទសិស្ស': std.student_phone,
-      'ស្ថានភាពចុងក្រោយ': std.current_status,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "GEIP Master Profiling");
-    XLSX.writeFile(wb, `MoEYS_GEIP_Master_Data_${activeClass?.name || 'Class'}.xlsx`);
+    if (!activeClass?.id) {
+      alert('សូមជ្រើសរើសថ្នាក់ជាមុនសិន!');
+      return;
+    }
+    const url = new URL('/api/export/class-roster', window.location.origin);
+    url.searchParams.set('classId', activeClass.id);
+    if (activeClass.academic_year_id) {
+      url.searchParams.set('academicYearId', activeClass.academic_year_id);
+    }
+    window.location.href = url.toString();
   };
 
   const handleExportGEIPPDF = () => {
@@ -536,15 +507,15 @@ export default function StudentsPage() {
   };
 
   const handleDeleteSelected = async () => {
-    if (!window.confirm(`តើអ្នកពិតជាចង់លុបសិស្សចំនួន ${selectedIds.length} នាក់នេះមែនទេ? (សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ)`)) return;
+    if (!window.confirm(`តើអ្នកពិតជាចង់បោះបង់សិស្សចំនួន ${selectedIds.length} នាក់នេះមែនទេ? (សិស្សនឹងត្រូវប្តូរស្ថានភាពទៅជា បោះបង់)`)) return;
     setIsSaving(true);
-    const { error } = await supabase.from('students').delete().in('id', selectedIds);
+    const { error } = await supabase.from('students').update({ enrollment_status: 'dropout', is_active: false }).in('id', selectedIds);
     if (!error) {
-      setStudents(prev => prev.filter(s => !selectedIds.includes(s.id)));
+      setStudents(prev => prev.map(s => selectedIds.includes(s.id) ? { ...s, current_status: 'dropout' } : s));
       setSelectedIds([]);
     } else {
       console.error(error);
-      alert('បរាជ័យក្នុងការលុបសិស្ស');
+      alert('បរាជ័យក្នុងការបោះបង់សិស្ស');
     }
     setIsSaving(false);
   };
