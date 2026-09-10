@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import Image from 'next/image';
 import {
   GraduationCap,
   ShieldCheck,
@@ -67,7 +68,7 @@ export default function LoginPage() {
       {/* Top Navbar */}
       <nav className="w-full px-6 py-4 flex items-center justify-between bg-white border-b border-slate-100 z-40 relative">
         <div className="flex items-center gap-3">
-          <img src="/school_logo.png" alt="School Logo" className="w-10 h-10 object-contain shrink-0" />
+          <Image src="/school_logo.png" alt="School Logo" width={40} height={40} className="w-10 h-10 object-contain shrink-0" priority />
           <div className="flex flex-col">
             <span className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight leading-none">វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</span>
             <span className="text-[11px] font-bold text-[#155EEF] tracking-wide mt-1">គុណធម៌ ចំណេះដឹង បំណិនវិជ្ជាជីវៈ</span>

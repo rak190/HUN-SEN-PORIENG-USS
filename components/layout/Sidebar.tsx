@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import QRCode from 'react-qr-code';
+import Image from 'next/image';
 import { useAuth } from '@/lib/auth-context';
 import Modal from '@/components/ui/Modal';
 import {
@@ -175,7 +176,7 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
     <aside className={containerClassName}>
       {/* Logo */}
       <Link href="/" onClick={onClose} className="flex items-center gap-3 mb-6 pl-1 group shrink-0">
-        <img src="/school_logo.png" alt="School Logo" className="w-10 h-10 object-contain shrink-0 group-hover:scale-105 transition-transform" />
+        <Image src="/school_logo.png" alt="School Logo" width={40} height={40} className="w-10 h-10 object-contain shrink-0 group-hover:scale-105 transition-transform" priority />
         <div className="flex flex-col min-w-0 py-1">
           <span className="text-sm font-extrabold text-slate-900 tracking-tight whitespace-nowrap truncate">វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</span>
           <span className="text-[10px] font-bold text-[#155EEF] tracking-wide mt-0.5 truncate">គុណធម៌ ចំណេះដឹង បំណិនវិជ្ជាជីវៈ</span>

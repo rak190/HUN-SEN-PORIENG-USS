@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import { useAuth } from '@/lib/auth-context';
 import { Loader2, Menu } from 'lucide-react';
+import Image from 'next/image';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { loading, profile } = useAuth();
@@ -29,7 +30,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
              <div className="absolute inset-0 bg-[#155EEF] rounded-full animate-ping opacity-25"></div>
              {/* School Logo */}
              <div className="w-20 h-20 rounded-full bg-white shadow-md flex items-center justify-center p-3 relative z-10 animate-pulse">
-                <img src="/school_logo.png" alt="School Logo" className="w-full h-full object-contain" />
+                <Image src="/school_logo.png" alt="School Logo" width={80} height={80} className="w-full h-full object-contain" priority />
              </div>
           </div>
           
@@ -57,7 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             <Menu className="w-6 h-6" />
           </button>
-          <img src="/school_logo.png" alt="School Logo" className="w-8 h-8 object-contain shrink-0" />
+          <Image src="/school_logo.png" alt="School Logo" width={32} height={32} className="w-8 h-8 object-contain shrink-0" priority />
           <div className="flex flex-col min-w-0 py-0.5">
             <span className="text-sm font-extrabold text-slate-900 tracking-tight whitespace-nowrap truncate">វិ. ហ៊ុន សែន ពោធិ៍រៀង</span>
             <span className="text-[10px] font-bold text-[#155EEF] tracking-wide whitespace-nowrap truncate">វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</span>

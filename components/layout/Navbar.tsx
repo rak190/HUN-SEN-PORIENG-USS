@@ -4,6 +4,7 @@ import React from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { ShieldAlert, LogOut, User, BookOpen, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 export default function Navbar() {
   const { profile, activeClass, classes, setActiveClass, logout, isDemoMode } = useAuth();
@@ -15,7 +16,7 @@ export default function Navbar() {
         {/* Left Section: School & Active Class Selector */}
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3.5 py-1.5 rounded-xl shadow-md shadow-blue-500/20">
-            <img src="/school_logo.png" alt="School Logo" className="w-7 h-7 object-contain shrink-0" />
+            <Image src="/school_logo.png" alt="School Logo" width={28} height={28} className="w-7 h-7 object-contain shrink-0" priority />
             <div className="flex flex-col">
               <span className="font-extrabold text-sm tracking-wide leading-none">
                 វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង
