@@ -488,8 +488,7 @@ export default function MasterStudentsClient({
       <StudentProfileDrawer
         student={selectedProfileStudent}
         isOpen={!!selectedProfileStudent}
-        onClose={() => setSelectedProfileStudent(null)}
-        onSaved={() => {
+        onClose={() => {
           setSelectedProfileStudent(null);
           router.refresh();
         }}
