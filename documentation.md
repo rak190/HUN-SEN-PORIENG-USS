@@ -88,7 +88,7 @@ This simple trick makes web data entry 10x faster.
 
 ## 4. Advanced Grading Logic & Workflows
 
-### The "ប្លង់តុ" (Desk Number) Sorting
+### The "លេខតុ" (Desk Number) Sorting
 To make grading even faster, the `students` table includes a `desk_number` column.
 When the Teacher opens the grade book, the database query looks like this:
 ```typescript
@@ -127,7 +127,7 @@ To handle monthly exams efficiently, the school uses a centralized Google Sheet 
 
 ### C. The Homeroom Workflow (Teacher)
 - Teachers log in and are dropped into their specific Class Dashboard.
-- When they navigate to their `/grades` page, the Master Scores uploaded by the Admin are instantly available, perfectly sorted by `desk_number` (ប្លង់តុ).
+- When they navigate to their `/grades`, the Master Scores uploaded by the Admin are instantly available, perfectly sorted by `desk_number` (លេខតុ).
 - They use the `Students Profile` tab to log immense detail about students (Health, Demographics, Distance to school) required for government reporting.
 
 ### D. The GIEP (General Education Improvement Project) Tracking

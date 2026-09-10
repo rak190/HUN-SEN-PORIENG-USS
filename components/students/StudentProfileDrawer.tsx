@@ -288,7 +288,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
                   <input type="text" value={formData.birth_cert_no || ''} onChange={e=>setFormData({...formData, birth_cert_no:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
-                  ប្លង់តុ (Desk Number)
+                  លេខតុ (Desk Number)
                   <input type="text" placeholder="A-01" value={formData.desk_number || ''} onChange={e=>setFormData({...formData, desk_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">

@@ -65,7 +65,7 @@ export default function StudentTable({
               {activeTableView === 1 && (
                 <>
                   {renderSortHeader('ភេទ', 'gender', 'center')}
-                  {renderSortHeader('ប្លង់តុ', 'desk_number', 'center')}
+                  {renderSortHeader('លេខតុ', 'desk_number', 'center')}
                   {renderSortHeader('លេខបន្ទប់', 'room_number', 'center')}
                   {renderSortHeader('ថ្ងៃខែឆ្នាំកំណើត', 'date_of_birth')}
                   {renderSortHeader('អាយុ', 'age', 'center')}

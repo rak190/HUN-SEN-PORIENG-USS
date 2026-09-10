@@ -101,7 +101,7 @@ export default function MasterStudentsPage() {
       'ភេទ': s.gender,
       'ថ្នាក់': s.class_name,
       'គ្រូបន្ទុកថ្នាក់': s.homeroom_teacher,
-      'ប្លង់តុ': s.desk_number || '',
+      'លេខតុ': s.desk_number || '',
       'លេខបន្ទប់': s.room_number || '',
       'ស្ថានភាព': s.is_active ? 'សកម្ម' : 'ផ្អាក'
     }));
@@ -254,7 +254,7 @@ export default function MasterStudentsPage() {
                   </div>
                   <input 
                     type="text" 
-                    placeholder="ស្វែងរកសិស្សតាមឈ្មោះ, អត្តលេខ, ឬ ប្លង់តុ..." 
+                    placeholder="ស្វែងរកសិស្សតាមឈ្មោះ, អត្តលេខ, ឬ លេខតុ..." 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 bg-white border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-[#155EEF]/10 focus:border-[#155EEF] transition-all shadow-sm"
@@ -319,9 +319,9 @@ export default function MasterStudentsPage() {
                   onChange={(e) => setActiveDeskStatus(e.target.value)}
                   className="w-full sm:w-36 pl-8 pr-7 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:border-slate-300 focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none transition-all appearance-none cursor-pointer shadow-sm"
                 >
-                  <option value="all">ស្ថានភាពប្លង់តុ</option>
-                  <option value="assigned">មានប្លង់តុ</option>
-                  <option value="unassigned">គ្មានប្លង់តុ</option>
+                  <option value="all">ស្ថានភាពលេខតុ</option>
+                  <option value="assigned">មានលេខតុ</option>
+                  <option value="unassigned">គ្មានលេខតុ</option>
                 </select>
               </div>
             </div>
@@ -344,7 +344,7 @@ export default function MasterStudentsPage() {
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider border-r border-blue-100/80">សិស្ស</th>
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center border-r border-blue-100/80">ភេទ</th>
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center border-r border-blue-100/80">ថ្នាក់</th>
-                <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center border-r border-blue-100/80">ប្លង់តុ</th>
+                <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center border-r border-blue-100/80">លេខតុ</th>
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center border-r border-blue-100/80">លេខបន្ទប់</th>
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider border-r border-blue-100/80">គ្រូបន្ទុកថ្នាក់</th>
                 <th className="px-4 py-3 text-[11px] font-black text-blue-700 uppercase tracking-wider text-center">ស្ថានភាព</th>

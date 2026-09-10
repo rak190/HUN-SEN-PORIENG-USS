@@ -115,7 +115,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, student }: Stude
               <p className="font-bold text-slate-700 truncate">{student.homeroom_teacher}</p>
             </div>
             <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
-              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">ប្លង់តុ (Desk)</p>
+              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">លេខតុ (Desk)</p>
               <p className="font-black text-[#155EEF] text-lg leading-none">{student.desk_number || 'គ្មាន'}</p>
             </div>
             <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100 sm:col-span-2">
