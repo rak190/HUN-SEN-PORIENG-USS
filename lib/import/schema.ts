@@ -235,10 +235,10 @@ export function applySchema(rowObj: Record<string, any>, rawArray: any[], header
   // 41 = Mother Name, 42 = Mother Job, 43 = Mother Phone
   // 45 = Guardian Name, 46 = Guardian Job, 47 = Guardian Phone
   
-  const idNum = String(rowObj['អត្តលេខ'] || rawArray[3] || '').trim();
-  const lastName = String(rowObj['នាមត្រកូល'] || rawArray[4] || '').trim();
-  const firstName = String(rowObj['នាមខ្លួន'] || rawArray[5] || '').trim();
-  const fullName = (lastName + ' ' + firstName).trim() || String(rowObj['នាមត្រកូល និងនាមខ្លួន'] || '').trim();
+  const idNum = String(rowObj['អត្តលេខ_1'] || rowObj['អត្តលេខ'] || rowObj['ID'] || '').trim();
+  const lastName = String(rowObj['នាមត្រកូល_1'] || rowObj['នាមត្រកូល'] || '').trim();
+  const firstName = String(rowObj['នាមខ្លួន_1'] || rowObj['នាមខ្លួន'] || '').trim();
+  const fullName = (lastName + ' ' + firstName).trim() || String(rowObj['នាមត្រកូល និងនាមខ្លួន_1'] || rowObj['នាមត្រកូល និងនាមខ្លួន'] || '').trim();
   
   result['student_id_number'] = idNum;
   result['full_name'] = fullName;
@@ -256,6 +256,10 @@ export function applySchema(rowObj: Record<string, any>, rawArray: any[], header
     for (const h of field.headers) {
       if (rowObj[h] !== undefined) {
         val = rowObj[h];
+        break;
+      }
+      if (rowObj[`${h}_1`] !== undefined) {
+        val = rowObj[`${h}_1`];
         break;
       }
     }
@@ -276,23 +280,23 @@ export function applySchema(rowObj: Record<string, any>, rawArray: any[], header
     result[field.dbField] = normalized;
   }
   
-  // Custom manual mappings for family based on known indexes in the 99-column sheet
-  result['father_name'] = cleanString(rawArray[38]);
-  result['father_job'] = cleanString(rawArray[39]);
-  result['father_phone'] = cleanString(rawArray[40]);
+  // Custom manual mappings for family based on occurrence mappings
+  result['father_name'] = cleanString(rowObj['ឈ្មោះឪពុក_1'] || rowObj['ឈ្មោះឪពុក']);
+  result['father_job'] = cleanString(rowObj['មុខរបរ_1'] || rowObj['មុខរបរ']);
+  result['father_phone'] = cleanString(rowObj['លេខទូរស័ព្ទ_1'] || rowObj['លេខទូស័ព្ទ_1'] || rowObj['លេខទូរស័ព្ទ'] || rowObj['លេខទូស័ព្ទ']);
   
-  result['mother_name'] = cleanString(rawArray[41]);
-  result['mother_job'] = cleanString(rawArray[42]);
-  result['mother_phone'] = cleanString(rawArray[43]);
+  result['mother_name'] = cleanString(rowObj['ឈ្មោះម្តាយ_1'] || rowObj['ឈ្មោះម្តាយ']);
+  result['mother_job'] = cleanString(rowObj['មុខរបរ_2']);
+  result['mother_phone'] = cleanString(rowObj['លេខទូរស័ព្ទ_2'] || rowObj['លេខទូស័ព្ទ_2']);
   
-  result['guardian_name'] = cleanString(rawArray[45]);
-  result['guardian_job'] = cleanString(rawArray[46]);
-  result['guardian_phone'] = cleanString(rawArray[47]);
+  result['guardian_name'] = cleanString(rowObj['ឈ្មោះអាណាព្យាបាល_1'] || rowObj['ឈ្មោះអាណាព្យាបាល'] || rowObj['ឈ្មោះអ្នកអាណាព្យាបាល_1'] || rowObj['ឈ្មោះអ្នកអាណាព្យាបាល']);
+  result['guardian_job'] = cleanString(rowObj['មុខរបរ_3']);
+  result['guardian_phone'] = cleanString(rowObj['លេខទូរស័ព្ទ_3'] || rowObj['លេខទូស័ព្ទ_3']);
 
-  result['current_address'] = cleanString(rawArray[44] || rawArray[48]);
+  result['current_address'] = cleanString(rowObj['អាសយដ្ឋានបច្ចុប្បន្ន_1'] || rowObj['អាសយដ្ឋានបច្ចុប្បន្ន']);
   
   // Fallback for parent_phone
-  result['parent_phone'] = result['father_phone'] || result['mother_phone'] || result['guardian_phone'] || cleanString(rawArray[30]);
+  result['parent_phone'] = result['father_phone'] || result['mother_phone'] || result['guardian_phone'] || cleanString(rowObj['លេខទូរស័ព្ទសិស្ស_1'] || rowObj['លេខទូរស័ព្ទសិស្ស']);
 
   if (!result['parent_phone']) {
      warnings.push({ column: 'លេខទូរស័ព្ទ', problem: 'មិនមានលេខទូរស័ព្ទទំនាក់ទំនងទាល់តែសោះ' });

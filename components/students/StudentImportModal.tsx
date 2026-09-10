@@ -133,13 +133,17 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
 
           // Convert array to object based on headers
           const rowObj: Record<string, any> = {};
+          const headerCounts: Record<string, number> = {};
           headers.forEach((h: any, i: number) => {
              if (h) {
                 const key = String(h).trim();
-                if (!rowObj[key]) {
+                headerCounts[key] = (headerCounts[key] || 0) + 1;
+                const count = headerCounts[key];
+                
+                if (count === 1) {
                    rowObj[key] = rowArr[i];
                 } else {
-                   rowObj[`${key}_${i}`] = rowArr[i];
+                   rowObj[`${key}_${count}`] = rowArr[i];
                 }
              }
           });
