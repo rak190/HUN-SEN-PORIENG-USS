@@ -186,7 +186,18 @@ export function GeipExportModal({
 
         {/* Printable & Scrollable Preview Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-100/70">
+          <style dangerouslySetInnerHTML={{__html: `
+            @media print {
+              body * { visibility: hidden; }
+              #geip-print-section, #geip-print-section * { visibility: visible; }
+              #geip-print-section { position: absolute; left: 0; top: 0; width: 100%; }
+              @page { size: A4 landscape; margin: 10mm; }
+              body, html, * { font-family: 'Khmer OS Siemreap', 'Siemreap', sans-serif !important; color: black !important; }
+              .font-muol, h1, h2, h3, h4, [class*="font-black"], [class*="font-extrabold"] { font-family: 'Khmer OS Moul Light', 'Khmer OS Moul', 'Moul', cursive !important; }
+            }
+          `}} />
           <div
+            id="geip-print-section"
             ref={printRef}
             className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-slate-900 print:border-none print:shadow-none print:p-0 print:m-0"
           >

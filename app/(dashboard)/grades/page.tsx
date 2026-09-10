@@ -418,14 +418,6 @@ export default function GradesPage() {
         </div>
 
         <div className="flex items-center gap-3">
-
-          <button
-            onClick={() => setIsImportModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-700 text-xs font-black shadow-sm flex items-center gap-2 transition-all scale-[1.01]"
-          >
-            <Upload className="w-4 h-4" />
-            <span>នាំចូលពិន្ទុ</span>
-          </button>
           
           <button
             onClick={() => setIsGeipModalOpen(true)}
@@ -433,15 +425,6 @@ export default function GradesPage() {
           >
             <FileSpreadsheet className="w-4 h-4 text-indigo-700" />
             <span>Export GEIP ៣.១.៤</span>
-          </button>
-
-          <button
-            onClick={exportToExcel}
-            disabled={isExporting}
-            className="px-4 py-2.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-black shadow-sm flex items-center gap-2 transition-all scale-[1.01] disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            <span>{isExporting ? 'កំពុងទាញយក...' : 'ទាញយកគំរូ Excel'}</span>
           </button>
 
           <Link
