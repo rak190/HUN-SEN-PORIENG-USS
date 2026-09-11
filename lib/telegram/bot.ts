@@ -116,3 +116,55 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
     console.error('Error answering callback query:', error);
   }
 }
+
+/**
+ * Retrieve file metadata from Telegram
+ */
+export async function getFile(fileId: string) {
+  try {
+    const response = await fetch(`${TELEGRAM_API_URL}/getFile?file_id=${fileId}`);
+    const data = await response.json();
+    if (data.ok) {
+      return data.result;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting file from Telegram:', error);
+    return null;
+  }
+}
+
+/**
+ * Download file buffer from Telegram
+ */
+export async function downloadFile(filePath: string): Promise<ArrayBuffer | null> {
+  try {
+    const downloadUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${filePath}`;
+    const response = await fetch(downloadUrl);
+    if (!response.ok) return null;
+    return await response.arrayBuffer();
+  } catch (error) {
+    console.error('Error downloading file from Telegram:', error);
+    return null;
+  }
+}
+
+/**
+ * Send a document/file back to the user
+ */
+export async function sendDocument(chatId: number, documentUrl: string, caption?: string, replyMarkup?: InlineKeyboardMarkup) {
+  try {
+    await fetch(`${TELEGRAM_API_URL}/sendDocument`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        document: documentUrl,
+        caption,
+        reply_markup: replyMarkup,
+      }),
+    });
+  } catch (error) {
+    console.error('Error sending document:', error);
+  }
+}

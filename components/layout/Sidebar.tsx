@@ -142,6 +142,26 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
   const { profile, logout } = useAuth();
   const userRole = profile?.role || 'teacher';
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [linkCode, setLinkCode] = useState<string | null>(null);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+
+  const handleGenerateLink = async () => {
+    setIsGeneratingLink(true);
+    try {
+      const res = await fetch('/api/telegram/generate-link-code', { method: 'POST' });
+      const data = await res.json();
+      if (data.code) {
+        setLinkCode(data.code);
+      } else {
+        alert('មានបញ្ហាក្នុងការបង្កើតកូដភ្ជាប់។');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('មានបញ្ហាក្នុងការបង្កើតកូដភ្ជាប់។');
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  };
 
   const filteredItems = MENU_ITEMS.filter((item) => item.roles.includes(userRole));
 
@@ -322,7 +342,10 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
       {/* Support Telegram Modal (Full-Screen Frosted Glass Portal) */}
       <Modal
         isOpen={showSupportModal}
-        onClose={() => setShowSupportModal(false)}
+        onClose={() => {
+          setShowSupportModal(false);
+          setLinkCode(null);
+        }}
         size="sm"
         showCloseButton={true}
       >
@@ -335,28 +358,36 @@ export default function Sidebar({ onClose, className }: SidebarProps = {}) {
             មជ្ឈមណ្ឌលជំនួយគាំទ្រ
           </h2>
           <p className="text-xs font-semibold text-slate-500 mb-6 leading-relaxed">
-            ស្កេនកូដ QR ឬចុចប៊ូតុងខាងក្រោម ដើម្បីភ្ជាប់ទៅកាន់ Telegram Bot ជំនួយការរបស់សាលា។
+            ភ្ជាប់គណនីរបស់អ្នកទៅកាន់ Telegram ដើម្បីទទួលបានជំនួយ និងការជូនដំណឹងពីសាលាដោយស្វ័យប្រវត្តិ។
           </p>
 
-          <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-xs inline-block mb-6">
-            <QRCode
-              value="https://t.me/HSPR_Support_Bot"
-              size={180}
-              className="w-full h-auto"
-              fgColor="#0f172a"
-            />
-          </div>
-
-          <a
-            href="https://t.me/HSPR_Support_Bot"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setShowSupportModal(false)}
-            className="w-full py-3.5 bg-[#155EEF] hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-md transition-all text-sm cursor-pointer flex items-center justify-center gap-2 active:scale-98"
-          >
-            <MessageSquare className="w-4 h-4" />
-            បើកក្នុង Telegram
-          </a>
+          {!linkCode ? (
+            <div className="w-full flex flex-col gap-3">
+              <button
+                onClick={handleGenerateLink}
+                disabled={isGeneratingLink}
+                className="w-full py-3.5 bg-[#155EEF] hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-md transition-all text-sm cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isGeneratingLink ? 'កំពុងបង្កើតកូដ...' : 'បង្កើតកូដភ្ជាប់ (Generate Link Code)'}
+              </button>
+            </div>
+          ) : (
+            <div className="w-full bg-slate-50 border border-slate-200 rounded-xl p-6 text-center animate-in fade-in zoom-in duration-300">
+              <p className="text-sm text-slate-600 mb-2 font-medium">សូមផ្ញើកូដខាងក្រោមនេះចូលទៅកាន់ Telegram Bot៖</p>
+              <div className="bg-white px-4 py-3 rounded-lg border-2 border-[#155EEF] border-dashed mb-4">
+                <code className="text-2xl font-black text-[#155EEF] tracking-widest">/link {linkCode}</code>
+              </div>
+              <a
+                href={`https://t.me/HSPR_Support_Bot?start=link`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3 bg-[#155EEF] text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                <MessageSquare className="w-4 h-4" />
+                បើក Telegram Bot
+              </a>
+            </div>
+          )}
         </div>
       </Modal>
     </aside>

@@ -3,6 +3,8 @@ import { TelegramUpdate } from '@/lib/telegram/types';
 import { handleCommand } from '@/lib/telegram/handlers/commands';
 import { handleCallback } from '@/lib/telegram/handlers/callbacks';
 import { handleMessage } from '@/lib/telegram/handlers/messages';
+import { handleIncomingFile } from '@/lib/telegram/handlers/files';
+import { handleLinkCommand } from '@/lib/telegram/auth';
 
 export async function POST(req: Request) {
   try {
@@ -24,12 +26,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // 2. Handle Text Messages
+    // 2. Handle Incoming Files (Photos, Documents)
+    if (update.message && (update.message.document || (update.message.photo && update.message.photo.length > 0))) {
+      const chatId = update.message.chat.id;
+      await handleIncomingFile(chatId, update.message);
+      return NextResponse.json({ ok: true });
+    }
+
+    // 3. Handle Text Messages
     if (update.message && update.message.text) {
       const chatId = update.message.chat.id;
-      const text = update.message.text;
+      const text = update.message.text.trim();
 
-      // Try to handle as a command first
+      // Special handling for the /link command
+      if (text.startsWith('/link ')) {
+        const code = text.split(' ')[1];
+        if (code) {
+          await handleLinkCommand(chatId, code);
+          return NextResponse.json({ ok: true });
+        }
+      }
+
+      // Try to handle as a normal command first
       const isCommand = await handleCommand(chatId, text);
       
       // If it wasn't a recognized command, send the gentle fallback
