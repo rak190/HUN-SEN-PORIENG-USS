@@ -15,6 +15,7 @@ export default function PrincipalStudentsPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const [totalStudents, setTotalStudents] = useState(0);
+  const [searchResultCount, setSearchResultCount] = useState<number | null>(null);
   const [stats, setStats] = useState({ g12: 0, g11: 0, g10: 0, female: 0 });
   const [availableClasses, setAvailableClasses] = useState<{grade: string, classes: string[]}[]>([]);
 
@@ -97,7 +98,9 @@ export default function PrincipalStudentsPage() {
 
         setStudents(mapped);
         if (count !== null && (searchQuery || selectedFilter !== 'all')) {
-            // Update total pages based on filter
+            setSearchResultCount(count);
+        } else {
+            setSearchResultCount(null);
         }
       } catch (err) {
         console.error('Error fetching principal students:', err);
@@ -116,8 +119,8 @@ export default function PrincipalStudentsPage() {
   const currentStudents = students;
   const filterOptions = availableClasses;
   
-  // Estimate total pages for the current view
-  const totalPages = Math.max(1, Math.ceil((searchQuery || selectedFilter !== 'all' ? students.length : totalStudents) / itemsPerPage));
+  const activeCount = searchResultCount !== null ? searchResultCount : totalStudents;
+  const totalPages = Math.max(1, Math.ceil(activeCount / itemsPerPage));
   
   const g12Count = stats.g12;
   const g11Count = stats.g11;
@@ -237,7 +240,7 @@ export default function PrincipalStudentsPage() {
         <div className="p-5 bg-white border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
             <GraduationCap className="w-5 h-5 text-[#155EEF]" />
-            <span>បង្ហាញលទ្ធផលស្វែងរក ({filteredStudents.length} នាក់)</span>
+            <span>បង្ហាញលទ្ធផលស្វែងរក ({activeCount} នាក់)</span>
           </h3>
           <span className="text-xs font-extrabold text-[#64748B] bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
             {selectedFilter === 'all' 
@@ -320,7 +323,7 @@ export default function PrincipalStudentsPage() {
         {/* Pagination Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
           <span className="text-xs font-bold text-[#64748B]">
-            ទំព័រទី {currentPage} នៃ {totalPages} (សរុប {filteredStudents.length} នាក់)
+            ទំព័រទី {currentPage} នៃ {totalPages} (សរុប {activeCount} នាក់)
           </span>
 
           <div className="flex items-center gap-2">
