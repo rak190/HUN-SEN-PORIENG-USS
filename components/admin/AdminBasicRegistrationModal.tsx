@@ -272,6 +272,7 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
