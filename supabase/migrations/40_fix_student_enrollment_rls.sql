@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION is_admin()
 RETURNS BOOLEAN AS $$
   SELECT EXISTS (
     SELECT 1 FROM profiles
-    WHERE id = auth.uid()
+    WHERE id = auth.uid()::uuid
     AND role = 'admin'
   );
 $$ LANGUAGE sql SECURITY DEFINER;
@@ -15,14 +15,14 @@ CREATE OR REPLACE FUNCTION is_principal()
 RETURNS BOOLEAN AS $$
   SELECT EXISTS (
     SELECT 1 FROM profiles
-    WHERE id = auth.uid()
+    WHERE id = auth.uid()::uuid
     AND role = 'principal'
   );
 $$ LANGUAGE sql SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION user_school_id()
 RETURNS TEXT AS $$
-  SELECT school_id FROM profiles WHERE id = auth.uid();
+  SELECT school_id FROM profiles WHERE id = auth.uid()::uuid;
 $$ LANGUAGE sql SECURITY DEFINER;
 
 -- 2. SECURE STUDENTS RLS (Support progressive registration via student_enrollments)
