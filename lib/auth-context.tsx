@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (academicYear) setActiveAcademicYear(academicYear as AcademicYear);
           }
 
-          await refreshClassesForUser(session.user.id);
+          await refreshClassesForUser(session.user.id, (dbProfile as Profile)?.role);
         } else {
           setUser(null);
           setProfile(null);
@@ -77,8 +77,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         setUser(session.user);
         setIsDemoMode(false);
-        await fetchProfile(session.user.id);
-        await refreshClassesForUser(session.user.id);
+        const fetchedProfile = await fetchProfile(session.user.id);
+        await refreshClassesForUser(session.user.id, fetchedProfile?.role);
       } else {
         setUser(null);
         setProfile(null);
@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  async function fetchProfile(userId: string) {
+  async function fetchProfile(userId: string): Promise<Profile | null> {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -103,13 +103,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
       if (data && !error) {
         setProfile(data as Profile);
+        return data as Profile;
       }
     } catch (e) {
       console.error('Error fetching profile:', e);
     }
+    return null;
   }
 
-  async function refreshClassesForUser(userId: string) {
+  async function refreshClassesForUser(userId: string, userRole?: string) {
     try {
       // 1. Try to find classes assigned to this teacher
       const { data: teacherClasses } = await supabase
@@ -121,6 +123,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (teacherClasses && teacherClasses.length > 0) {
         setClasses(teacherClasses as Classroom[]);
         setActiveClass(prev => (prev && teacherClasses.some(c => c.id === prev.id)) ? prev : teacherClasses[0] as Classroom);
+        return;
+      }
+
+      // If the user is explicitly a teacher, do not fallback to fetching all classes
+      // This prevents unassigned teachers from seeing other teachers' classes
+      if (userRole === 'teacher') {
+        setClasses([]);
+        setActiveClass(null);
         return;
       }
 
@@ -144,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function refreshClasses() {
     if (user && !isDemoMode) {
-      await refreshClassesForUser(user.id);
+      await refreshClassesForUser(user.id, profile?.role);
     } else {
       setClasses([]);
     }

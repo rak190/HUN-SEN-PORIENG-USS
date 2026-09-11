@@ -43,11 +43,17 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       
-      // Fetch all students to match
+      // Get user profile for school_id scoping
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) throw new Error("Not authenticated");
+      const { data: profile } = await supabase.from('profiles').select('school_id').eq('id', authData.user.id).single();
+      
+      // Fetch all students to match, strictly scoped by school_id via inner join
       const { data: studentsData, error } = await supabase
         .from('students')
-        .select('id, full_name, class_id, classes(name)')
-        .eq('is_active', true);
+        .select('id, full_name, student_id_number, class_id, classes!inner(name, school_id)')
+        .eq('is_active', true)
+        .eq('classes.school_id', profile?.school_id);
 
       if (error) throw error;
 
@@ -91,6 +97,7 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
           // Must have a valid Number of Table (ល.រ) in column 0 to be a student row
           if (typeof row[0] !== 'number') continue;
 
+          const studentIdNumber = (row[1] || '').toString().trim();
           const lastName = (row[2] || '').toString().trim();
           const firstName = (row[3] || '').toString().trim();
           const studentName = `${lastName}${firstName}`.trim();
@@ -99,11 +106,11 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
           const classMod = (row[9] || '').toString().trim();
           const className = `${gradeLevel}${classMod}`;
 
-          // Match logic
-          const match = studentsData.find(s => 
-            s.full_name.replace(/\s+/g, '') === studentName.replace(/\s+/g, '') && 
-            (s.classes as any)?.name === className
-          );
+          // Match logic: Prefer student_id_number, fallback to exact name + class match
+          const match = studentsData.find(s => {
+            if (studentIdNumber && s.student_id_number === studentIdNumber) return true;
+            return s.full_name.replace(/\s+/g, '') === studentName.replace(/\s+/g, '') && (s.classes as any)?.name === className;
+          });
 
           const scores: Record<string, number> = {};
           let totalScore = 0;

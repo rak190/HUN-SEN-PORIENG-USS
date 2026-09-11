@@ -11,146 +11,59 @@ import { MasterGradeImportModal } from '@/components/principal/MasterGradeImport
 import { fetchPrincipalDashboardData } from '../actions';
 import Modal from '@/components/ui/Modal';
 
-const MOCK_TERMS = {
-  'sem1-2026': {
-    students: '1,345',
-    attendance: '96.8',
-    gpa: '3.42',
-    atRisk: '45',
-    girls: '685',
-    boys: '660',
-    weeklyData: [
-      { day: 'ច', present: 97, absent: 3 },
-      { day: 'អ', present: 96, absent: 4 },
-      { day: 'ព', present: 98, absent: 2 },
-      { day: 'ព្រ', present: 95, absent: 5 },
-      { day: 'សុ', present: 97, absent: 3 },
-    ],
-    trendData: [
-      { monthLabel: 'មករា', attendancePct: 92, gradePct: 65 },
-      { monthLabel: 'កុម្ភៈ', attendancePct: 94, gradePct: 68 },
-      { monthLabel: 'មីនា', attendancePct: 95, gradePct: 70 },
-      { monthLabel: 'មេសា', attendancePct: 93, gradePct: 71 },
-      { monthLabel: 'ឧសភា', attendancePct: 96, gradePct: 75 },
-      { monthLabel: 'មិថុនា', attendancePct: 97, gradePct: 78 },
-    ],
-    tableData: [
-      { grade: 'ថ្នាក់ទី 12', classes: 5, students: 245, att: 98.2, gpa: '3.65', ab: 72.4, eval: 'ល្អប្រសើរ' },
-      { grade: 'ថ្នាក់ទី 11', classes: 6, students: 260, att: 96.5, gpa: '3.40', ab: 64.0, eval: 'ល្អ' },
-      { grade: 'ថ្នាក់ទី 10', classes: 6, students: 285, att: 95.8, gpa: '3.35', ab: 58.5, eval: 'ល្អ' },
-      { grade: 'ថ្នាក់ទី 9', classes: 6, students: 290, att: 96.0, gpa: '3.28', ab: 55.0, eval: 'មធ្យមល្អ' },
-      { grade: 'ថ្នាក់ទី 8', classes: 5, students: 130, att: 94.5, gpa: '3.10', ab: 48.0, eval: 'មធ្យម' },
-      { grade: 'ថ្នាក់ទី 7', classes: 5, students: 135, att: 97.0, gpa: '3.50', ab: 68.0, eval: 'ល្អ' },
-    ]
-  },
-  'sem2-2026': {
-    students: '1,348',
-    attendance: '97.5',
-    gpa: '3.55',
-    atRisk: '28',
-    girls: '687',
-    boys: '661',
-    weeklyData: [
-      { day: 'ច', present: 98, absent: 2 },
-      { day: 'អ', present: 97, absent: 3 },
-      { day: 'ព', present: 99, absent: 1 },
-      { day: 'ព្រ', present: 96, absent: 4 },
-      { day: 'សុ', present: 98, absent: 2 },
-    ],
-    trendData: [
-      { monthLabel: 'កក្កដា', attendancePct: 97, gradePct: 76 },
-      { monthLabel: 'សីហា', attendancePct: 98, gradePct: 79 },
-      { monthLabel: 'កញ្ញា', attendancePct: 96, gradePct: 80 },
-      { monthLabel: 'តុលា', attendancePct: 95, gradePct: 78 },
-      { monthLabel: 'វិច្ឆិកា', attendancePct: 98, gradePct: 82 },
-      { monthLabel: 'ធ្នូ', attendancePct: 99, gradePct: 85 },
-    ],
-    tableData: [
-      { grade: 'ថ្នាក់ទី 12', classes: 5, students: 245, att: 99.1, gpa: '3.80', ab: 82.4, eval: 'ល្អប្រសើរ' },
-      { grade: 'ថ្នាក់ទី 11', classes: 6, students: 260, att: 97.5, gpa: '3.55', ab: 70.0, eval: 'ល្អ' },
-      { grade: 'ថ្នាក់ទី 10', classes: 6, students: 286, att: 96.8, gpa: '3.45', ab: 62.5, eval: 'ល្អ' },
-      { grade: 'ថ្នាក់ទី 9', classes: 6, students: 290, att: 97.0, gpa: '3.40', ab: 60.0, eval: 'ល្អ' },
-      { grade: 'ថ្នាក់ទី 8', classes: 5, students: 131, att: 95.5, gpa: '3.25', ab: 52.0, eval: 'មធ្យមល្អ' },
-      { grade: 'ថ្នាក់ទី 7', classes: 5, students: 136, att: 98.0, gpa: '3.65', ab: 72.0, eval: 'ល្អប្រសើរ' },
-    ]
-  },
-  'annual-2026': {
-    students: '1,348',
-    attendance: '97.1',
-    gpa: '3.48',
-    atRisk: '35',
-    girls: '687',
-    boys: '661',
-    weeklyData: [
-      { day: 'ច', present: 97, absent: 3 },
-      { day: 'អ', present: 96, absent: 4 },
-      { day: 'ព', present: 98, absent: 2 },
-      { day: 'ព្រ', present: 95, absent: 5 },
-      { day: 'សុ', present: 97, absent: 3 },
-    ],
-    trendData: [
-      { monthLabel: 'មករា', attendancePct: 92, gradePct: 65 },
-      { monthLabel: 'មីនា', attendancePct: 95, gradePct: 70 },
-      { monthLabel: 'ឧសភា', attendancePct: 96, gradePct: 75 },
-      { monthLabel: 'កក្កដា', attendancePct: 97, gradePct: 76 },
-      { monthLabel: 'កញ្ញា', attendancePct: 96, gradePct: 80 },
-      { monthLabel: 'ធ្នូ', attendancePct: 99, gradePct: 85 },
-    ],
-    tableData: [
-      { grade: 'ថ្នាក់ទី 12', classes: 5, students: 245, att: 98.6, gpa: '3.72', ab: 77.4, eval: 'ល្អប្រសើរ' },
-      { grade: 'ថ្នាក់ទី 11', classes: 6, students: 260, att: 97.0, gpa: '3.47', ab: 67.0, eval: 'ល្អ' },
-      { grade: 'ថ្នាក់ទី 10', classes: 6, students: 286, att: 96.3, gpa: '3.40', ab: 60.5, eval: 'ល្អ' },
-      { grade: 'ថ្នាក់ទី 9', classes: 6, students: 290, att: 96.5, gpa: '3.34', ab: 57.5, eval: 'មធ្យមល្អ' },
-      { grade: 'ថ្នាក់ទី 8', classes: 5, students: 131, att: 95.0, gpa: '3.17', ab: 50.0, eval: 'មធ្យម' },
-      { grade: 'ថ្នាក់ទី 7', classes: 5, students: 136, att: 97.5, gpa: '3.57', ab: 70.0, eval: 'ល្អ' },
-    ]
-  }
+const DEFAULT_STATE = {
+  students: '0',
+  attendance: '0.0',
+  gpa: '0.00',
+  atRisk: '0',
+  girls: '0',
+  boys: '0',
+  weeklyData: [],
+  trendData: [],
+  tableData: []
 };
 
-type TermKey = keyof typeof MOCK_TERMS;
+type TermKey = 'sem1-2026' | 'sem2-2026' | 'annual-2026';
 
 export default function PrincipalReportsPage() {
   const { profile } = useAuth();
   const [selectedTerm, setSelectedTerm] = useState<TermKey>('sem1-2026');
   const [showEwsModal, setShowEwsModal] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
   const [liveData, setLiveData] = useState<any | null>(null);
 
   useEffect(() => {
     async function loadData() {
+      setIsLoading(true);
       const data = await fetchPrincipalDashboardData();
       if (data) {
         setLiveData(data);
       }
+      setIsLoading(false);
     }
     loadData();
   }, []);
 
   const currentData = useMemo(() => {
-    const base = MOCK_TERMS[selectedTerm];
     if (liveData) {
       return { 
-        ...base, 
-        trendData: liveData.trendData,
-        students: liveData.totalStudents.toString(),
-        girls: liveData.girlsCount.toString(),
-        boys: liveData.boysCount.toString(),
-        attendance: liveData.overallAttendance,
-        gpa: liveData.overallGpa,
-        atRisk: liveData.atRiskCount.toString(),
-        tableData: liveData.tableData
+        ...DEFAULT_STATE,
+        trendData: liveData.trendData || [],
+        students: liveData.totalStudents?.toString() || '0',
+        girls: liveData.girlsCount?.toString() || '0',
+        boys: liveData.boysCount?.toString() || '0',
+        attendance: liveData.overallAttendance || '0.0',
+        gpa: liveData.overallGpa || '0.00',
+        atRisk: liveData.atRiskCount?.toString() || '0',
+        tableData: liveData.tableData || []
       };
     }
-    return base;
-  }, [selectedTerm, liveData]);
+    return DEFAULT_STATE;
+  }, [liveData]);
 
-  const atRiskStudents = liveData?.atRiskList || [
-    { id: '101', name: 'សៅ សុភាព', reasons: ['អវត្តមាន ៤ ដងក្នុងខែនេះ', 'ធ្លាក់ពិន្ទុគណិតវិទ្យា (៤៥)'], severity: 'high' as const },
-    { id: '102', name: 'ដួង វិចិត្រ', reasons: ['ធ្លាក់ពិន្ទុរូបវិទ្យា និងគីមីវិទ្យា'], severity: 'medium' as const },
-    { id: '103', name: 'ម៉ៅ រស្មី', reasons: ['បញ្ហាវិន័យ៖ ឈ្លោះប្រកែកគ្នា'], severity: 'high' as const },
-    { id: '104', name: 'កែវ មករា', reasons: ['អវត្តមាន ៧ ថ្ងៃជាប់គ្នា'], severity: 'high' as const }
-  ];
+  const atRiskStudents = liveData?.atRiskList || [];
 
 
   const generateSvgPath = (data: any[], key: 'attendancePct' | 'gradePct') => {
