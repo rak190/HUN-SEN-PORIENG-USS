@@ -21,7 +21,8 @@ interface StudentProfileDrawerProps {
 }
 
 export default function StudentProfileDrawer({ isOpen, onClose, initialData, activeTab = 1, onSave }: StudentProfileDrawerProps) {
-  const { role } = useAuth();
+  const { profile } = useAuth();
+  const role = profile?.role;
   const isAdmin = role === 'admin' || role === 'principal';
   const [formData, setFormData] = useState<Partial<MassiveProfilingStudent>>({});
   const [activeModalTab, setActiveModalTab] = useState(activeTab);

@@ -154,12 +154,12 @@ CREATE POLICY "Teachers can insert correction requests" ON correction_requests
 -- Admins and Principals can view and update all requests
 CREATE POLICY "Admins can view all correction requests" ON correction_requests
     FOR SELECT TO authenticated USING (
-        EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role IN ('admin', 'principal'))
+        (SELECT is_admin() OR is_principal())
     );
 
 CREATE POLICY "Admins can update correction requests" ON correction_requests
     FOR UPDATE TO authenticated USING (
-        EXISTS (SELECT 1 FROM user_roles WHERE user_roles.user_id = auth.uid() AND user_roles.role IN ('admin', 'principal'))
+        (SELECT is_admin() OR is_principal())
     );
 
 
