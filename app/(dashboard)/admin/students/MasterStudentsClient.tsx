@@ -11,6 +11,7 @@ import {
 import * as XLSX from 'xlsx';
 import StudentMigrationModal from './components/StudentMigrationModal';
 import StudentProfileDrawer from './components/StudentProfileDrawer';
+import AdminBasicRegistrationModal from '../../../components/admin/AdminBasicRegistrationModal';
 import { fetchExportData } from './actions';
 
 interface MasterStudentsClientProps {
@@ -26,7 +27,7 @@ interface MasterStudentsClientProps {
     desk: string;
   };
   filterOptions: {
-    classes: string[];
+    classes: { id: string; name: string }[];
     teachers: string[];
   };
 }
@@ -49,6 +50,7 @@ export default function MasterStudentsClient({
   const [selectedProfileStudent, setSelectedProfileStudent] = useState<any | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [localSearch, setLocalSearch] = useState(filters.q);
+  const [isBasicRegistrationModalOpen, setIsBasicRegistrationModalOpen] = useState(false);
 
   // Sync state with props
   useEffect(() => {
@@ -163,6 +165,12 @@ export default function MasterStudentsClient({
         </div>
         
         <div className="flex gap-2">
+          <button 
+            onClick={() => setIsBasicRegistrationModalOpen(true)}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
+          >
+            បញ្ចូលបញ្ជីឈ្មោះមូលដ្ឋាន
+          </button>
           <Link 
             href="/admin/giep-import"
             className="px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-colors border border-slate-200 shadow-sm flex items-center justify-center gap-2"
@@ -248,11 +256,13 @@ export default function MasterStudentsClient({
                 <select 
                   value={filters.class}
                   onChange={(e) => updateFilter('class', e.target.value)}
-                  className="w-full sm:w-32 pl-8 pr-7 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:border-slate-300 focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none transition-all appearance-none cursor-pointer shadow-sm"
+                  className="pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] appearance-none shadow-sm cursor-pointer"
                 >
                   <option value="all">គ្រប់ថ្នាក់</option>
-                  {filterOptions.classes.map(c => <option key={c} value={c}>{c}</option>)}
                   <option value="គ្មានថ្នាក់">គ្មានថ្នាក់</option>
+                  {filterOptions.classes.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
                 </select>
               </div>
 
@@ -472,7 +482,20 @@ export default function MasterStudentsClient({
 
       </div>
 
-      {/* Modals & Drawers */}
+      {/* Modals */}
+      <AdminBasicRegistrationModal
+        isOpen={isBasicRegistrationModalOpen}
+        onClose={() => setIsBasicRegistrationModalOpen(false)}
+        onSuccess={() => {
+          setIsBasicRegistrationModalOpen(false);
+          // Refresh the page
+          router.refresh();
+        }}
+        filterOptions={{
+          classes: filterOptions.classes
+        }}
+      />
+
       <StudentMigrationModal 
         isOpen={isMigrationModalOpen}
         onClose={() => setIsMigrationModalOpen(false)}

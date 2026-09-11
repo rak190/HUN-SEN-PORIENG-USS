@@ -28,8 +28,9 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
 
   // We need to figure out all unique classes and teachers for the dropdowns.
   // Instead of querying everything, we'll fetch them separately to populate filters.
-  const { data: dbClasses } = await supabase.from('classes').select('name, teacher_id');
-  const classNames = dbClasses ? [...new Set(dbClasses.map(c => c.name))] : [];
+  const { data: dbClasses } = await supabase.from('classes').select('id, name, teacher_id');
+  const classOptions = dbClasses ? dbClasses.map(c => ({ id: c.id, name: c.name })) : [];
+  const classNames = classOptions.map(c => c.name);
   
   const teacherIds = dbClasses ? [...new Set(dbClasses.map(c => c.teacher_id).filter(Boolean))] : [];
   let teacherProfiles: any[] = [];
@@ -118,7 +119,7 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
         desk: filterDesk
       }}
       filterOptions={{
-        classes: classNames,
+        classes: classOptions,
         teachers: teacherNames
       }}
     />

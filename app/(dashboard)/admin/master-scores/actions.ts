@@ -236,3 +236,60 @@ export async function calculateSummaryScores(period: string) {
 
   return { success: true, count: updates.length };
 }
+
+/**
+ * Validates that all scores correspond to an official, active student enrollment
+ * in the specified academic year. This protects the data integrity of monthly scores.
+ */
+export async function validateMonthlyScoreDataIntegrity(period: string, academic_year_id: string, class_id?: string) {
+  const supabase = await createClient();
+  try {
+    // 1. Fetch scores for the period
+    let scoresQuery = supabase.from('grades').select('student_id, class_id').eq('period', period);
+    if (class_id) {
+      scoresQuery = scoresQuery.eq('class_id', class_id);
+    }
+    const { data: scoresData, error: scoresErr } = await scoresQuery;
+    if (scoresErr) throw scoresErr;
+    if (!scoresData || scoresData.length === 0) {
+      return { success: true, isValid: true, message: 'មិនមានពិន្ទុដែលត្រូវត្រួតពិនិត្យទេ (No scores to validate)' };
+    }
+
+    const uniqueStudentIds = [...new Set(scoresData.map(s => s.student_id))];
+
+    // 2. Fetch active enrollments for these students in the current academic year
+    const { data: enrollmentsData, error: enrollmentsErr } = await supabase
+      .from('student_enrollments')
+      .select('student_id, class_id, enrollment_status')
+      .in('student_id', uniqueStudentIds)
+      .eq('academic_year_id', academic_year_id);
+
+    if (enrollmentsErr) throw enrollmentsErr;
+
+    // 3. Find any orphans (scores without a valid enrollment)
+    const validEnrollmentMap = new Map(enrollmentsData?.map(e => [e.student_id, e]));
+    
+    const orphanScores = scoresData.filter(score => {
+      const enrollment = validEnrollmentMap.get(score.student_id);
+      if (!enrollment) return true; // No enrollment at all
+      if (enrollment.enrollment_status !== 'active') return true; // Enrollment exists but not active
+      if (enrollment.class_id !== score.class_id) return true; // Class mismatch
+      return false;
+    });
+
+    if (orphanScores.length > 0) {
+      return { 
+        success: true, 
+        isValid: false, 
+        orphanCount: orphanScores.length,
+        message: `រកឃើញពិន្ទុចំនួន ${orphanScores.length} ដែលមិនមានចុះបញ្ជីមូលដ្ឋានផ្លូវការត្រឹមត្រូវក្នុងឆ្នាំសិក្សានេះទេ។ សូមរាយការណ៍ទៅ Admin។` 
+      };
+    }
+
+    return { success: true, isValid: true, message: 'ទិន្នន័យពិន្ទុត្រឹមត្រូវ' };
+  } catch (err: any) {
+    console.error('Data integrity validation failed:', err);
+    return { success: false, error: err.message };
+  }
+}
+

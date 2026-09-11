@@ -676,10 +676,7 @@ export default function StudentsPage() {
             selectedIdsCount={selectedIds.length}
             onDeleteSelected={handleDeleteSelected}
             isSaving={isSaving}
-            onOpenImport={() => setIsImportModalOpen(true)}
             onDownloadTemplate={handleDownloadTemplate}
-            onOpenGrid={() => setIsGridModalOpen(true)}
-            onAddStudent={openAddModal}
             onOpenBulkImage={() => setIsBulkImageModalOpen(true)}
           />
 

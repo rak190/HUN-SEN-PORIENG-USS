@@ -85,3 +85,45 @@ export async function fetchExportData(filters: { q?: string, class?: string, tea
 
   return { success: true, data: filtered };
 }
+
+export async function adminBasicRegisterAction(payload: {
+  records: Array<{ 
+    student_id_number: string; 
+    full_name: string; 
+    gender: string; 
+    class_id: string; 
+    status: string; 
+  }>;
+  academic_year_id: string;
+}) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    const { user } = await requireAdmin(); // strict admin requirement
+    const supabase = await createClient(); // this uses the service role for admin routes? 
+    // Wait, createAdminClient is usually used for bypass RLS. Let's import it.
+    // Actually, createClient is fine because requireAdmin ensures we are admin, but let's see what was imported.
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const adminSupabase = createAdminClient();
+
+    const { data, error } = await adminSupabase.rpc('bulk_quick_register_students', {
+      student_records: payload.records,
+      target_year_id: payload.academic_year_id,
+      admin_user_id: user?.id
+    });
+
+    if (error) {
+      console.error('Admin basic register error:', error);
+      return { success: false, error: error.message };
+    }
+
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/admin/students');
+    revalidatePath('/students');
+    revalidatePath('/classes/info');
+    return { success: true, count: data?.count || 0 };
+  } catch (err: any) {
+    console.error('Admin basic register action caught error:', err?.message);
+    return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
+
