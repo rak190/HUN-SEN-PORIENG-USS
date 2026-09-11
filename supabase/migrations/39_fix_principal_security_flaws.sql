@@ -1,12 +1,12 @@
 -- 39_fix_principal_security_flaws.sql
 BEGIN;
 
--- 1. ENSURE HELPER FUNCTIONS EXIST (Defense in depth)
+-- 1. ENSURE HELPER FUNCTIONS EXIST
 CREATE OR REPLACE FUNCTION is_admin()
 RETURNS BOOLEAN AS $$
   SELECT EXISTS (
     SELECT 1 FROM profiles
-    WHERE id = auth.uid()
+    WHERE id::text = auth.uid()::text
     AND role = 'admin'
   );
 $$ LANGUAGE sql SECURITY DEFINER;
@@ -15,14 +15,14 @@ CREATE OR REPLACE FUNCTION is_principal()
 RETURNS BOOLEAN AS $$
   SELECT EXISTS (
     SELECT 1 FROM profiles
-    WHERE id = auth.uid()
+    WHERE id::text = auth.uid()::text
     AND role = 'principal'
   );
 $$ LANGUAGE sql SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION user_school_id()
 RETURNS TEXT AS $$
-  SELECT school_id FROM profiles WHERE id = auth.uid();
+  SELECT school_id FROM profiles WHERE id::text = auth.uid()::text;
 $$ LANGUAGE sql SECURITY DEFINER;
 
 
@@ -36,7 +36,7 @@ DROP POLICY IF EXISTS "Profiles viewable by everyone" ON profiles;
 -- 2. Admins can see all profiles
 -- 3. Principals can only see profiles within their own school
 CREATE POLICY "Profiles select scope" ON profiles FOR SELECT USING (
-  auth.uid() = id OR 
+  auth.uid()::text = id::text OR 
   is_admin() OR 
   (is_principal() AND school_id = user_school_id())
 );
