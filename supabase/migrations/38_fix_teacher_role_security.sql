@@ -1,7 +1,26 @@
 -- 38_fix_teacher_role_security.sql
 BEGIN;
 
--- 1. DROP EXISTING FLAWED POLICY
+-- 1. ENSURE HELPER FUNCTIONS EXIST
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+    AND role = 'admin'
+  );
+$$ LANGUAGE sql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION is_principal()
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+    AND role = 'principal'
+  );
+$$ LANGUAGE sql SECURITY DEFINER;
+
+-- 2. DROP EXISTING FLAWED POLICY
 DROP POLICY IF EXISTS "Classes manage scope" ON classes;
 
 -- 2. RECREATE POLICY WITH TENANT ISOLATION FOR TEACHERS

@@ -1,11 +1,29 @@
 -- 37_fix_principal_role_security.sql
 BEGIN;
 
--- 1. DROP THE VULNERABLE POLICIES FROM MIGRATION 35
+-- 1. ENSURE HELPER FUNCTIONS EXIST
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+    AND role = 'admin'
+  );
+$$ LANGUAGE sql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION is_principal()
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+    AND role = 'principal'
+  );
+$$ LANGUAGE sql SECURITY DEFINER;
+
+-- 2. DROP THE VULNERABLE POLICIES FROM MIGRATION 35
 DROP POLICY IF EXISTS "Teachers modify students in class" ON students;
 DROP POLICY IF EXISTS "Teachers modify attendance in class" ON attendance_records;
 DROP POLICY IF EXISTS "Teachers modify grades in class" ON grades;
-DROP POLICY IF EXISTS "Teachers modify grade records in class" ON grade_records;
 DROP POLICY IF EXISTS "Teachers modify health in class" ON student_health_records;
 DROP POLICY IF EXISTS "Teachers modify visits in class" ON home_visits;
 DROP POLICY IF EXISTS "Teachers modify interventions in class" ON support_interventions;
