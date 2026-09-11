@@ -23,11 +23,10 @@ export default function PrincipalStudentsPage() {
 
   useEffect(() => {
     async function fetchSchoolStats() {
-      // 1. Fetch aggregate stats using a lightweight query
+      // 1. Fetch aggregate stats using a lightweight query from the view
       const { data, error } = await supabase
-        .from('students')
-        .select('gender, classes(name, grade)')
-        .eq('is_active', true);
+        .from('active_class_rosters')
+        .select('gender, class_name, grade');
         
       if (!error && data) {
         let g12 = 0, g11 = 0, g10 = 0, female = 0;
@@ -35,13 +34,13 @@ export default function PrincipalStudentsPage() {
         
         data.forEach((s: any) => {
           if (s.gender === 'F' || s.gender === 'ស្រី') female++;
-          const grade = s.classes?.grade ? String(s.classes.grade) : '12';
+          const grade = s.grade ? String(s.grade) : '12';
           if (grade === '12') g12++;
           if (grade === '11') g11++;
           if (grade === '10') g10++;
           
           if (!options[grade]) options[grade] = new Set();
-          if (s.classes?.name) options[grade].add(s.classes.name);
+          if (s.class_name) options[grade].add(s.class_name);
         });
         
         setStats({ g12, g11, g10, female });
@@ -62,9 +61,8 @@ export default function PrincipalStudentsPage() {
       setLoading(true);
       try {
         let query = supabase
-          .from('students')
-          .select('id, full_name, student_id_number, gender, is_active, class_id, classes!inner(id, name, grade, track)', { count: 'exact' })
-          .eq('is_active', true)
+          .from('active_class_rosters')
+          .select('id, full_name, student_id_number, gender, is_active, enrollment_class_id, class_name, grade', { count: 'exact' })
           .order('full_name');
 
         if (searchQuery) {
@@ -73,9 +71,9 @@ export default function PrincipalStudentsPage() {
 
         if (selectedFilter !== 'all') {
           if (selectedFilter.startsWith('grade:')) {
-            query = query.eq('classes.grade', selectedFilter.split(':')[1]);
+            query = query.eq('grade', selectedFilter.split(':')[1]);
           } else if (selectedFilter.startsWith('class:')) {
-            query = query.eq('classes.name', selectedFilter.split(':')[1]);
+            query = query.eq('class_name', selectedFilter.split(':')[1]);
           }
         }
 
@@ -91,8 +89,8 @@ export default function PrincipalStudentsPage() {
           dbId: s.id,
           name: s.full_name,
           gender: s.gender === 'F' || s.gender === 'ស្រី' ? 'F' : 'M',
-          grade: s.classes?.grade ? String(s.classes.grade) : '12',
-          class: s.classes?.name || 'គ្មានថ្នាក់',
+          grade: s.grade ? String(s.grade) : '12',
+          class: s.class_name || 'គ្មានថ្នាក់',
           status: 'សកម្ម'
         }));
 
