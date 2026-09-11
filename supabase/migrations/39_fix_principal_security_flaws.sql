@@ -42,48 +42,16 @@ CREATE POLICY "Profiles select scope" ON profiles FOR SELECT USING (
 );
 
 
--- 3. EXTEND SCHOOLS TABLE FOR ISOLATED SETTINGS (Prevent Global Config Overwrite)
+-- 3. EXTEND SCHOOLS TABLE FOR ISOLATED SETTINGS
 ALTER TABLE schools 
 ADD COLUMN IF NOT EXISTS address TEXT,
 ADD COLUMN IF NOT EXISTS principal_name TEXT,
 ADD COLUMN IF NOT EXISTS principal_phone TEXT,
 ADD COLUMN IF NOT EXISTS ict_lead_name TEXT,
 ADD COLUMN IF NOT EXISTS ict_lead_phone TEXT,
-ADD COLUMN IF NOT EXISTS ict_lead_email TEXT,
-ADD COLUMN IF NOT EXISTS smc_head_name TEXT,
-ADD COLUMN IF NOT EXISTS smc_head_phone TEXT,
-ADD COLUMN IF NOT EXISTS water_supply TEXT,
-ADD COLUMN IF NOT EXISTS electricity TEXT,
-ADD COLUMN IF NOT EXISTS internet TEXT;
-
--- 4. MIGRATE EXISTING SETTINGS FROM SYSTEM_SETTINGS
--- Copy from the global system_settings JSON blob into the primary school
-DO $$
-DECLARE
-  v_school_info JSONB;
-BEGIN
-  SELECT value INTO v_school_info 
-  FROM system_settings 
-  WHERE key = 'school_info' 
-  LIMIT 1;
-
-  IF v_school_info IS NOT NULL THEN
-    UPDATE schools SET
-      name = COALESCE(v_school_info->>'schoolName', name),
-      code = COALESCE(v_school_info->>'schoolCode', code),
-      address = COALESCE(v_school_info->>'village', '') || ' ' || COALESCE(v_school_info->>'commune', '') || ' ' || COALESCE(v_school_info->>'district', '') || ' ' || COALESCE(v_school_info->>'province', ''),
-      principal_name = v_school_info->>'principalName',
-      principal_phone = v_school_info->>'principalPhone',
-      ict_lead_name = v_school_info->>'ictLeadName',
-      ict_lead_phone = v_school_info->>'ictLeadPhone',
-      ict_lead_email = v_school_info->>'ictLeadEmail',
-      smc_head_name = v_school_info->>'smcHeadName',
-      smc_head_phone = v_school_info->>'smcHeadPhone',
-      water_supply = v_school_info->>'waterSupply',
-      electricity = v_school_info->>'electricity',
-      internet = v_school_info->>'internet'
-    WHERE id = 'main-school';
-  END IF;
-END $$;
+ADD COLUMN IF NOT EXISTS academic_year TEXT,
+ADD COLUMN IF NOT EXISTS semester TEXT,
+ADD COLUMN IF NOT EXISTS logo_url TEXT,
+ADD COLUMN IF NOT EXISTS contact_email TEXT;
 
 COMMIT;
