@@ -22,7 +22,7 @@ $$ LANGUAGE sql SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION user_school_id()
 RETURNS TEXT AS $$
-  SELECT school_id FROM profiles WHERE id::text = auth.uid()::text;
+  SELECT school_id::text FROM profiles WHERE id::text = auth.uid()::text;
 $$ LANGUAGE sql SECURITY DEFINER;
 
 
@@ -38,7 +38,7 @@ DROP POLICY IF EXISTS "Profiles viewable by everyone" ON profiles;
 CREATE POLICY "Profiles select scope" ON profiles FOR SELECT USING (
   auth.uid()::text = id::text OR 
   is_admin() OR 
-  (is_principal() AND school_id = user_school_id())
+  (is_principal() AND school_id::text = user_school_id())
 );
 
 

@@ -22,7 +22,7 @@ $$ LANGUAGE sql SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION user_school_id()
 RETURNS TEXT AS $$
-  SELECT school_id FROM profiles WHERE id::text = auth.uid()::text;
+  SELECT school_id::text FROM profiles WHERE id::text = auth.uid()::text;
 $$ LANGUAGE sql SECURITY DEFINER;
 
 -- 2. SECURE STUDENTS RLS (Support progressive registration via student_enrollments)
@@ -30,11 +30,11 @@ DROP POLICY IF EXISTS "Students select scope" ON students;
 
 CREATE POLICY "Students select scope" ON students FOR SELECT USING (
   is_admin() OR 
-  (class_id IN (SELECT id FROM classes WHERE school_id = user_school_id())) OR
+  (class_id IN (SELECT id FROM classes WHERE school_id::text = user_school_id())) OR
   EXISTS (
     SELECT 1 FROM student_enrollments e
     JOIN classes c ON c.id = e.class_id
-    WHERE e.student_id = students.id AND c.school_id = user_school_id()
+    WHERE e.student_id = students.id AND c.school_id::text = user_school_id()
   )
 );
 
@@ -42,19 +42,19 @@ DROP POLICY IF EXISTS "Students manage scope" ON students;
 
 CREATE POLICY "Students manage scope" ON students FOR ALL USING (
   is_admin() OR 
-  (class_id IN (SELECT id FROM classes WHERE school_id = user_school_id())) OR
+  (class_id IN (SELECT id FROM classes WHERE school_id::text = user_school_id())) OR
   EXISTS (
     SELECT 1 FROM student_enrollments e
     JOIN classes c ON c.id = e.class_id
-    WHERE e.student_id = students.id AND c.school_id = user_school_id()
+    WHERE e.student_id = students.id AND c.school_id::text = user_school_id()
   )
 ) WITH CHECK (
   is_admin() OR 
-  (class_id IN (SELECT id FROM classes WHERE school_id = user_school_id())) OR
+  (class_id IN (SELECT id FROM classes WHERE school_id::text = user_school_id())) OR
   EXISTS (
     SELECT 1 FROM student_enrollments e
     JOIN classes c ON c.id = e.class_id
-    WHERE e.student_id = students.id AND c.school_id = user_school_id()
+    WHERE e.student_id = students.id AND c.school_id::text = user_school_id()
   )
 );
 
