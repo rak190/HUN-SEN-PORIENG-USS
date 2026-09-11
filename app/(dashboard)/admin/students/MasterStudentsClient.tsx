@@ -11,7 +11,7 @@ import {
 import * as XLSX from 'xlsx';
 import StudentMigrationModal from './components/StudentMigrationModal';
 import StudentProfileDrawer from './components/StudentProfileDrawer';
-import AdminBasicRegistrationModal from '../../../components/admin/AdminBasicRegistrationModal';
+import AdminBasicRegistrationModal from '@/components/admin/AdminBasicRegistrationModal';
 import { fetchExportData } from './actions';
 
 interface MasterStudentsClientProps {
