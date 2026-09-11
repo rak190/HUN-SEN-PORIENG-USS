@@ -32,6 +32,8 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
     student_id_number: '',
     full_name: '',
     gender: 'M',
+    desk_number: '',
+    room_number: ''
   });
 
   const [gridData, setGridData] = useState<any[]>(Array(15).fill(null).map(generateEmptyRow));
@@ -57,7 +59,7 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
     const rows = pasteData.split('\n').filter(r => r.trim() !== '');
     if (rows.length === 0) return;
 
-    const columns = ['no', 'student_id_number', 'full_name', 'gender'];
+    const columns = ['no', 'student_id_number', 'full_name', 'gender', 'desk_number', 'room_number'];
     const startColIndex = columns.indexOf(startField);
     if (startColIndex === -1) return;
 
@@ -132,6 +134,8 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
         gender: isFemale ? 'F' : 'M',
         student_id_number: s.student_id_number.trim(),
         full_name: s.full_name.trim(),
+        desk_number: s.desk_number?.trim() || null,
+        room_number: s.room_number?.trim() || null,
       };
     });
 
@@ -157,7 +161,7 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 lg:p-10 animate-overlayFade" onClick={onClose}>
-      <div className="w-full h-full max-w-4xl bg-white rounded-[24px] shadow-2xl overflow-hidden flex flex-col relative animate-modalScale" onClick={e => e.stopPropagation()}>
+      <div className="w-full h-full max-w-5xl bg-white rounded-[24px] shadow-2xl overflow-hidden flex flex-col relative animate-modalScale" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
         <div className="px-6 py-5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between shrink-0 gap-4">
@@ -167,7 +171,7 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
             </div>
             <div>
               <h2 className="text-lg font-black text-slate-900">បញ្ចូលបញ្ជីឈ្មោះសិស្សមូលដ្ឋាន (Official Roster)</h2>
-              <p className="text-xs font-bold text-slate-500">Fast Entry: អត្តលេខ ឈ្មោះ ភេទ និងថ្នាក់។ (ការពារជាន់គ្នា)</p>
+              <p className="text-xs font-bold text-slate-500">Fast Entry: អាច Copy-Paste ពី Excel មកកាន់តារាងនេះបានដោយផ្ទាល់។</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -193,9 +197,11 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
             <thead className="bg-slate-100 sticky top-0 z-10 shadow-sm font-black text-slate-600 text-xs uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-3 border border-slate-200 w-12 text-center text-slate-400">ល.រ</th>
-                <th className="px-4 py-3 border border-slate-200 w-48 text-blue-600">អត្តលេខ (ID)*</th>
-                <th className="px-4 py-3 border border-slate-200 w-full text-blue-600">គោត្តនាម និងនាម (Name)*</th>
-                <th className="px-4 py-3 border border-slate-200 w-32 text-center">ភេទ (Gender)</th>
+                <th className="px-4 py-3 border border-slate-200 w-32 text-blue-600">អត្តលេខ*</th>
+                <th className="px-4 py-3 border border-slate-200 w-full text-blue-600">គោត្តនាម និងនាម*</th>
+                <th className="px-4 py-3 border border-slate-200 w-24 text-center">ភេទ*</th>
+                <th className="px-4 py-3 border border-slate-200 w-24 text-center">លេខតុ</th>
+                <th className="px-4 py-3 border border-slate-200 w-24 text-center">បន្ទប់</th>
               </tr>
             </thead>
             <tbody>
@@ -235,6 +241,28 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
                       <option value="M">ប្រុស (M)</option>
                       <option value="F">ស្រី (F)</option>
                     </select>
+                  </td>
+                  <td className="border border-slate-200 p-0 relative">
+                    <input
+                      type="text"
+                      className="w-full h-full min-h-[40px] px-4 py-2 bg-transparent outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 text-center"
+                      value={row.desk_number}
+                      onChange={(e) => handleChange(idx, 'desk_number', e.target.value)}
+                      onPaste={(e) => handlePaste(e, idx, 'desk_number')}
+                      data-row={idx} data-col="desk_number"
+                      placeholder="ស្រេចចិត្ត"
+                    />
+                  </td>
+                  <td className="border border-slate-200 p-0 relative">
+                    <input
+                      type="text"
+                      className="w-full h-full min-h-[40px] px-4 py-2 bg-transparent outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 text-center"
+                      value={row.room_number}
+                      onChange={(e) => handleChange(idx, 'room_number', e.target.value)}
+                      onPaste={(e) => handlePaste(e, idx, 'room_number')}
+                      data-row={idx} data-col="room_number"
+                      placeholder="ស្រេចចិត្ត"
+                    />
                   </td>
                 </tr>
               ))}

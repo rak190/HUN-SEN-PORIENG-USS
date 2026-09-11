@@ -9,6 +9,11 @@ import {
   ArrowRightLeft, UserX, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+// Assuming the font exists or we fallback
+import { suwannaphumBase64 } from '@/public/fonts/SuwannaphumBase64';
+
 import StudentMigrationModal from './components/StudentMigrationModal';
 import StudentProfileDrawer from './components/StudentProfileDrawer';
 import AdminBasicRegistrationModal from '@/components/admin/AdminBasicRegistrationModal';
@@ -85,6 +90,69 @@ export default function MasterStudentsClient({
     router.push(`${pathname}?${params.toString()}`);
   };
 
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    try {
+      const res = await fetchExportData(filters);
+      if (!res.success) {
+        alert("បរាជ័យក្នុងការទាញយកទិន្នន័យ៖ " + res.error);
+        return;
+      }
+      
+      const exportData = res.data;
+      if (!exportData || exportData.length === 0) {
+        alert("មិនមានទិន្នន័យសម្រាប់ទាញយកទេ");
+        return;
+      }
+
+      const doc = new jsPDF();
+      
+      // Add Khmer font
+      doc.addFileToVFS("Suwannaphum.ttf", suwannaphumBase64);
+      doc.addFont("Suwannaphum.ttf", "Suwannaphum", "normal");
+      doc.setFont("Suwannaphum");
+
+      doc.setFontSize(16);
+      doc.text("បញ្ជីរាយនាមសិស្ស (Student Roster)", 14, 15);
+      
+      doc.setFontSize(10);
+      doc.text(`សរុប: ${exportData.length} នាក់`, 14, 22);
+
+      const tableData = exportData.map((s: any, index: number) => [
+        index + 1,
+        s.student_id_number || '',
+        s.full_name,
+        s.gender,
+        s.class_name,
+        s.desk_number || '',
+        s.room_number || '',
+        s.is_active ? 'សកម្ម' : 'ផ្អាក'
+      ]);
+
+      autoTable(doc, {
+        head: [['ល.រ', 'អត្តលេខ', 'គោត្តនាម និងនាម', 'ភេទ', 'ថ្នាក់', 'លេខតុ', 'បន្ទប់', 'ស្ថានភាព']],
+        body: tableData,
+        startY: 25,
+        styles: {
+          font: 'Suwannaphum',
+          fontSize: 9,
+        },
+        headStyles: {
+          fillColor: [21, 94, 239],
+          textColor: 255,
+          fontStyle: 'bold'
+        }
+      });
+
+      doc.save(`Students_Roster_${new Date().toLocaleDateString('km-KH').replace(/\//g, '-')}.pdf`);
+    } catch (err) {
+      console.error(err);
+      alert("មានបញ្ហាក្នុងការទាញយក PDF");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleExport = async () => {
     setIsExporting(true);
     try {
@@ -137,6 +205,25 @@ export default function MasterStudentsClient({
   };
 
   const handleDownloadTemplate = () => {
+    // 1. Instructions Sheet (Read Me)
+    const readmeData = [
+      ['ការណែនាំអំពីការប្រើប្រាស់គំរូ Excel (Read Me)'],
+      [''],
+      ['១. សូមកុំប្តូរឈ្មោះ Column (ជួរឈរ) ខាងលើឱ្យសោះ។ ប្រព័ន្ធនឹងអានទិន្នន័យតាមឈ្មោះទាំងនេះ។'],
+      ['២. ព័ត៌មានដែលចាំបាច់ត្រូវតែមាន៖ អត្តលេខ, នាមត្រកូល, នាមខ្លួន, និង ភេទ។'],
+      ['៣. ភេទ៖ សូមបញ្ចូល "M" ឬ "ប្រុស" សម្រាប់សិស្សប្រុស, "F" ឬ "ស្រី" សម្រាប់សិស្សស្រី។'],
+      ['៤. ថ្នាក់៖ សូមបញ្ចូលឈ្មោះថ្នាក់ឱ្យបានត្រឹមត្រូវ (ឧ. "7A", "10A") បើមិនទាន់មានថ្នាក់ សូមទុកទទេ។'],
+      ['៥. លេខតុ និង បន្ទប់ប្រឡង៖ អាចទុកទទេបានប្រសិនបើមិនទាន់មាន។'],
+      ['៦. ឆ្នាំសិក្សា៖ សូមបញ្ចូលឆ្នាំសិក្សាបច្ចុប្បន្ន (ឧ. "2024-2025")។'],
+      [''],
+      ['បញ្ជាក់៖ ទិន្នន័យដែលបញ្ចូលនៅទីនេះ នឹងក្លាយជាទិន្នន័យគោល (Basic Data) សម្រាប់គ្រូបន្ទុកថ្នាក់។']
+    ];
+
+    const wsReadme = XLSX.utils.aoa_to_sheet(readmeData);
+    // Set column widths for readme
+    wsReadme['!cols'] = [{ wch: 80 }];
+
+    // 2. Data Template Sheet
     const wsData = [{
       'អត្តលេខ': '',
       'នាមត្រកូល': '',
@@ -149,8 +236,23 @@ export default function MasterStudentsClient({
     }];
 
     const ws = XLSX.utils.json_to_sheet(wsData);
+    
+    // Set column widths for data
+    ws['!cols'] = [
+      { wch: 15 }, // អត្តលេខ
+      { wch: 20 }, // នាមត្រកូល
+      { wch: 20 }, // នាមខ្លួន
+      { wch: 10 }, // ភេទ
+      { wch: 15 }, // ថ្នាក់
+      { wch: 15 }, // ឆ្នាំសិក្សា
+      { wch: 10 }, // លេខតុ
+      { wch: 15 }  // បន្ទប់ប្រឡង
+    ];
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.utils.book_append_sheet(wb, wsReadme, "ការណែនាំ (Read Me)");
+    XLSX.utils.book_append_sheet(wb, ws, "ទិន្នន័យសិស្ស (Data)");
+    
     XLSX.writeFile(wb, `Basic_Registration_Template.xlsx`);
   };
 
@@ -202,6 +304,14 @@ export default function MasterStudentsClient({
             className="px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-colors border border-slate-200 shadow-sm flex items-center justify-center gap-2"
           >
              ទាញយកគំរូ Excel
+          </button>
+          <button 
+            onClick={handleExportPDF}
+            disabled={isExporting || totalCount === 0}
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isExporting ? <span className="animate-spin text-xl leading-none">⟳</span> : <Download className="w-4 h-4" />}
+            {isExporting ? 'កំពុងទាញយក...' : 'ទាញយក PDF'}
           </button>
           <button 
             onClick={handleExport}

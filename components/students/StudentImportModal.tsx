@@ -159,10 +159,23 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
           }
 
           if (status !== 'invalid') {
-            const dupResult = await detectDuplicate(mappedData, existingStudentsInDb, results.map(r => r.data));
-            if (dupResult.status === 'matched_existing' || dupResult.status === 'possible_duplicate' || dupResult.status === 'duplicate_within_file') {
-              errors.push({ column: 'អត្តលេខ/ឈ្មោះ', problem: dupResult.reason || 'ស្ទួន', suggestion: 'សិស្សនេះមានរួចហើយ' });
-              status = 'duplicate';
+            const existingMatch = existingStudentsInDb.find(
+                s => s.student_id_number === mappedData.student_id_number
+            );
+
+            if (!existingMatch) {
+              errors.push({ column: 'អត្តលេខ', problem: 'មិនមានសិស្សនេះក្នុងថ្នាក់អ្នកទេ', suggestion: 'គ្រូបន្ទុកថ្នាក់មិនអាចបង្កើតសិស្សថ្មីបានទេ (សូមទាក់ទង Admin)' });
+              status = 'invalid';
+            } else {
+               // Append the existing database ID so we can do a proper UPDATE
+               mappedData.id = existingMatch.id;
+            }
+            
+            // Check if duplicated in the file itself
+            const fileDups = results.filter(r => r.data.student_id_number === mappedData.student_id_number);
+            if (fileDups.length > 0) {
+               errors.push({ column: 'អត្តលេខ', problem: 'ស្ទួនក្នុងឯកសារនេះ', suggestion: 'លុបជួរស្ទួនចេញ' });
+               status = 'duplicate';
             }
           }
 
@@ -171,7 +184,7 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
             status,
             errors,
             warnings,
-            data: { ...mappedData, status: 'new', is_active: true }
+            data: { ...mappedData, class_id: activeClass?.id } // ensure class_id is preserved
           });
         }
 
@@ -197,7 +210,7 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
 
     if (isDemoMode || !activeClass) {
       setTimeout(() => {
-        onSuccess(validRows.map((r, idx) => ({ ...r.data, id: `import-${idx}-${Date.now()}`, class_id: activeClass?.id || 'demo-class-1' })));
+        onSuccess(validRows.map((r) => ({ ...r.data })));
         setLoading(false);
         onClose();
       }, 500);
@@ -205,12 +218,16 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
     }
 
     try {
-      const payload = validRows.map(r => ({
-        ...r.data,
-        class_id: activeClass.id,
-      }));
+      const payload = validRows.map(r => {
+        // Strip undefined or empty fields so we don't overwrite existing data with empty strings 
+        // unless they explicitly want to? The schema logic sets missing fields to empty strings or nulls.
+        // For a bulk UPDATE, we will upsert the entire mapped object.
+        const record = { ...r.data };
+        return record;
+      });
 
-      const { data, error } = await supabase.from('students').insert(payload).select();
+      // Upsert using the primary key 'id' which we mapped earlier
+      const { data, error } = await supabase.from('students').upsert(payload, { onConflict: 'id' }).select();
       if (error) {
         throw error;
       }
