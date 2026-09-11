@@ -60,6 +60,42 @@ export const studentImportSchema: ImportSchemaField[] = [
     validate: (val) => val ? null : 'បាត់អត្តលេខសិស្ស'
   },
   {
+    canonicalField: 'class_id',
+    dbField: '', // We resolve class name to class_id separately
+    headers: ['ថ្នាក់', 'Class', 'កម្រិត'],
+    type: 'string',
+    required: false,
+    missingValueBehavior: 'empty_string',
+    normalize: (val) => String(val || '').trim()
+  },
+  {
+    canonicalField: 'academic_year',
+    dbField: '', // Handled separately
+    headers: ['ឆ្នាំសិក្សា', 'Academic Year'],
+    type: 'string',
+    required: false,
+    missingValueBehavior: 'empty_string',
+    normalize: (val) => String(val || '').trim()
+  },
+  {
+    canonicalField: 'desk_number',
+    dbField: 'desk_number',
+    headers: ['លេខតុ', 'Desk'],
+    type: 'string',
+    required: false,
+    missingValueBehavior: 'empty_string',
+    normalize: (val) => String(val || '').trim()
+  },
+  {
+    canonicalField: 'room_number',
+    dbField: 'room_number',
+    headers: ['លេខបន្ទប់', 'បន្ទប់ប្រឡង', 'Room'],
+    type: 'string',
+    required: false,
+    missingValueBehavior: 'empty_string',
+    normalize: (val) => String(val || '').trim()
+  },
+  {
     canonicalField: 'last_name',
     dbField: '', // Transient field to build full_name
     headers: ['នាមត្រកូល'],
@@ -229,11 +265,8 @@ export function applySchema(rowObj: Record<string, any>, rawArray: any[], header
   const warnings: any[] = [];
   const errors: any[] = [];
   
-  // Custom logic to handle duplicate column names in the real 99-column spreadsheet
-  // Indexes based on previous analysis:
-  // 38 = Father Name, 39 = Father Job, 40 = Father Phone
-  // 41 = Mother Name, 42 = Mother Job, 43 = Mother Phone
-  // 45 = Guardian Name, 46 = Guardian Job, 47 = Guardian Phone
+  // Custom logic to handle duplicate column names in the real spreadsheet
+  // using the _1, _2 suffixes assigned during parsing.
   
   const idNum = String(rowObj['អត្តលេខ_1'] || rowObj['អត្តលេខ'] || rowObj['ID'] || '').trim();
   const lastName = String(rowObj['នាមត្រកូល_1'] || rowObj['នាមត្រកូល'] || '').trim();
@@ -297,6 +330,12 @@ export function applySchema(rowObj: Record<string, any>, rawArray: any[], header
   
   // Fallback for parent_phone
   result['parent_phone'] = result['father_phone'] || result['mother_phone'] || result['guardian_phone'] || cleanString(rowObj['លេខទូរស័ព្ទសិស្ស_1'] || rowObj['លេខទូរស័ព្ទសិស្ស']);
+
+  // Also capture class, desk, room from rowObj if not handled by basic processing
+  result['class_name'] = String(rowObj['ថ្នាក់'] || rowObj['Class'] || rowObj['កម្រិត'] || '').trim();
+  result['academic_year'] = String(rowObj['ឆ្នាំសិក្សា'] || rowObj['Academic Year'] || '').trim();
+  result['desk_number'] = String(rowObj['លេខតុ'] || rowObj['Desk'] || result['desk_number'] || '').trim();
+  result['room_number'] = String(rowObj['លេខបន្ទប់'] || rowObj['បន្ទប់ប្រឡង'] || rowObj['Room'] || result['room_number'] || '').trim();
 
   if (!result['parent_phone']) {
      warnings.push({ column: 'លេខទូរស័ព្ទ', problem: 'មិនមានលេខទូរស័ព្ទទំនាក់ទំនងទាល់តែសោះ' });

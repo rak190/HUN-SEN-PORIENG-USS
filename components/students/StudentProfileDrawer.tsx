@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { MassiveProfilingStudent, DEFAULT_FORM } from '@/app/(dashboard)/students/types';
-import { UserSquare2, FileText, Heart, Users, MapPin, X, Loader2, Check, Camera } from 'lucide-react';
+import { UserSquare2, FileText, Heart, Users, MapPin, X, Loader2, Check, Camera, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
 
 const VIEW_TABS = [
   { id: 1, label: 'មូលដ្ឋាន', icon: UserSquare2 },
@@ -20,6 +21,8 @@ interface StudentProfileDrawerProps {
 }
 
 export default function StudentProfileDrawer({ isOpen, onClose, initialData, activeTab = 1, onSave }: StudentProfileDrawerProps) {
+  const { role } = useAuth();
+  const isAdmin = role === 'admin' || role === 'principal';
   const [formData, setFormData] = useState<Partial<MassiveProfilingStudent>>({});
   const [activeModalTab, setActiveModalTab] = useState(activeTab);
   const [isSaving, setIsSaving] = useState(false);
@@ -256,21 +259,21 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
                   </div>
                 </div>
 
-                <label className="block text-xs font-bold text-slate-700">
-                  អត្តលេខ
-                  <input type="text" value={formData.student_id_number || ''} onChange={e=>setFormData({...formData, student_id_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                <label className="block text-xs font-bold text-slate-700 relative">
+                  អត្តលេខ {(!isAdmin && formData.student_id_number) && <button type="button" onClick={() => alert('មុខងារស្នើសុំកែតម្រូវទិន្នន័យកំពុងអភិវឌ្ឍ')} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
+                  <input type="text" value={formData.student_id_number || ''} disabled={!isAdmin && !!formData.student_id_number} onChange={e=>setFormData({...formData, student_id_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500" />
                 </label>
-                <label className="block text-xs font-bold text-slate-700">
-                  ឈ្មោះពេញ (Khmer)
-                  <input type="text" value={formData.full_name || ''} onChange={e=>setFormData({...formData, full_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                <label className="block text-xs font-bold text-slate-700 relative">
+                  ឈ្មោះពេញ (Khmer) {(!isAdmin && formData.full_name) && <button type="button" onClick={() => alert('មុខងារស្នើសុំកែតម្រូវទិន្នន័យកំពុងអភិវឌ្ឍ')} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
+                  <input type="text" value={formData.full_name || ''} disabled={!isAdmin && !!formData.full_name} onChange={e=>setFormData({...formData, full_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
                   ឈ្មោះឡាតាំង (English)
                   <input type="text" value={formData.english_name || ''} onChange={e=>setFormData({...formData, english_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
-                <label className="block text-xs font-bold text-slate-700">
-                  ភេទ
-                  <select value={formData.gender || 'M'} onChange={e=>setFormData({...formData, gender:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
+                <label className="block text-xs font-bold text-slate-700 relative">
+                  ភេទ {(!isAdmin && formData.gender) && <button type="button" onClick={() => alert('មុខងារស្នើសុំកែតម្រូវទិន្នន័យកំពុងអភិវឌ្ឍ')} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
+                  <select value={formData.gender || 'M'} disabled={!isAdmin && !!formData.gender} onChange={e=>setFormData({...formData, gender:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500">
                     <option value="M">ប្រុស</option>
                     <option value="F">ស្រី</option>
                   </select>

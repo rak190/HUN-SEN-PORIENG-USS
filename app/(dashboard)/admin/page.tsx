@@ -118,6 +118,18 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
 
   atRiskStudents.sort((a, b) => (a.severity === 'high' ? -1 : 1));
 
+  // 8. Data Quality Metrics (Exception-First Processing)
+  const { count: missingIdCount } = await supabase
+    .from('students')
+    .select('id', { count: 'exact' })
+    .or('student_id_number.is.null,student_id_number.eq.""')
+    .eq('is_active', true);
+
+  const { count: pendingCorrections } = await supabase
+    .from('correction_requests')
+    .select('id', { count: 'exact' })
+    .eq('status', 'pending');
+
   return (
     <AdminDashboardClient
       stats={{
@@ -130,6 +142,10 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
       activities={(activities as any) || []}
       atRiskStudents={atRiskStudents.slice(0, 10)}
       currentMonth={currentMonthStr}
+      dataQuality={{
+        missingIdCount: missingIdCount ?? 0,
+        pendingCorrections: pendingCorrections ?? 0
+      }}
     />
   );
 }

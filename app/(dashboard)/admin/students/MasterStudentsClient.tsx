@@ -12,6 +12,7 @@ import * as XLSX from 'xlsx';
 import StudentMigrationModal from './components/StudentMigrationModal';
 import StudentProfileDrawer from './components/StudentProfileDrawer';
 import AdminBasicRegistrationModal from '@/components/admin/AdminBasicRegistrationModal';
+import AdminBasicImportModal from '@/components/admin/AdminBasicImportModal';
 import { fetchExportData } from './actions';
 
 interface MasterStudentsClientProps {
@@ -51,6 +52,7 @@ export default function MasterStudentsClient({
   const [isExporting, setIsExporting] = useState(false);
   const [localSearch, setLocalSearch] = useState(filters.q);
   const [isBasicRegistrationModalOpen, setIsBasicRegistrationModalOpen] = useState(false);
+  const [isBasicImportModalOpen, setIsBasicImportModalOpen] = useState(false);
 
   // Sync state with props
   useEffect(() => {
@@ -134,6 +136,24 @@ export default function MasterStudentsClient({
     }
   };
 
+  const handleDownloadTemplate = () => {
+    const wsData = [{
+      'អត្តលេខ': '',
+      'នាមត្រកូល': '',
+      'នាមខ្លួន': '',
+      'ភេទ': '',
+      'ថ្នាក់': '',
+      'ឆ្នាំសិក្សា': '',
+      'លេខតុ': '',
+      'បន្ទប់ប្រឡង': ''
+    }];
+
+    const ws = XLSX.utils.json_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.writeFile(wb, `Basic_Registration_Template.xlsx`);
+  };
+
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
       setSelectedStudents(students.map(s => s.id));
@@ -169,14 +189,20 @@ export default function MasterStudentsClient({
             onClick={() => setIsBasicRegistrationModalOpen(true)}
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
           >
-            បញ្ចូលបញ្ជីឈ្មោះមូលដ្ឋាន
+            បញ្ជូលតាមប្រអប់ (Grid)
           </button>
-          <Link 
-            href="/admin/giep-import"
+          <button 
+            onClick={() => setIsBasicImportModalOpen(true)}
+            className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> នាំចូលពី Excel
+          </button>
+          <button 
+            onClick={handleDownloadTemplate}
             className="px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-colors border border-slate-200 shadow-sm flex items-center justify-center gap-2"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> សមកាលកម្ម (GIEP)
-          </Link>
+             ទាញយកគំរូ Excel
+          </button>
           <button 
             onClick={handleExport}
             disabled={isExporting || totalCount === 0}
@@ -513,6 +539,14 @@ export default function MasterStudentsClient({
         isOpen={!!selectedProfileStudent}
         onClose={() => {
           setSelectedProfileStudent(null);
+          router.refresh();
+        }}
+      />
+      <AdminBasicImportModal
+        isOpen={isBasicImportModalOpen}
+        onClose={() => setIsBasicImportModalOpen(false)}
+        onSuccess={(data) => {
+          setIsBasicImportModalOpen(false);
           router.refresh();
         }}
       />

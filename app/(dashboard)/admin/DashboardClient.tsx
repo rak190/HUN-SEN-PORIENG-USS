@@ -34,9 +34,13 @@ interface AdminDashboardClientProps {
   activities: ActivityLog[];
   atRiskStudents: any[];
   currentMonth: string;
+  dataQuality?: {
+    missingIdCount: number;
+    pendingCorrections: number;
+  };
 }
 
-export default function AdminDashboardClient({ stats, pieData, activities, atRiskStudents, currentMonth }: AdminDashboardClientProps) {
+export default function AdminDashboardClient({ stats, pieData, activities, atRiskStudents, currentMonth, dataQuality }: AdminDashboardClientProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showEwsModal, setShowEwsModal] = useState(false);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
@@ -299,6 +303,48 @@ export default function AdminDashboardClient({ stats, pieData, activities, atRis
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Data Quality & Exception Management */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+         <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+               <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+               <h3 className="font-black text-slate-800 text-lg">បាត់អត្តលេខសិស្ស</h3>
+               <p className="text-xs text-slate-500 font-medium mt-1">
+                  សិស្ស {dataQuality?.missingIdCount || 0} នាក់ មិនមានអត្តលេខផ្លូវការ។ សូមនាំចូលទិន្នន័យពី Excel (Basic Import)។
+               </p>
+               <div className="mt-4 flex items-center gap-2">
+                  <span className="text-2xl font-black text-amber-600">{dataQuality?.missingIdCount || 0}</span>
+                  <span className="text-sm font-bold text-slate-400">នាក់</span>
+               </div>
+            </div>
+         </div>
+
+         <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+               <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div>
+               <h3 className="font-black text-slate-800 text-lg">សំណើកែប្រែទិន្នន័យ (Pending)</h3>
+               <p className="text-xs text-slate-500 font-medium mt-1">
+                  គ្រូបន្ទុកថ្នាក់បានស្នើសុំកែប្រែទិន្នន័យមូលដ្ឋានរបស់សិស្ស ចំនួន {dataQuality?.pendingCorrections || 0} ករណី។
+               </p>
+               <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                     <span className="text-2xl font-black text-indigo-600">{dataQuality?.pendingCorrections || 0}</span>
+                     <span className="text-sm font-bold text-slate-400">សំណើ</span>
+                  </div>
+                  {dataQuality && dataQuality.pendingCorrections > 0 && (
+                     <button onClick={() => alert('មុខងារពិនិត្យសំណើកែប្រែ កំពុងអភិវឌ្ឍ...')} className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-colors">
+                        ពិនិត្យមើល
+                     </button>
+                  )}
+               </div>
+            </div>
+         </div>
       </div>
 
       {/* EWS Modal (Full-Screen Frosted Glass Portal) */}

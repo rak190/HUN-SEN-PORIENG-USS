@@ -1,0 +1,431 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import * as XLSX from 'xlsx';
+import { useAuth } from '@/lib/auth-context';
+import { Upload, FileSpreadsheet, Check, AlertTriangle, X, Loader2, Info } from 'lucide-react';
+import { applySchema } from '@/lib/import/schema';
+import { detectDuplicate } from '@/lib/import/duplicate-detector';
+import { adminBasicRegisterAction } from '@/app/(dashboard)/admin/students/actions';
+import { createClient } from '@/lib/supabase/client';
+
+interface AdminBasicImportModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: (newStudents: any[]) => void;
+}
+
+type ValidationStatus = 'valid' | 'missing_optional' | 'duplicate' | 'invalid';
+
+interface ParsedStudent {
+  rowNumber: number;
+  data: any;
+  status: ValidationStatus;
+  errors: { column: string; problem: string; suggestion: string }[];
+  warnings: { column: string; problem: string }[];
+}
+
+export default function AdminBasicImportModal({ isOpen, onClose, onSuccess }: AdminBasicImportModalProps) {
+  const { activeAcademicYear } = useAuth();
+  const [parsedRows, setParsedRows] = useState<ParsedStudent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [dragActive, setDragActive] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const supabase = createClient();
+
+  if (!isOpen || !mounted) return null;
+
+  function handleFileChange(file: File) {
+    setErrorMsg('');
+    setParsedRows([]);
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        const allRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+        
+        if (allRows.length === 0) {
+          setErrorMsg('ឯកសារ Excel មិនមានទិន្នន័យទេ។');
+          return;
+        }
+
+        // Find the actual header row by looking for 'អត្តលេខ' or 'ID'
+        let headerRowIdx = -1;
+        for (let i = 0; i < Math.min(10, allRows.length); i++) {
+          if (allRows[i].some(cell => String(cell).includes('អត្តលេខ') || String(cell).includes('ID') || String(cell).includes('អត្តលេខសិស្ស'))) {
+            headerRowIdx = i;
+            break;
+          }
+        }
+
+        if (headerRowIdx === -1) {
+           setErrorMsg('មិនអាចរកឃើញក្បាលជួរឈរ (អត្តលេខ) នៅក្នុងឯកសារទេ។ សូមពិនិត្យទម្រង់ឯកសារម្តងទៀត។');
+           return;
+        }
+
+        const headers = allRows[headerRowIdx];
+        const dataRows = allRows.slice(headerRowIdx + 1);
+
+        // Fetch existing students to detect duplicates globally or within active year
+        let existingStudentsInDb: any[] = [];
+        const { data: existingData } = await supabase
+          .from('students')
+          .select('id, student_id_number, full_name, class_id');
+        if (existingData) {
+          existingStudentsInDb = existingData;
+        }
+        
+        // Also fetch classes to map class names to class IDs safely
+        const { data: classesData } = await supabase.from('classes').select('id, name');
+
+        const results: ParsedStudent[] = [];
+
+        for (let rowIdx = 0; rowIdx < dataRows.length; rowIdx++) {
+          const rowArr = dataRows[rowIdx];
+          if (rowArr.every((cell: any) => !String(cell).trim())) continue;
+
+          // Convert array to object based on headers
+          const rowObj: Record<string, any> = {};
+          const headerCounts: Record<string, number> = {};
+          headers.forEach((h: any, i: number) => {
+             if (h) {
+                const key = String(h).trim();
+                headerCounts[key] = (headerCounts[key] || 0) + 1;
+                const count = headerCounts[key];
+                
+                if (count === 1) {
+                   rowObj[key] = rowArr[i];
+                } else {
+                   rowObj[`${key}_${count}`] = rowArr[i];
+                }
+             }
+          });
+
+          // Use applySchema from lib/import/schema
+          const { result: mappedData, warnings, errors } = applySchema(rowObj, rowArr, headers);
+
+          let status: ValidationStatus = 'valid';
+
+          // Map Class Name to Class ID
+          let mappedClassId = null;
+          if (mappedData.class_name) {
+             const matchedClass = classesData?.find(c => c.name === mappedData.class_name);
+             if (matchedClass) {
+                mappedClassId = matchedClass.id;
+                mappedData.class_id = mappedClassId;
+             } else {
+                errors.push({ column: 'ថ្នាក់', problem: `រកមិនឃើញថ្នាក់ "${mappedData.class_name}"`, suggestion: 'ពិនិត្យឈ្មោះថ្នាក់ក្នុងប្រព័ន្ធ' });
+             }
+          }
+
+          if (errors.length > 0) {
+            status = 'invalid';
+          } else if (warnings.length > 0) {
+            status = 'missing_optional';
+          }
+
+          if (status !== 'invalid') {
+            const dupResult = await detectDuplicate(mappedData, existingStudentsInDb, results.map(r => r.data));
+            if (dupResult.status === 'matched_existing' || dupResult.status === 'possible_duplicate' || dupResult.status === 'duplicate_within_file') {
+              errors.push({ column: 'អត្តលេខ/ឈ្មោះ', problem: dupResult.reason || 'ស្ទួន', suggestion: 'សិស្សនេះមានរួចហើយ' });
+              status = 'duplicate';
+            }
+          }
+
+          results.push({
+            rowNumber: headerRowIdx + 1 + rowIdx + 1,
+            status,
+            errors,
+            warnings,
+            data: { ...mappedData, status: 'new', is_active: true }
+          });
+        }
+
+        if (results.length === 0) {
+          setErrorMsg('មិនមានទិន្នន័យត្រឹមត្រូវដែលអាចទាញយកបានទេ។');
+          return;
+        }
+
+        setParsedRows(results);
+      } catch (err: any) {
+        console.error('Excel parse error:', err);
+        setErrorMsg('មិនអាចអានឯកសារ Excel បានទេ។ សូមពិនិត្យទម្រង់ឯកសារ។');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  async function handleSave() {
+    const validRows = parsedRows.filter(r => r.status === 'valid' || r.status === 'missing_optional');
+    if (validRows.length === 0) return;
+    
+    setLoading(true);
+
+    try {
+      const recordsToSave = validRows.map(r => ({
+        student_id_number: r.data.student_id_number,
+        full_name: r.data.full_name,
+        gender: r.data.gender,
+        class_id: r.data.class_id, // Could be null if no class specified, but DB accepts null
+        status: r.data.status,
+        desk_number: r.data.desk_number,
+        room_number: r.data.room_number,
+        dob: r.data.dob,
+        address: r.data.current_address,
+        father_name: r.data.father_name,
+        mother_name: r.data.mother_name,
+        father_phone: r.data.father_phone,
+        mother_phone: r.data.mother_phone,
+      }));
+
+      // adminBasicRegisterAction executes bulk_quick_register_students RPC
+      const res = await adminBasicRegisterAction({
+         records: recordsToSave,
+         academic_year_id: activeAcademicYear?.id || ''
+      });
+
+      if (!res.success) {
+         throw new Error(res.error);
+      }
+
+      onSuccess(recordsToSave);
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'កំហុសក្នុងការរក្សាទុកទៅប្រព័ន្ធ។');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const validCount = parsedRows.filter(r => r.status === 'valid').length;
+  const missingCount = parsedRows.filter(r => r.status === 'missing_optional').length;
+  const duplicateCount = parsedRows.filter(r => r.status === 'duplicate').length;
+  const invalidCount = parsedRows.filter(r => r.status === 'invalid').length;
+  const savableCount = validCount + missingCount;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 animate-overlayFade" onClick={onClose}>
+      <div className="w-full max-w-5xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-modalScale" onClick={e => e.stopPropagation()}>
+        {/* Modal Header */}
+        <div className="p-6 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">
+                បញ្ចូលបញ្ជីឈ្មោះមូលដ្ឋានពី Excel (Admin)
+              </h2>
+              <p className="text-xs text-slate-500">
+                ឆ្នាំសិក្សា៖ <span className="font-bold text-indigo-600 dark:text-indigo-400">{activeAcademicYear?.name || 'មិនមាន'}</span>
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50 dark:bg-slate-900/50">
+          {errorMsg && (
+            <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-sm flex items-center space-x-3">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {parsedRows.length === 0 && (
+             <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700">
+                <div
+                  onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+                  onDragOver={(e) => { e.preventDefault(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setDragActive(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      handleFileChange(e.dataTransfer.files[0]);
+                    }
+                  }}
+                  className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all ${
+                    dragActive 
+                      ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/10' 
+                      : 'border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600'
+                  }`}
+                >
+                  <div className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-4">
+                    <Upload className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
+                    អូសទម្លាក់ឯកសារ Excel នៅទីនេះ
+                  </h3>
+                  <p className="text-sm text-slate-500 mb-6">
+                    គាំទ្រឯកសារ .xlsx (Basic Import Template) សម្រាប់ Admin
+                  </p>
+
+                  <label className="inline-flex items-center space-x-2 px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-bold shadow-sm cursor-pointer transition-all">
+                    <span>ជ្រើសរើសឯកសារ</span>
+                    <input
+                      type="file"
+                      accept=".xlsx, .xls, .csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          handleFileChange(e.target.files[0]);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                
+                <div className="mt-6 flex items-start space-x-3 p-4 bg-indigo-50 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/30 text-indigo-800 dark:text-indigo-300">
+                  <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                     <p className="font-bold mb-1">គោលការណ៍នាំចូលទិន្នន័យ៖</p>
+                     <ul className="list-disc pl-5 space-y-1 opacity-90">
+                        <li>ការនាំចូលនេះគឺសម្រាប់តែទិន្នន័យមូលដ្ឋានប៉ុណ្ណោះ (អត្តលេខ, ឈ្មោះ, ភេទ, ថ្នាក់, លេខតុ, បន្ទប់)។</li>
+                        <li>អត្តលេខសិស្ស និងឈ្មោះ គឺជាព័ត៌មានចាំបាច់ដាច់ខាត។</li>
+                        <li>សិស្សដែលមានស្រាប់នឹងត្រូវ Update តែទិន្នន័យមូលដ្ឋានប៉ុណ្ណោះដោយមិនប៉ះពាល់ទិន្នន័យលម្អិត។</li>
+                     </ul>
+                  </div>
+                </div>
+             </div>
+          )}
+
+          {/* Validation & Preview Table */}
+          {parsedRows.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-3">
+                 <div className="flex-1 bg-white dark:bg-slate-800 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/50 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{validCount}</span>
+                    <span className="text-xs font-bold text-slate-500">ត្រឹមត្រូវ ✓</span>
+                 </div>
+                 <div className="flex-1 bg-white dark:bg-slate-800 p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-black text-amber-600 dark:text-amber-400">{missingCount}</span>
+                    <span className="text-xs font-bold text-slate-500 text-center">បាត់ព័ត៌មានបន្ទាប់បន្សំ ⚠</span>
+                 </div>
+                 <div className="flex-1 bg-white dark:bg-slate-800 p-4 rounded-xl border border-rose-200 dark:border-rose-900/50 flex flex-col items-center justify-center opacity-70">
+                    <span className="text-2xl font-black text-rose-600 dark:text-rose-400">{duplicateCount}</span>
+                    <span className="text-xs font-bold text-slate-500">ស្ទួន ✗</span>
+                 </div>
+                 <div className="flex-1 bg-white dark:bg-slate-800 p-4 rounded-xl border border-rose-200 dark:border-rose-900/50 flex flex-col items-center justify-center opacity-70">
+                    <span className="text-2xl font-black text-rose-600 dark:text-rose-400">{invalidCount}</span>
+                    <span className="text-xs font-bold text-slate-500">មិនត្រឹមត្រូវ ✗</span>
+                 </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full text-left text-sm text-slate-600 dark:text-slate-300">
+                    <thead className="bg-slate-100 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 font-bold sticky top-0 z-10">
+                      <tr>
+                        <th className="p-3 w-16 text-center">ជួរ</th>
+                        <th className="p-3">អត្តលេខ</th>
+                        <th className="p-3">ឈ្មោះពេញ</th>
+                        <th className="p-3">ថ្នាក់</th>
+                        <th className="p-3">ស្ថានភាព</th>
+                        <th className="p-3">បញ្ហា / ដំណោះស្រាយ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {parsedRows.map((row, i) => (
+                        <tr key={i} className={`
+                           ${row.status === 'invalid' ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}
+                           ${row.status === 'duplicate' ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}
+                           ${row.status === 'missing_optional' ? 'bg-amber-50/30 dark:bg-amber-900/5' : ''}
+                           hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors
+                        `}>
+                          <td className="p-3 text-center font-mono text-xs text-slate-400">{row.rowNumber}</td>
+                          <td className="p-3 font-mono font-medium">{row.data.student_id_number || '-'}</td>
+                          <td className="p-3 font-bold text-slate-800 dark:text-slate-200">{row.data.full_name || '-'}</td>
+                          <td className="p-3 font-bold text-indigo-600 dark:text-indigo-400">{row.data.class_name || '-'}</td>
+                          <td className="p-3">
+                             {row.status === 'valid' && <span className="inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-700 text-xs font-bold">✓ ត្រឹមត្រូវ</span>}
+                             {row.status === 'missing_optional' && <span className="inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-700 text-xs font-bold">⚠ បាត់ខ្លះ</span>}
+                             {row.status === 'invalid' && <span className="inline-flex items-center px-2 py-1 rounded-md bg-rose-100 text-rose-700 text-xs font-bold">✗ ខុស</span>}
+                             {row.status === 'duplicate' && <span className="inline-flex items-center px-2 py-1 rounded-md bg-rose-100 text-rose-700 text-xs font-bold">✗ ស្ទួន</span>}
+                          </td>
+                          <td className="p-3 text-xs">
+                             {row.errors.length > 0 && (
+                                <ul className="text-rose-600 dark:text-rose-400 space-y-1">
+                                   {row.errors.map((e, idx) => (
+                                      <li key={idx}><b>{e.column}:</b> {e.problem} — <i>{e.suggestion}</i></li>
+                                   ))}
+                                </ul>
+                             )}
+                             {row.warnings.length > 0 && (
+                                <ul className="text-amber-600 dark:text-amber-400 space-y-1 mt-1">
+                                   {row.warnings.map((w, idx) => (
+                                      <li key={idx}><b>{w.column}:</b> {w.problem}</li>
+                                   ))}
+                                </ul>
+                             )}
+                             {row.errors.length === 0 && row.warnings.length === 0 && (
+                                <span className="text-emerald-600 dark:text-emerald-500">រួចរាល់សម្រាប់ការរក្សាទុក</span>
+                             )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-sm">
+                   <button onClick={() => setParsedRows([])} className="text-slate-500 hover:text-slate-700 font-bold px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                      ← ជ្រើសរើសឯកសារផ្សេង
+                   </button>
+                   <span className="text-slate-600 dark:text-slate-400 font-medium">
+                      សិស្សសរុប {parsedRows.length} នាក់ (អាចបញ្ចូលបាន <span className="font-bold text-emerald-600 dark:text-emerald-400">{savableCount} នាក់</span>)
+                   </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="p-6 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end space-x-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+          >
+            បោះបង់
+          </button>
+          <button
+            type="button"
+            disabled={savableCount === 0 || loading || !activeAcademicYear?.id}
+            onClick={handleSave}
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition-all flex items-center space-x-2 disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>រក្សាទុកសិស្ស {savableCount} នាក់</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
