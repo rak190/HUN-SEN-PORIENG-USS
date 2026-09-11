@@ -14,15 +14,74 @@ export default function PrincipalStudentsPage() {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
 
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [stats, setStats] = useState({ g12: 0, g11: 0, g10: 0, female: 0 });
+  const [availableClasses, setAvailableClasses] = useState<{grade: string, classes: string[]}[]>([]);
+
+  const itemsPerPage = 20;
+
+  useEffect(() => {
+    async function fetchSchoolStats() {
+      // 1. Fetch aggregate stats using a lightweight query
+      const { data, error } = await supabase
+        .from('students')
+        .select('gender, classes(name, grade)')
+        .eq('is_active', true);
+        
+      if (!error && data) {
+        let g12 = 0, g11 = 0, g10 = 0, female = 0;
+        const options: Record<string, Set<string>> = { '12': new Set(), '11': new Set(), '10': new Set(), '9': new Set(), '8': new Set(), '7': new Set() };
+        
+        data.forEach((s: any) => {
+          if (s.gender === 'F' || s.gender === 'ស្រី') female++;
+          const grade = s.classes?.grade ? String(s.classes.grade) : '12';
+          if (grade === '12') g12++;
+          if (grade === '11') g11++;
+          if (grade === '10') g10++;
+          
+          if (!options[grade]) options[grade] = new Set();
+          if (s.classes?.name) options[grade].add(s.classes.name);
+        });
+        
+        setStats({ g12, g11, g10, female });
+        setTotalStudents(data.length);
+        
+        const sortedGrades = Object.keys(options).sort((a, b) => Number(b) - Number(a));
+        setAvailableClasses(sortedGrades.map(grade => ({
+          grade,
+          classes: Array.from(options[grade]).sort((a, b) => a.localeCompare(b, 'km'))
+        })));
+      }
+    }
+    fetchSchoolStats();
+  }, []);
+
   useEffect(() => {
     async function fetchSchoolStudents() {
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('students')
-          .select('id, full_name, student_id_number, gender, is_active, class_id, classes(id, name, grade, track)')
+          .select('id, full_name, student_id_number, gender, is_active, class_id, classes!inner(id, name, grade, track)', { count: 'exact' })
           .eq('is_active', true)
           .order('full_name');
+
+        if (searchQuery) {
+          query = query.or(`full_name.ilike.%${searchQuery}%,student_id_number.ilike.%${searchQuery}%`);
+        }
+
+        if (selectedFilter !== 'all') {
+          if (selectedFilter.startsWith('grade:')) {
+            query = query.eq('classes.grade', selectedFilter.split(':')[1]);
+          } else if (selectedFilter.startsWith('class:')) {
+            query = query.eq('classes.name', selectedFilter.split(':')[1]);
+          }
+        }
+
+        const from = (currentPage - 1) * itemsPerPage;
+        const to = from + itemsPerPage - 1;
+        
+        const { data, count, error } = await query.range(from, to);
 
         if (error) throw error;
 
@@ -37,6 +96,9 @@ export default function PrincipalStudentsPage() {
         }));
 
         setStudents(mapped);
+        if (count !== null && (searchQuery || selectedFilter !== 'all')) {
+            // Update total pages based on filter
+        }
       } catch (err) {
         console.error('Error fetching principal students:', err);
         setStudents([]);
@@ -45,69 +107,22 @@ export default function PrincipalStudentsPage() {
       }
     }
 
-    fetchSchoolStudents();
-  }, []);
+    const debounce = setTimeout(() => {
+      fetchSchoolStudents();
+    }, 300);
+    return () => clearTimeout(debounce);
+  }, [currentPage, searchQuery, selectedFilter]);
 
-  // Dynamically extract available classes from real data
-  const filterOptions = useMemo(() => {
-    const options: Record<string, Set<string>> = {
-      '12': new Set(),
-      '11': new Set(),
-      '10': new Set(),
-      '9': new Set(),
-      '8': new Set(),
-      '7': new Set(),
-    };
-
-    students.forEach(s => {
-      if (!options[s.grade]) options[s.grade] = new Set();
-      if (s.class && s.class !== 'គ្មានថ្នាក់') {
-        options[s.grade].add(s.class);
-      }
-    });
-    
-    const sortedGrades = Object.keys(options).sort((a, b) => Number(b) - Number(a));
-    
-    return sortedGrades.map(grade => ({
-      grade,
-      classes: Array.from(options[grade]).sort((a, b) => a.localeCompare(b, 'km'))
-    }));
-  }, [students]);
-
-  const filteredStudents = useMemo(() => {
-    return students.filter(s => {
-      const searchLower = searchQuery.toLowerCase();
-      const matchesSearch = s.name.toLowerCase().includes(searchLower) || 
-                            s.id.toLowerCase().includes(searchLower) || 
-                            s.class.toLowerCase().includes(searchLower);
-                            
-      let matchesFilter = true;
-      if (selectedFilter.startsWith('grade:')) {
-        const targetGrade = selectedFilter.split(':')[1];
-        matchesFilter = s.grade === targetGrade;
-      } else if (selectedFilter.startsWith('class:')) {
-        const targetClass = selectedFilter.split(':')[1];
-        matchesFilter = s.class === targetClass;
-      }
-
-      return matchesSearch && matchesFilter;
-    });
-  }, [searchQuery, selectedFilter, students]);
-
-  const itemsPerPage = 20;
-  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / itemsPerPage));
+  const currentStudents = students;
+  const filterOptions = availableClasses;
   
-  const currentStudents = useMemo(() => {
-    return filteredStudents.slice(
-      (currentPage - 1) * itemsPerPage,
-      currentPage * itemsPerPage
-    );
-  }, [filteredStudents, currentPage]);
-
-  const g12Count = students.filter(s => s.grade === '12').length;
-  const g11Count = students.filter(s => s.grade === '11').length;
-  const g10Count = students.filter(s => s.grade === '10').length;
-  const totalFemale = students.filter(s => s.gender === 'F').length;
+  // Estimate total pages for the current view
+  const totalPages = Math.max(1, Math.ceil((searchQuery || selectedFilter !== 'all' ? students.length : totalStudents) / itemsPerPage));
+  
+  const g12Count = stats.g12;
+  const g11Count = stats.g11;
+  const g10Count = stats.g10;
+  const totalFemale = stats.female;
 
   return (
     <div className="space-y-6 animate-fadeIn select-none">
@@ -120,7 +135,7 @@ export default function PrincipalStudentsPage() {
           <p className="text-xs font-semibold text-[#64748B] mt-0.5 flex items-center gap-1.5">
             <span>សរុបសិស្សសកម្ម៖</span>
             <span className="font-bold text-[#155EEF] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-              {students.length} នាក់ (ស្រី {totalFemale} នាក់)
+              {totalStudents} នាក់ (ស្រី {totalFemale} នាក់)
             </span>
           </p>
         </div>

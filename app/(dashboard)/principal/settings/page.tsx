@@ -36,25 +36,29 @@ export default function PrincipalSettingsPage() {
         if (res.ok) {
           const { schoolInfo } = await res.json();
           if (schoolInfo) {
-            if (schoolInfo.schoolName) setSchoolName(schoolInfo.schoolName);
+            if (schoolInfo.name || schoolInfo.schoolName) setSchoolName(schoolInfo.name || schoolInfo.schoolName);
             if (schoolInfo.schoolType) setSchoolType(schoolInfo.schoolType);
-            if (schoolInfo.schoolCode) setSchoolCode(schoolInfo.schoolCode);
+            if (schoolInfo.code || schoolInfo.schoolCode) setSchoolCode(schoolInfo.code || schoolInfo.schoolCode);
             if (schoolInfo.academicYear) setAcademicYear(schoolInfo.academicYear);
 
-            const addrParts = [schoolInfo.village ? `ភូមិ${schoolInfo.village}` : '', schoolInfo.commune ? `ឃុំ${schoolInfo.commune}` : '', schoolInfo.district ? `ស្រុក${schoolInfo.district}` : '', schoolInfo.province ? `ខេត្ត${schoolInfo.province}` : ''].filter(Boolean);
-            if (addrParts.length > 0) setAddress(addrParts.join(' '));
+            if (schoolInfo.address) {
+              setAddress(schoolInfo.address);
+            } else {
+              const addrParts = [schoolInfo.village ? `ភូមិ${schoolInfo.village}` : '', schoolInfo.commune ? `ឃុំ${schoolInfo.commune}` : '', schoolInfo.district ? `ស្រុក${schoolInfo.district}` : '', schoolInfo.province ? `ខេត្ត${schoolInfo.province}` : ''].filter(Boolean);
+              if (addrParts.length > 0) setAddress(addrParts.join(' '));
+            }
 
-            if (schoolInfo.principalName) setPrincipalName(schoolInfo.principalName);
-            if (schoolInfo.principalPhone) setPrincipalPhone(schoolInfo.principalPhone);
+            if (schoolInfo.principal_name || schoolInfo.principalName) setPrincipalName(schoolInfo.principal_name || schoolInfo.principalName);
+            if (schoolInfo.principal_phone || schoolInfo.principalPhone) setPrincipalPhone(schoolInfo.principal_phone || schoolInfo.principalPhone);
 
-            if (schoolInfo.ictLeadName) setIctTeacherName(schoolInfo.ictLeadName);
-            if (schoolInfo.ictLeadPhone) setIctTeacherPhone(schoolInfo.ictLeadPhone);
-            if (schoolInfo.ictLeadEmail) setIctTeacherEmail(schoolInfo.ictLeadEmail);
+            if (schoolInfo.ict_lead_name || schoolInfo.ictLeadName) setIctTeacherName(schoolInfo.ict_lead_name || schoolInfo.ictLeadName);
+            if (schoolInfo.ict_lead_phone || schoolInfo.ictLeadPhone) setIctTeacherPhone(schoolInfo.ict_lead_phone || schoolInfo.ictLeadPhone);
+            if (schoolInfo.ict_lead_email || schoolInfo.ictLeadEmail) setIctTeacherEmail(schoolInfo.ict_lead_email || schoolInfo.ictLeadEmail);
 
-            if (schoolInfo.smcHeadName) setSmcHeadName(schoolInfo.smcHeadName);
-            if (schoolInfo.smcHeadPhone) setSmcHeadPhone(schoolInfo.smcHeadPhone);
+            if (schoolInfo.smc_head_name || schoolInfo.smcHeadName) setSmcHeadName(schoolInfo.smc_head_name || schoolInfo.smcHeadName);
+            if (schoolInfo.smc_head_phone || schoolInfo.smcHeadPhone) setSmcHeadPhone(schoolInfo.smc_head_phone || schoolInfo.smcHeadPhone);
 
-            if (schoolInfo.waterSupply) setWaterSystem(schoolInfo.waterSupply);
+            if (schoolInfo.water_supply || schoolInfo.waterSupply) setWaterSystem(schoolInfo.water_supply || schoolInfo.waterSupply);
             if (schoolInfo.electricity) setElectricity(schoolInfo.electricity);
             if (schoolInfo.internet) setInternet(schoolInfo.internet);
           }
@@ -79,7 +83,7 @@ export default function PrincipalSettingsPage() {
           <p className="text-xs font-semibold text-[#64748B] mt-0.5 flex items-center gap-1.5">
             <span>គ្រប់គ្រងព័ត៌មាន និងឆ្នាំសិក្សា៖</span>
             <span className="font-bold text-[#155EEF] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-              {profile?.school_code || 'Porieng-2026'}
+              {profile?.school_code || schoolCode || 'កំពុងទាញយក...'}
             </span>
           </p>
         </div>

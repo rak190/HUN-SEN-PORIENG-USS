@@ -20,7 +20,8 @@ export default async function PrincipalStaffPage() {
   const { data: teachers } = await supabase
     .from('profiles')
     .select('*')
-    .in('role', ['teacher', 'admin', 'principal', 'monitor']);
+    .in('role', ['teacher', 'admin', 'principal', 'monitor'])
+    .eq('school_id', profile?.school_id || '');
 
   // 2. Fetch Classes to map teacher_id
   const { data: classes } = await supabase

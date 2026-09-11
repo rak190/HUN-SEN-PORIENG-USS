@@ -1,32 +1,29 @@
 import { NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 import { getServerAuth } from '@/lib/auth-server';
 
 export async function GET() {
-  const { user, role } = await getServerAuth();
+  const { user, profile, role } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || (role !== 'admin' && role !== 'principal') || !profile?.school_id) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
-  const adminClient = createAdminClient();
-  if (!adminClient) {
-    return NextResponse.json({ schoolInfo: null });
-  }
+  const supabase = await createClient();
 
-  const { data } = await adminClient
-    .from('system_settings')
-    .select('value')
-    .eq('key', 'school_info')
+  const { data } = await supabase
+    .from('schools')
+    .select('*')
+    .eq('id', profile.school_id)
     .maybeSingle();
 
-  return NextResponse.json({ schoolInfo: data?.value || null });
+  return NextResponse.json({ schoolInfo: data || null });
 }
 
 export async function PATCH(req: Request) {
-  const { user, role } = await getServerAuth();
+  const { user, profile, role } = await getServerAuth();
 
-  if (!user || role !== 'admin') {
+  if (!user || role !== 'admin' || !profile?.school_id) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -37,24 +34,34 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'schoolInfo is required' }, { status: 400 });
   }
 
-  const adminClient = createAdminClient();
-  if (!adminClient) return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
+  const supabase = await createClient();
 
-  const { error } = await adminClient
-    .from('system_settings')
-    .upsert({
-      key: 'school_info',
-      value: schoolInfo,
-      updated_by: user.id,
-      updated_at: new Date().toISOString()
-    });
+  // Support both camelCase (from old form) and snake_case mapping
+  const { error } = await supabase
+    .from('schools')
+    .update({
+      name: schoolInfo.name || schoolInfo.schoolName || '',
+      code: schoolInfo.code || schoolInfo.schoolCode || '',
+      address: schoolInfo.address || [schoolInfo.village ? `ភូមិ${schoolInfo.village}` : '', schoolInfo.commune ? `ឃុំ${schoolInfo.commune}` : '', schoolInfo.district ? `ស្រុក${schoolInfo.district}` : '', schoolInfo.province ? `ខេត្ត${schoolInfo.province}` : ''].filter(Boolean).join(' '),
+      principal_name: schoolInfo.principal_name || schoolInfo.principalName || '',
+      principal_phone: schoolInfo.principal_phone || schoolInfo.principalPhone || '',
+      ict_lead_name: schoolInfo.ict_lead_name || schoolInfo.ictLeadName || '',
+      ict_lead_phone: schoolInfo.ict_lead_phone || schoolInfo.ictLeadPhone || '',
+      ict_lead_email: schoolInfo.ict_lead_email || schoolInfo.ictLeadEmail || '',
+      smc_head_name: schoolInfo.smc_head_name || schoolInfo.smcHeadName || '',
+      smc_head_phone: schoolInfo.smc_head_phone || schoolInfo.smcHeadPhone || '',
+      water_supply: schoolInfo.water_supply || schoolInfo.waterSupply || '',
+      electricity: schoolInfo.electricity || '',
+      internet: schoolInfo.internet || ''
+    })
+    .eq('id', profile.school_id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   
   // Log it
-  await adminClient.from('audit_logs').insert([{
+  await supabase.from('audit_logs').insert([{
     action: `បានកែសម្រួលព័ត៌មានសាលា និងទិន្នន័យ GEIP`,
     type: 'info',
     user_id: user.id
