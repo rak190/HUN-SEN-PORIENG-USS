@@ -6,7 +6,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { 
   Users, Search, Filter, FileSpreadsheet, 
   Download, Edit2, Check, X, ShieldCheck,
-  ArrowRightLeft, UserX, ChevronLeft, ChevronRight
+  ArrowRightLeft, UserX, ChevronLeft, ChevronRight, GraduationCap
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
