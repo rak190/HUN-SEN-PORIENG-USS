@@ -115,9 +115,9 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
         let existingStudentsInDb: any[] = [];
         if (activeClass?.id) {
           const { data: existingData } = await supabase
-            .from('students')
+            .from('active_class_rosters')
             .select('*')
-            .eq('class_id', activeClass.id);
+            .eq('enrollment_class_id', activeClass.id);
           if (existingData) {
             existingStudentsInDb = existingData;
           }
@@ -223,6 +223,10 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
         // unless they explicitly want to? The schema logic sets missing fields to empty strings or nulls.
         // For a bulk UPDATE, we will upsert the entire mapped object.
         const record = { ...r.data };
+        delete record.class_id; // REMOVED from schema
+        delete record.desk_number; // REMOVED from schema
+        delete record.room_number; // REMOVED from schema
+        delete record.enrollment_class_id;
         return record;
       });
 

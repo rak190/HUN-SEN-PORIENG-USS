@@ -72,18 +72,42 @@ export async function addStudent(data: {
     throw new Error('អ្នកមិនទាន់មានថ្នាក់គ្រប់គ្រងនៅឡើយទេ (You are not assigned to a class yet)');
   }
 
-  // 3. Insert student securely with the enforced class_id
-  const { error } = await supabase.from('students').insert({
+  // 2.5 Get current academic year
+  const { data: currentYear } = await supabase
+    .from('academic_years')
+    .select('id')
+    .eq('is_active', true)
+    .single();
+
+  if (!currentYear) {
+    throw new Error('មិនមានឆ្នាំសិក្សាសកម្មទេ (No active academic year found)');
+  }
+
+  // 3. Insert student securely without the class_id
+  const { data: newStudent, error } = await supabase.from('students').insert({
     full_name: data.full_name,
     student_id_number: data.student_id_number || null,
     gender: data.gender || null,
-    class_id: classroom.id,
     is_active: true
-  });
+  }).select().single();
 
-  if (error) {
+  if (error || !newStudent) {
     console.error('Error adding student:', error);
     throw new Error('បរាជ័យក្នុងការបន្ថែមសិស្ស');
+  }
+
+  // 4. Enroll the student in the teacher's class
+  const { error: enrollError } = await supabase.from('student_enrollments').insert({
+    student_id: newStudent.id,
+    class_id: classroom.id,
+    academic_year_id: currentYear.id,
+    enrollment_status: 'active'
+  });
+
+  if (enrollError) {
+    console.error('Error enrolling student:', enrollError);
+    // Ideally we would rollback the student creation, but for now we throw
+    throw new Error('សិស្សត្រូវបានបង្កើត ប៉ុន្តែបរាជ័យក្នុងការចុះឈ្មោះចូលថ្នាក់');
   }
 
   revalidatePath('/homeroom');

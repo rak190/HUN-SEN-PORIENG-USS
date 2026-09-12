@@ -42,8 +42,8 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
 
   // Main Query
   let query = supabase
-    .from('students')
-    .select('*, classes(name, teacher_id)', { count: 'exact' });
+    .from('active_class_rosters')
+    .select('*', { count: 'exact' });
 
   // Apply filters
   if (q) {
@@ -68,7 +68,7 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
 
   if (filterClass && filterClass !== 'all') {
     if (filterClass === 'គ្មានថ្នាក់') {
-       query = query.is('class_id', null);
+       query = query.is('enrollment_class_id', null);
     }
   }
 
@@ -82,7 +82,7 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
 
   if (studentsData && studentsData.length > 0) {
     mappedStudents = studentsData.map(s => {
-      const teacherProfile = teacherProfiles?.find(p => p.id === s.classes?.teacher_id);
+      const teacherProfile = teacherProfiles?.find(p => p.id === s.teacher_id);
       return {
         id: s.id,
         full_name: s.full_name,
@@ -90,7 +90,7 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
         desk_number: s.desk_number,
         room_number: s.room_number,
         gender: s.gender,
-        class_name: s.classes?.name || 'គ្មានថ្នាក់',
+        class_name: s.class_name || 'គ្មានថ្នាក់',
         homeroom_teacher: teacherProfile ? teacherProfile.full_name : 'មិនមាន',
         is_active: s.is_active
       };

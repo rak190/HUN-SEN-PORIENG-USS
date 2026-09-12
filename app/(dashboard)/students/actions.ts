@@ -99,7 +99,6 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
       is_active: isActive,
     };
 
-    if (validatedPayload.class_id) dbRecord.class_id = validatedPayload.class_id;
     if (validatedPayload.date_of_birth !== undefined) dbRecord.dob = validatedPayload.date_of_birth || null;
     if (validatedPayload.age !== undefined) dbRecord.age = validatedPayload.age ? Number(validatedPayload.age) : null;
     if (validatedPayload.scholarship !== undefined) dbRecord.scholarship = scholarship;
@@ -128,8 +127,6 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
     if (validatedPayload.father_phone !== undefined) dbRecord.father_phone = validatedPayload.father_phone || null;
     if (validatedPayload.mother_phone !== undefined) dbRecord.mother_phone = validatedPayload.mother_phone || null;
     if (validatedPayload.guardian_phone !== undefined) dbRecord.guardian_phone = validatedPayload.guardian_phone || null;
-    if (validatedPayload.desk_number !== undefined) dbRecord.desk_number = validatedPayload.desk_number || null;
-    if (validatedPayload.room_number !== undefined) dbRecord.room_number = validatedPayload.room_number || null;
     if (validatedPayload.birth_cert_no !== undefined) dbRecord.birth_cert_no = validatedPayload.birth_cert_no || null;
     if (validatedPayload.migrant_status !== undefined) dbRecord.migrant_status = validatedPayload.migrant_status || null;
 
@@ -177,8 +174,8 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
           class_id: validatedPayload.class_id,
           academic_year_id: validatedPayload.academic_year_id,
           enrollment_status: enrollmentStatus,
-          desk_number: dbRecord.desk_number || null,
-          room_number: dbRecord.room_number || null,
+          desk_number: validatedPayload.desk_number || null,
+          room_number: validatedPayload.room_number || null,
        }, { onConflict: 'student_id,academic_year_id' });
     }
 

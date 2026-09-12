@@ -12,7 +12,7 @@ export async function fetchExportData(filters: { q?: string, class?: string, tea
 
   const supabase = await createClient();
 
-  let query = supabase.from('students').select('*, classes(name, teacher_id)');
+  let query = supabase.from('active_class_rosters').select('*');
 
   // Apply filters
   if (filters.q) {
@@ -37,7 +37,7 @@ export async function fetchExportData(filters: { q?: string, class?: string, tea
   
   if (filters.class && filters.class !== 'all') {
     if (filters.class === 'គ្មានថ្នាក់') {
-       query = query.is('class_id', null);
+       query = query.is('enrollment_class_id', null);
     }
   }
 
@@ -51,7 +51,7 @@ export async function fetchExportData(filters: { q?: string, class?: string, tea
     return { success: true, data: [] };
   }
 
-  const teacherIds = [...new Set(studentsData.map(s => s.classes?.teacher_id).filter(Boolean))];
+  const teacherIds = [...new Set(studentsData.map(s => s.teacher_id).filter(Boolean))];
   let profiles: any[] = [];
   
   if (teacherIds.length > 0) {
@@ -60,7 +60,7 @@ export async function fetchExportData(filters: { q?: string, class?: string, tea
   }
 
   const mapped = studentsData.map(s => {
-    const teacherProfile = profiles?.find(p => p.id === s.classes?.teacher_id);
+    const teacherProfile = profiles?.find(p => p.id === s.teacher_id);
     return {
       id: s.id,
       full_name: s.full_name,
@@ -68,7 +68,7 @@ export async function fetchExportData(filters: { q?: string, class?: string, tea
       desk_number: s.desk_number,
       room_number: s.room_number,
       gender: s.gender,
-      class_name: s.classes?.name || 'គ្មានថ្នាក់',
+      class_name: s.class_name || 'គ្មានថ្នាក់',
       homeroom_teacher: teacherProfile ? teacherProfile.full_name : 'មិនមាន',
       is_active: s.is_active
     };
