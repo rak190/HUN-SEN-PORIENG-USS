@@ -956,7 +956,7 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
                               <input
                                 type="number"
                                 step="0.1"
-                                value={data.weight_kg !== undefined ? data.weight_kg : ''}
+                                value={data.weight_kg ?? ''}
                                 onChange={(e) => handleInputChange(student.id, 'weight_kg', e.target.value ? parseFloat(e.target.value) : undefined)}
                                 className="w-full bg-white border border-slate-200/80 rounded-xl px-2.5 py-1.5 font-bold text-slate-800 focus:outline-none focus:border-[#155EEF] focus:ring-1 focus:ring-[#155EEF]"
                                 placeholder="kg"
@@ -966,7 +966,7 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
                               <input
                                 type="number"
                                 step="0.5"
-                                value={data.height_cm !== undefined ? data.height_cm : ''}
+                                value={data.height_cm ?? ''}
                                 onChange={(e) => handleInputChange(student.id, 'height_cm', e.target.value ? parseFloat(e.target.value) : undefined)}
                                 className="w-full bg-white border border-slate-200/80 rounded-xl px-2.5 py-1.5 font-bold text-slate-800 focus:outline-none focus:border-[#155EEF] focus:ring-1 focus:ring-[#155EEF]"
                                 placeholder="cm"
