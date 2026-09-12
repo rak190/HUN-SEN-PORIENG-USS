@@ -78,7 +78,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   // 2. Fetch basic stats (only active students)
 
-  let studentsQuery = supabase.from('active_class_rosters').select('id, gender', { count: 'exact' });
+  let studentsQuery = supabase.from('active_class_rosters').select('*', { count: 'exact' });
   studentsQuery = scopeQueryToYear(studentsQuery, 'enrollment_class_id');
   const { data: studentsData, count: studentsCount } = await studentsQuery;
 
@@ -233,7 +233,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     boys: boysCount.toString(),
     classNameKh: teacherClassName || (effectiveClassId ? `ថ្នាក់ ${effectiveClassId}` : 'គ្រប់ថ្នាក់ទាំងអស់'),
     weeklyData,
-    trendData
+    trendData,
+    allStudents: studentsData || []
   };
 
   const activities: ActivityLog[] = (activityData || []).map(a => ({

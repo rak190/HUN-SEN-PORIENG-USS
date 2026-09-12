@@ -6,11 +6,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search, Mic, ArrowUpRight, Award, Globe, Share2,
   MessageCircle, Mail, CalendarCheck, ClipboardList,
-  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall
+  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall, FileSpreadsheet
 } from 'lucide-react';
 import { ActivityLog, Profile, AtRiskStudent } from '@/types';
 import { createActivityLog, deleteActivityLog } from './actions';
 import Modal from '@/components/ui/Modal';
+import MassProfileImportModal from './components/MassProfileImportModal';
 
 interface DashboardStats {
   students: string;
@@ -23,6 +24,7 @@ interface DashboardStats {
   classNameKh: string;
   weeklyData: { day: string; present: number; absent: number }[];
   trendData: { monthLabel: string; attendancePct: number; gradePct: number }[];
+  allStudents?: any[]; // To pass down to export
 }
 
 interface DashboardClientProps {
@@ -44,6 +46,7 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
   const [newType, setNewType] = useState<'report' | 'attendance' | 'award' | 'student'>('award');
   const [isPending, startTransition] = useTransition();
   const [showEwsModal, setShowEwsModal] = useState(false);
+  const [showMassImportModal, setShowMassImportModal] = useState(false);
   const [footerModalData, setFooterModalData] = useState<{ title: string; content: React.ReactNode } | null>(null);
 
   // Interactive trend and weekly filters
@@ -180,8 +183,25 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
           >
             <Mic className="w-5 h-5" />
           </button>
+          
+          <button
+            onClick={() => setShowMassImportModal(true)}
+            className="hidden sm:flex px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors items-center justify-center gap-2 shadow-sm shrink-0"
+          >
+             <FileSpreadsheet className="w-4 h-4" /> Mass Update
+          </button>
         </div>
       </header>
+      
+      <MassProfileImportModal 
+         isOpen={showMassImportModal}
+         onClose={() => setShowMassImportModal(false)}
+         students={stats.allStudents || []}
+         onComplete={() => {
+            setShowMassImportModal(false);
+            router.refresh();
+         }}
+      />
 
       {/* EWS Modal (Full-Screen Frosted Glass Portal) */}
       <Modal

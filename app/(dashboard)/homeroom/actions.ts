@@ -113,3 +113,87 @@ export async function addStudent(data: {
   revalidatePath('/homeroom');
   revalidatePath('/admin/students');
 }
+
+export async function massProfileUpdateAction(studentData: any[]) {
+  const supabase = await createClient();
+  const { user } = await getServerAuth();
+  
+  if (!user) throw new Error('Unauthorized');
+  if (!studentData || studentData.length === 0) return { success: true, count: 0 };
+
+  // Get teacher's class
+  const { data: classroom } = await supabase
+    .from('classes')
+    .select('id')
+    .eq('teacher_id', user.id)
+    .single();
+
+  if (!classroom) throw new Error('អ្នកមិនទាន់មានថ្នាក់គ្រប់គ្រងនៅឡើយទេ');
+
+  // Verify that all updated students actually belong to the teacher's class
+  const studentIds = studentData.map(s => s.id).filter(Boolean);
+  if (studentIds.length === 0) throw new Error('គ្មានទិន្នន័យត្រឹមត្រូវ');
+
+  const { data: enrollments } = await supabase
+    .from('student_enrollments')
+    .select('student_id')
+    .eq('class_id', classroom.id)
+    .in('student_id', studentIds);
+
+  const validStudentIds = new Set(enrollments?.map(e => e.student_id) || []);
+
+  let updatedCount = 0;
+
+  for (const s of studentData) {
+     if (!s.id || !validStudentIds.has(s.id)) continue; // Skip unauthorized students
+     
+     // Note: We deliberately exclude critical identifying fields (name, id_number, gender) 
+     // because those are governed by the Correction Request workflow for Teachers.
+     const payload = {
+        date_of_birth: s.date_of_birth,
+        birth_cert_no: s.birth_cert_no,
+        student_phone: s.student_phone,
+        status: s.status,
+        prev_school: s.prev_school,
+        scholarship: s.scholarship,
+        id_poor: s.id_poor,
+        orphan: s.orphan,
+        indigenous: s.indigenous,
+        distance_km: s.distance_km,
+        weight_kg: s.weight_kg,
+        height_m: s.height_m,
+        bmi: s.bmi,
+        nutrition_status: s.nutrition_status,
+        disability: s.disability,
+        assistive_device: s.assistive_device,
+        health_issues: s.health_issues,
+        father_name: s.father_name,
+        father_job: s.father_job,
+        father_phone: s.father_phone,
+        mother_name: s.mother_name,
+        mother_job: s.mother_job,
+        mother_phone: s.mother_phone,
+        guardian_name: s.guardian_name,
+        guardian_job: s.guardian_job,
+        guardian_phone: s.guardian_phone,
+        siblings_count: s.siblings_count,
+        migrant_status: s.migrant_status,
+        domestic_violence: s.domestic_violence,
+        housing: s.housing,
+        income: s.income,
+        current_address: s.current_address
+     };
+
+     // Remove undefined properties
+     Object.keys(payload).forEach(key => (payload as any)[key] === undefined && delete (payload as any)[key]);
+
+     if (Object.keys(payload).length > 0) {
+        await supabase.from('students').update(payload).eq('id', s.id);
+        updatedCount++;
+     }
+  }
+
+  revalidatePath('/homeroom');
+  revalidatePath('/students');
+  return { success: true, count: updatedCount };
+}
