@@ -5,7 +5,7 @@ import { Upload, FileSpreadsheet, AlertTriangle, Check, X, Loader2, ArrowRightLe
 import * as XLSX from 'xlsx';
 
 import { useAuth } from '@/lib/auth-context';
-import { processGiepMatchingAction } from './actions';
+import { processGiepMatchingAction } from '../actions';
 
 interface GIEPImportManagerProps {
   onClose: () => void;
@@ -311,7 +311,7 @@ export default function GIEPImportManager({ onClose, onImportComplete }: GIEPImp
                 onClick={async () => {
                    setLoading(true);
                    try {
-                      const { processGiepCommitAction } = await import('./actions');
+                      const { processGiepCommitAction } = await import('../actions');
                       const res = await processGiepCommitAction(matched, conflicts, newRecords, activeAcademicYear?.id || '');
                       if (res.success) {
                          onImportComplete();

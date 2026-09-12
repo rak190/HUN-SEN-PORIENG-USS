@@ -77,7 +77,7 @@ export default function StudentMigrationModal({
     setErrorMsg('');
 
     try {
-      const { bulkAssignClassAction } = await import('./actions');
+      const { bulkAssignClassAction } = await import('../actions');
       const res = await bulkAssignClassAction(selectedStudentIds, selectedClassId, activeAcademicYear.id);
 
       if (!res.success) throw new Error(res.error);
