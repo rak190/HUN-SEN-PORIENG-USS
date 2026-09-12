@@ -415,6 +415,7 @@ export default function MasterScoresPage() {
         isOpen={isRollbackModalOpen}
         onClose={() => setIsRollbackModalOpen(false)}
         selectedPeriod={selectedPeriod}
+        academicYearId={activeYearId || ''}
         onRollbackSuccess={() => {
            setSelectedPeriod(selectedPeriod + ' ');
            setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);

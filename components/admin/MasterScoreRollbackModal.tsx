@@ -7,6 +7,7 @@ interface MasterScoreRollbackModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedPeriod: string;
+  academicYearId: string;
   onRollbackSuccess?: () => void;
 }
 
@@ -14,6 +15,7 @@ export function MasterScoreRollbackModal({
   isOpen,
   onClose,
   selectedPeriod,
+  academicYearId,
   onRollbackSuccess
 }: MasterScoreRollbackModalProps) {
   const [loading, setLoading] = useState(true);
@@ -59,7 +61,7 @@ export function MasterScoreRollbackModal({
     setSuccessMessage('');
 
     try {
-      const res = await rollbackGradeSnapshot(snapshot.id);
+      const res = await rollbackGradeSnapshot(snapshot.id, academicYearId);
       if (res.success) {
         setSuccessMessage(`បានស្តារពិន្ទុដើមឡើងវិញដោយជោគជ័យសម្រាប់សិស្សចំនួន ${res.count} នាក់!`);
         if (onRollbackSuccess) onRollbackSuccess();
