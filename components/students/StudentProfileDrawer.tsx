@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { MassiveProfilingStudent, DEFAULT_FORM } from '@/app/(dashboard)/students/types';
+import { MassiveProfilingStudent, DEFAULT_FORM, calculateProfileCompleteness } from '@/app/(dashboard)/students/types';
 import { UserSquare2, FileText, Heart, Users, MapPin, X, Loader2, Check, Camera, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
@@ -29,6 +29,16 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
   const [isSaving, setIsSaving] = useState(false);
   const [mounted, setMounted] = useState(false);
   
+  // Correction Request State
+  const [correctionField, setCorrectionField] = useState<{
+    field: string;
+    label: string;
+    oldValue: string;
+  } | null>(null);
+  const [correctionNewValue, setCorrectionNewValue] = useState('');
+  const [correctionReason, setCorrectionReason] = useState('');
+  const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
@@ -174,6 +184,37 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
     setIsSaving(false);
   };
 
+  const handleSubmitCorrection = async () => {
+    if (!correctionField || !correctionNewValue.trim()) return;
+    setIsSubmittingCorrection(true);
+    try {
+      const { createClient } = await import('@/lib/supabase/client');
+      const supabase = createClient();
+      
+      const { error } = await supabase.from('correction_requests').insert({
+        student_id: formData.id,
+        teacher_id: profile?.id,
+        field_name: correctionField.field,
+        old_value: correctionField.oldValue,
+        new_value: correctionNewValue,
+        reason: correctionReason,
+        status: 'pending'
+      });
+
+      if (error) throw error;
+      
+      alert('បានបញ្ជូនសំណើសុំកែប្រែដោយជោគជ័យ។ (Correction request submitted successfully.)');
+      setCorrectionField(null);
+      setCorrectionNewValue('');
+      setCorrectionReason('');
+    } catch (err: any) {
+      console.error(err);
+      alert('បរាជ័យក្នុងការបញ្ជូនសំណើសុំកែប្រែ។ ' + err.message);
+    } finally {
+      setIsSubmittingCorrection(false);
+    }
+  };
+
   if (!mounted || !isOpen) return null;
 
   return createPortal(
@@ -192,8 +233,17 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
               <UserSquare2 className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-black text-slate-800">
+              <h2 className="text-base sm:text-lg font-black text-slate-800 flex items-center gap-2">
                 {formData.id ? 'កែប្រែប្រវត្តិរូបសិស្ស' : 'បង្កើតប្រវត្តិរូបសិស្សថ្មី'}
+                {formData.id && (
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
+                    calculateProfileCompleteness(formData) >= 80 ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 
+                    calculateProfileCompleteness(formData) >= 50 ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                    'bg-red-50 text-red-600 border-red-200'
+                  }`}>
+                    {calculateProfileCompleteness(formData)}% បំពេញ
+                  </span>
+                )}
               </h2>
               <p className="text-xs font-bold text-[#64748B]">
                 {formData.full_name ? `${formData.full_name} (${formData.student_id_number || 'គ្មានអត្តលេខ'})` : 'បញ្ចូលព័ត៌មានលម្អិតសិស្ស'}
@@ -261,11 +311,11 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
                 </div>
 
                 <label className="block text-xs font-bold text-slate-700 relative">
-                  អត្តលេខ {(!isAdmin && formData.student_id_number) && <button type="button" onClick={() => alert('មុខងារស្នើសុំកែតម្រូវទិន្នន័យកំពុងអភិវឌ្ឍ')} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
+                  អត្តលេខ {(!isAdmin && formData.student_id_number) && <button type="button" onClick={() => setCorrectionField({ field: 'student_id_number', label: 'អត្តលេខ', oldValue: formData.student_id_number || '' })} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
                   <input type="text" value={formData.student_id_number || ''} disabled={!isAdmin && !!formData.student_id_number} onChange={e=>setFormData({...formData, student_id_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700 relative">
-                  ឈ្មោះពេញ (Khmer) {(!isAdmin && formData.full_name) && <button type="button" onClick={() => alert('មុខងារស្នើសុំកែតម្រូវទិន្នន័យកំពុងអភិវឌ្ឍ')} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
+                  ឈ្មោះពេញ (Khmer) {(!isAdmin && formData.full_name) && <button type="button" onClick={() => setCorrectionField({ field: 'full_name', label: 'ឈ្មោះពេញ (Khmer)', oldValue: formData.full_name || '' })} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
                   <input type="text" value={formData.full_name || ''} disabled={!isAdmin && !!formData.full_name} onChange={e=>setFormData({...formData, full_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
@@ -273,7 +323,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
                   <input type="text" value={formData.english_name || ''} onChange={e=>setFormData({...formData, english_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700 relative">
-                  ភេទ {(!isAdmin && formData.gender) && <button type="button" onClick={() => alert('មុខងារស្នើសុំកែតម្រូវទិន្នន័យកំពុងអភិវឌ្ឍ')} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
+                  ភេទ {(!isAdmin && formData.gender) && <button type="button" onClick={() => setCorrectionField({ field: 'gender', label: 'ភេទ', oldValue: formData.gender || '' })} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
                   <select value={formData.gender || 'M'} disabled={!isAdmin && !!formData.gender} onChange={e=>setFormData({...formData, gender:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500">
                     <option value="M">ប្រុស</option>
                     <option value="F">ស្រី</option>
@@ -465,6 +515,61 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
             </button>
           </div>
         </div>
+
+        {/* Correction Request Modal Overlay */}
+        {correctionField && (
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 flex flex-col animate-in zoom-in-95">
+               <h3 className="text-lg font-black text-slate-800 mb-1">សំណើសុំកែប្រែទិន្នន័យ</h3>
+               <p className="text-xs font-bold text-slate-500 mb-4">លោកគ្រូ/អ្នកគ្រូកំពុងស្នើសុំកែប្រែ: <span className="text-[#155EEF]">{correctionField.label}</span></p>
+               
+               <div className="space-y-3 mb-5">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                     <p className="text-[10px] font-bold text-slate-400 uppercase">ទិន្នន័យចាស់ (Old Value)</p>
+                     <p className="font-bold text-slate-700">{correctionField.oldValue || 'គ្មាន'}</p>
+                  </div>
+                  <div>
+                     <label className="block text-xs font-bold text-slate-700 mb-1">ទិន្នន័យថ្មី (New Value) <span className="text-red-500">*</span></label>
+                     <input 
+                        type="text" 
+                        value={correctionNewValue} 
+                        onChange={e => setCorrectionNewValue(e.target.value)} 
+                        className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#155EEF] focus:outline-none"
+                        placeholder="បញ្ចូលទិន្នន័យថ្មី..."
+                     />
+                  </div>
+                  <div>
+                     <label className="block text-xs font-bold text-slate-700 mb-1">មូលហេតុនៃការកែប្រែ (Reason)</label>
+                     <textarea 
+                        value={correctionReason} 
+                        onChange={e => setCorrectionReason(e.target.value)} 
+                        className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-[#155EEF] focus:outline-none min-h-[80px]"
+                        placeholder="មូលហេតុ..."
+                     />
+                  </div>
+               </div>
+
+               <div className="flex gap-2 justify-end">
+                  <button 
+                     onClick={() => { setCorrectionField(null); setCorrectionNewValue(''); setCorrectionReason(''); }} 
+                     className="px-4 py-2 rounded-lg font-bold text-slate-600 hover:bg-slate-100 text-sm"
+                     disabled={isSubmittingCorrection}
+                  >
+                     បោះបង់
+                  </button>
+                  <button 
+                     onClick={handleSubmitCorrection}
+                     disabled={!correctionNewValue.trim() || isSubmittingCorrection}
+                     className="px-4 py-2 rounded-lg font-bold bg-[#155EEF] text-white hover:bg-blue-700 text-sm flex items-center gap-2 disabled:opacity-50"
+                  >
+                     {isSubmittingCorrection && <Loader2 className="w-4 h-4 animate-spin" />}
+                     បញ្ជូនសំណើ
+                  </button>
+               </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>,
     document.body

@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { X, ArrowRightLeft, AlertTriangle, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
+import { useAuth } from '@/lib/auth-context';
+
 interface StudentMigrationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -18,6 +20,7 @@ export default function StudentMigrationModal({
   selectedStudentIds,
   onComplete
 }: StudentMigrationModalProps) {
+  const { activeAcademicYear } = useAuth();
   const [classes, setClasses] = useState<any[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -40,13 +43,18 @@ export default function StudentMigrationModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && activeAcademicYear?.id) {
       fetchClasses();
     }
-  }, [isOpen]);
+  }, [isOpen, activeAcademicYear]);
 
   const fetchClasses = async () => {
-    const { data, error } = await supabase.from('classes').select('id, name, grade').order('grade').order('name');
+    if (!activeAcademicYear?.id) return;
+    const { data, error } = await supabase.from('classes')
+      .select('id, name, grade')
+      .eq('academic_year_id', activeAcademicYear.id)
+      .eq('is_archived', false)
+      .order('grade').order('name');
     if (!error && data) {
       setClasses(data);
       if (data.length > 0) setSelectedClassId(data[0].id);
@@ -60,18 +68,19 @@ export default function StudentMigrationModal({
       setErrorMsg('សូមជ្រើសរើសថ្នាក់ដែលត្រូវផ្ទេរទៅ');
       return;
     }
+    if (!activeAcademicYear?.id) {
+      setErrorMsg('មិនមានឆ្នាំសិក្សា។');
+      return;
+    }
 
     setLoading(true);
     setErrorMsg('');
 
     try {
-      // Perform bulk update
-      const { error } = await supabase
-        .from('students')
-        .update({ class_id: selectedClassId })
-        .in('id', selectedStudentIds);
+      const { bulkAssignClassAction } = await import('./actions');
+      const res = await bulkAssignClassAction(selectedStudentIds, selectedClassId, activeAcademicYear.id);
 
-      if (error) throw error;
+      if (!res.success) throw new Error(res.error);
 
       alert(`បានផ្ទេរសិស្សចំនួន ${selectedStudentIds.length} នាក់ដោយជោគជ័យ!`);
       onComplete();

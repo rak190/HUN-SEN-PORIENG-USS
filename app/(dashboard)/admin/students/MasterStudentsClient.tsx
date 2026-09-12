@@ -15,6 +15,7 @@ import autoTable from 'jspdf-autotable';
 import { suwannaphumBase64 } from '@/public/fonts/SuwannaphumBase64';
 
 import StudentMigrationModal from './components/StudentMigrationModal';
+import StudentPromotionModal from './components/StudentPromotionModal';
 import StudentProfileDrawer from './components/StudentProfileDrawer';
 import AdminBasicRegistrationModal from '@/components/admin/AdminBasicRegistrationModal';
 import AdminBasicImportModal from '@/components/admin/AdminBasicImportModal';
@@ -60,6 +61,7 @@ export default function MasterStudentsClient({
   const [isBasicRegistrationModalOpen, setIsBasicRegistrationModalOpen] = useState(false);
   const [isBasicImportModalOpen, setIsBasicImportModalOpen] = useState(false);
   const [isGiepImportModalOpen, setIsGiepImportModalOpen] = useState(false);
+  const [isPromotionModalOpen, setIsPromotionModalOpen] = useState(false);
 
   // Sync state with props
   useEffect(() => {
@@ -288,7 +290,13 @@ export default function MasterStudentsClient({
           </p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button 
+            onClick={() => setIsPromotionModalOpen(true)}
+            className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
+          >
+            <GraduationCap className="w-4 h-4" /> ឡើងថ្នាក់ (Promote)
+          </button>
           <button 
             onClick={() => setIsBasicRegistrationModalOpen(true)}
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
@@ -648,6 +656,16 @@ export default function MasterStudentsClient({
           setIsMigrationModalOpen(false);
           setSelectedStudents([]);
           // Force refresh
+          router.refresh();
+        }}
+      />
+
+      <StudentPromotionModal 
+        isOpen={isPromotionModalOpen}
+        onClose={() => setIsPromotionModalOpen(false)}
+        onComplete={() => {
+          setIsPromotionModalOpen(false);
+          setSelectedStudents([]);
           router.refresh();
         }}
       />

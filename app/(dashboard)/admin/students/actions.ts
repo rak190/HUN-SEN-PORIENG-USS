@@ -244,3 +244,35 @@ export async function processGiepCommitAction(
     return { success: false, error: err.message || 'Unknown error occurred' };
   }
 }
+
+export async function bulkAssignClassAction(studentIds: string[], targetClassId: string, academicYearId: string) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    const enrollmentsToUpsert = studentIds.map(id => ({
+      student_id: id,
+      class_id: targetClassId,
+      academic_year_id: academicYearId,
+      enrollment_status: 'active'
+    }));
+
+    const { error } = await supabase.from('student_enrollments').upsert(enrollmentsToUpsert, {
+      onConflict: 'student_id,academic_year_id'
+    });
+
+    if (error) throw error;
+
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/admin/students');
+    revalidatePath('/students');
+    revalidatePath('/classes/info');
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Bulk assign class error:', err);
+    return { success: false, error: err.message || 'Unknown error occurred' };
+  }
+}
