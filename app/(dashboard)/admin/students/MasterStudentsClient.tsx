@@ -18,6 +18,7 @@ import StudentMigrationModal from './components/StudentMigrationModal';
 import StudentProfileDrawer from './components/StudentProfileDrawer';
 import AdminBasicRegistrationModal from '@/components/admin/AdminBasicRegistrationModal';
 import AdminBasicImportModal from '@/components/admin/AdminBasicImportModal';
+import GIEPImportManager from './components/GIEPImportManager';
 import { fetchExportData } from './actions';
 
 interface MasterStudentsClientProps {
@@ -58,6 +59,7 @@ export default function MasterStudentsClient({
   const [localSearch, setLocalSearch] = useState(filters.q);
   const [isBasicRegistrationModalOpen, setIsBasicRegistrationModalOpen] = useState(false);
   const [isBasicImportModalOpen, setIsBasicImportModalOpen] = useState(false);
+  const [isGiepImportModalOpen, setIsGiepImportModalOpen] = useState(false);
 
   // Sync state with props
   useEffect(() => {
@@ -292,6 +294,12 @@ export default function MasterStudentsClient({
             className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
           >
             បញ្ជូលតាមប្រអប់ (Grid)
+          </button>
+          <button 
+            onClick={() => setIsGiepImportModalOpen(true)}
+            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> GIEP Import
           </button>
           <button 
             onClick={() => setIsBasicImportModalOpen(true)}
@@ -660,6 +668,15 @@ export default function MasterStudentsClient({
           router.refresh();
         }}
       />
+      {isGiepImportModalOpen && (
+        <GIEPImportManager 
+          onClose={() => setIsGiepImportModalOpen(false)}
+          onImportComplete={() => {
+            setIsGiepImportModalOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -127,3 +127,120 @@ export async function adminBasicRegisterAction(payload: {
   }
 }
 
+export async function processGiepMatchingAction(records: any[], academic_year_id: string) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    // Fetch existing students for the current academic year
+    // To match we need student_id_number, full_name, gender, etc.
+    const { data: existingStudents, error } = await supabase
+      .from('active_class_rosters')
+      .select('id, student_id_number, full_name, gender, class_name')
+      .eq('academic_year_id', academic_year_id);
+
+    if (error) throw error;
+
+    const existingMap = new Map();
+    existingStudents?.forEach(s => {
+      if (s.student_id_number) {
+        existingMap.set(s.student_id_number.trim(), s);
+      }
+    });
+
+    const matched = [];
+    const conflicts = [];
+    const newRecords = [];
+
+    for (const record of records) {
+       const existing = existingMap.get(record.student_id_number);
+       if (existing) {
+          // Check for conflicts
+          const isNameConflict = existing.full_name !== record.full_name;
+          // Gender might be normalized
+          const isGenderConflict = existing.gender !== record.gender;
+          
+          if (isNameConflict || isGenderConflict) {
+             conflicts.push({ ...record, existing });
+          } else {
+             matched.push({ ...record, existing_id: existing.id });
+          }
+       } else {
+          newRecords.push(record);
+       }
+    }
+
+    return { success: true, matched, conflicts, newRecords };
+  } catch (err: any) {
+    console.error('Process GIEP mapping error:', err);
+    return { success: false, error: err.message || 'Unknown error occurred' };
+  }
+}
+
+export async function processGiepCommitAction(
+  matched: any[], 
+  conflicts: any[], 
+  newRecords: any[], 
+  academic_year_id: string
+) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+    
+    const allRecordsToProcess = [...matched, ...conflicts, ...newRecords];
+    
+    // First, fetch existing classes so we can map class_name to class_id
+    const { data: dbClasses } = await supabase.from('classes').select('id, name');
+    const classMap = new Map();
+    dbClasses?.forEach(c => classMap.set(c.name.trim(), c.id));
+    
+    let successCount = 0;
+
+    for (const record of allRecordsToProcess) {
+       let studentId = record.existing_id || record.existing?.id;
+       const classId = classMap.get(record.class_name);
+       
+       const dbRecord: any = {
+          student_id_number: record.student_id_number,
+          full_name: record.full_name,
+          gender: record.gender,
+       };
+
+       if (studentId) {
+          await supabase.from('students').update(dbRecord).eq('id', studentId);
+       } else {
+          dbRecord.status = 'new';
+          dbRecord.is_active = true;
+          const { data } = await supabase.from('students').insert([dbRecord]).select().single();
+          if (data) studentId = data.id;
+       }
+       
+       if (studentId && classId) {
+          // Upsert enrollment
+          await supabase.from('student_enrollments').upsert({
+             student_id: studentId,
+             class_id: classId,
+             academic_year_id: academic_year_id,
+             enrollment_status: 'active',
+             desk_number: record.desk_number || null,
+             room_number: record.room_number || null
+          }, { onConflict: 'student_id,academic_year_id' });
+       }
+       
+       successCount++;
+    }
+
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/admin/students');
+    revalidatePath('/students');
+    
+    return { success: true, count: successCount };
+  } catch (err: any) {
+    console.error('Process GIEP commit error:', err);
+    return { success: false, error: err.message || 'Unknown error occurred' };
+  }
+}
