@@ -24,6 +24,8 @@ export default function MassProfileImportModal({
   const [previewData, setPreviewData] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [importResult, setImportResult] = useState<{count: number, errors: any[]} | null>(null);
+
   if (!isOpen) return null;
 
   const handleDownloadTemplate = () => {
@@ -59,6 +61,7 @@ export default function MassProfileImportModal({
     if (!file) return;
 
     setErrorMsg('');
+    setImportResult(null);
     setLoading(true);
 
     const reader = new FileReader();
@@ -106,13 +109,20 @@ export default function MassProfileImportModal({
     
     setLoading(true);
     setErrorMsg('');
+    setImportResult(null);
 
     try {
       const res = await massProfileUpdateAction(previewData);
       if (!res.success) throw new Error(res.error);
 
-      alert(`បានធ្វើបច្ចុប្បន្នភាពប្រវត្តិរូបសិស្សចំនួន ${res.count} នាក់!`);
-      onComplete();
+      setImportResult({ count: res.count, errors: res.errors || [] });
+      if (res.errors && res.errors.length > 0) {
+         // Show partial success
+         setErrorMsg(`បញ្ជូលបាន ${res.count} នាក់, បរាជ័យ ${res.errors.length} នាក់។`);
+      } else {
+         alert(`បានធ្វើបច្ចុប្បន្នភាពប្រវត្តិរូបសិស្សចំនួន ${res.count} នាក់!`);
+         onComplete();
+      }
     } catch (err: any) {
       setErrorMsg(err.message || 'មានបញ្ហាក្នុងការបញ្ចូលទិន្នន័យ');
     } finally {
@@ -143,8 +153,26 @@ export default function MassProfileImportModal({
         </div>
 
         {errorMsg && (
-          <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl text-xs font-bold shrink-0">
-            {errorMsg}
+          <div className="mb-4 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold shrink-0">
+            <div className="flex items-center gap-2 mb-2">
+               <AlertTriangle className="w-4 h-4 text-rose-600" />
+               <span className="text-sm">{errorMsg}</span>
+            </div>
+            {importResult?.errors && importResult.errors.length > 0 && (
+               <ul className="list-disc pl-5 space-y-1 font-semibold text-rose-600">
+                  {importResult.errors.map((err, i) => (
+                     <li key={i}>{err.name} (ID: {err.id}): {err.reason}</li>
+                  ))}
+               </ul>
+            )}
+            {importResult && (
+               <button 
+                  onClick={onComplete}
+                  className="mt-4 px-4 py-2 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded-xl"
+               >
+                  បិទ និងផ្ទុកឡើងវិញ (Refresh)
+               </button>
+            )}
           </div>
         )}
 

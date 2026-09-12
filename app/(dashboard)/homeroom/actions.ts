@@ -134,21 +134,39 @@ export async function massProfileUpdateAction(studentData: any[]) {
   const studentIds = studentData.map(s => s.id).filter(Boolean);
   if (studentIds.length === 0) throw new Error('គ្មានទិន្នន័យត្រឹមត្រូវ');
 
+  // Get current active academic year
+  const { data: activeYear } = await supabase
+    .from('academic_years')
+    .select('id')
+    .eq('is_active', true)
+    .single();
+
+  if (!activeYear) throw new Error('គ្មានឆ្នាំសិក្សាសកម្ម');
+
   const { data: enrollments } = await supabase
     .from('student_enrollments')
     .select('student_id')
     .eq('class_id', classroom.id)
+    .eq('academic_year_id', activeYear.id)
+    .eq('enrollment_status', 'active')
     .in('student_id', studentIds);
 
   const validStudentIds = new Set(enrollments?.map(e => e.student_id) || []);
 
   let updatedCount = 0;
+  let errors: { id: string, name: string, reason: string }[] = [];
 
   for (const s of studentData) {
-     if (!s.id || !validStudentIds.has(s.id)) continue; // Skip unauthorized students
+     if (!s.id) {
+       errors.push({ id: 'N/A', name: s.full_name || 'Unknown', reason: 'Missing ID' });
+       continue;
+     }
      
-     // Note: We deliberately exclude critical identifying fields (name, id_number, gender) 
-     // because those are governed by the Correction Request workflow for Teachers.
+     if (!validStudentIds.has(s.id)) {
+       errors.push({ id: s.student_id_number || s.id, name: s.full_name, reason: 'Student not in your active class' });
+       continue;
+     }
+     
      const payload = {
         date_of_birth: s.date_of_birth,
         birth_cert_no: s.birth_cert_no,
@@ -188,12 +206,16 @@ export async function massProfileUpdateAction(studentData: any[]) {
      Object.keys(payload).forEach(key => (payload as any)[key] === undefined && delete (payload as any)[key]);
 
      if (Object.keys(payload).length > 0) {
-        await supabase.from('students').update(payload).eq('id', s.id);
-        updatedCount++;
+        const { error } = await supabase.from('students').update(payload).eq('id', s.id);
+        if (error) {
+           errors.push({ id: s.student_id_number || s.id, name: s.full_name, reason: 'Database error: ' + error.message });
+        } else {
+           updatedCount++;
+        }
      }
   }
 
   revalidatePath('/homeroom');
   revalidatePath('/students');
-  return { success: true, count: updatedCount };
+  return { success: true, count: updatedCount, errors };
 }
