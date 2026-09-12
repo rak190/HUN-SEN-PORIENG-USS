@@ -221,6 +221,9 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
     const updatedFormData: Record<string, Partial<StudentHealthRecord>> = {};
     const recordsToSave: Partial<StudentHealthRecord>[] = [];
     const updatedHealthList: StudentHealthRecord[] = [...healthRecords];
+    
+    const selectedClass = classes.find(c => c.id === selectedClassId);
+    const activeYearId = selectedClass?.academic_year_id || activeClass?.academic_year_id;
 
     students.forEach(std => {
       const existing = formData[std.id] || {};
@@ -252,6 +255,7 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
         id: recIdx >= 0 ? updatedHealthList[recIdx].id : `rec-${std.id}-${recordDate}`,
         student_id: std.id,
         class_id: (std.class_id || selectedClassId) as string,
+        academic_year_id: activeYearId as string,
         recorded_date: recordDate,
         weight_kg: w,
         height_cm: h,
@@ -275,9 +279,6 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
     setHealthRecords(updatedHealthList);
 
     try {
-      const selectedClass = classes.find(c => c.id === selectedClassId);
-      const activeYearId = selectedClass?.academic_year_id || activeClass?.academic_year_id;
-      
       if (!activeYearId) {
         throw new Error('រកមិនឃើញឆ្នាំសិក្សាសកម្មទេ');
       }
@@ -335,6 +336,7 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
             id: idx >= 0 ? nextList[idx].id : `rec-${rec.student_id}-${rec.recorded_date}`,
             student_id: rec.student_id as string,
             class_id: (rec.class_id || selectedClassId) as string,
+            academic_year_id: activeYearId as string,
             recorded_date: rec.recorded_date as string,
             weight_kg: rec.weight_kg,
             height_cm: rec.height_cm,
