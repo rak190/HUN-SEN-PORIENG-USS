@@ -404,18 +404,18 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
         let valB: any = b[field as keyof Student];
 
         if (field === 'weight_kg') {
-          valA = formA.weight_kg !== undefined ? formA.weight_kg : (a.weight_kg || 0);
-          valB = formB.weight_kg !== undefined ? formB.weight_kg : (b.weight_kg || 0);
+          valA = formA.weight_kg ?? a.weight_kg ?? 0;
+          valB = formB.weight_kg ?? b.weight_kg ?? 0;
         } else if (field === 'height_cm') {
-          valA = formA.height_cm !== undefined ? formA.height_cm : (a.height_m ? a.height_m * 100 : 0);
-          valB = formB.height_cm !== undefined ? formB.height_cm : (b.height_m ? b.height_m * 100 : 0);
+          valA = formA.height_cm ?? (a.height_m ? a.height_m * 100 : 0);
+          valB = formB.height_cm ?? (b.height_m ? b.height_m * 100 : 0);
         } else if (field === 'bmi') {
-          const wA = formA.weight_kg !== undefined ? formA.weight_kg : (a.weight_kg || 0);
-          const hA = (formA.height_cm !== undefined ? formA.height_cm : (a.height_m ? a.height_m * 100 : 0)) / 100;
+          const wA = formA.weight_kg ?? a.weight_kg ?? 0;
+          const hA = (formA.height_cm ?? (a.height_m ? a.height_m * 100 : 0)) / 100;
           valA = wA > 0 && hA > 0 ? wA / (hA * hA) : 0;
 
-          const wB = formB.weight_kg !== undefined ? formB.weight_kg : (b.weight_kg || 0);
-          const hB = (formB.height_cm !== undefined ? formB.height_cm : (b.height_m ? b.height_m * 100 : 0)) / 100;
+          const wB = formB.weight_kg ?? b.weight_kg ?? 0;
+          const hB = (formB.height_cm ?? (b.height_m ? b.height_m * 100 : 0)) / 100;
           valB = wB > 0 && hB > 0 ? wB / (hB * hB) : 0;
         } else if (field === 'vision_left') {
           valA = formA.vision_left || '';
