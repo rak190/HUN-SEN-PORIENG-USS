@@ -113,7 +113,7 @@ export default function MassProfileImportModal({
 
     try {
       const res = await massProfileUpdateAction(previewData);
-      if (!res.success) throw new Error(res.error);
+      if (!res.success) throw new Error('ការបញ្ចូលបរាជ័យ (Import failed)');
 
       setImportResult({ count: res.count, errors: res.errors || [] });
       if (res.errors && res.errors.length > 0) {
