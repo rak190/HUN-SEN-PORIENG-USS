@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
 import { StudentHealthRecord } from '@/types';
 
-export async function upsertHealthRecords(records: Partial<StudentHealthRecord>[]) {
+export async function upsertHealthRecords(records: Partial<StudentHealthRecord>[], academicYearId: string) {
   try {
     const supabase = createAdminClient();
 
@@ -19,6 +19,7 @@ export async function upsertHealthRecords(records: Partial<StudentHealthRecord>[
         return {
           student_id: r.student_id,
           class_id: r.class_id,
+          academic_year_id: academicYearId,
           recorded_date: r.recorded_date,
           weight_kg: weight,
           height_cm: height,
@@ -35,7 +36,7 @@ export async function upsertHealthRecords(records: Partial<StudentHealthRecord>[
 
     const { error } = await supabase
       .from('student_health_records')
-      .upsert(validRecords, { onConflict: 'student_id,recorded_date' });
+      .upsert(validRecords, { onConflict: 'student_id,recorded_date,academic_year_id' });
 
     if (error) {
       console.warn('Supabase upsert health records warning (fallback applied):', error.message);

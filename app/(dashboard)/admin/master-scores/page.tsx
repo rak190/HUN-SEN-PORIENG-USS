@@ -35,6 +35,7 @@ export default function MasterScoresPage() {
   const [isCalculating, setIsCalculating] = useState(false);
 
   const supabase = createClient();
+  const [activeYearId, setActiveYearId] = useState<string | null>(null);
 
   useEffect(() => {
     const curMonth = new Date().getMonth();
@@ -50,19 +51,42 @@ export default function MasterScoresPage() {
     async function fetchStats() {
       setLoading(true);
       try {
-        // 1. Fetch all classes
-        const { data: classesData, error: classErr } = await supabase
+        // 0. Fetch active academic year
+        const { data: yearData } = await supabase
+          .from('academic_years')
+          .select('id')
+          .eq('is_active', true)
+          .single();
+          
+        if (yearData) {
+          setActiveYearId(yearData.id);
+        }
+
+        // 1. Fetch all classes for the active academic year
+        let classesQuery = supabase
           .from('classes')
           .select('id, name, teacher_id, profiles:teacher_id(full_name)')
           .order('name', { ascending: true });
+          
+        if (yearData) {
+          classesQuery = classesQuery.eq('academic_year_id', yearData.id);
+        }
+        
+        const { data: classesData, error: classErr } = await classesQuery;
 
         if (classErr) throw classErr;
 
-        // 2. Fetch distinct grades for this period
-        const { data: gradesData, error: gradeErr } = await supabase
+        // 2. Fetch distinct grades for this period (filtered by academic year implicitly via class_id but we should add it if possible, though status checking is fine)
+        let gradesQuery = supabase
           .from('grades')
           .select('class_id, status')
           .eq('period', selectedPeriod);
+          
+        if (yearData) {
+          gradesQuery = gradesQuery.eq('academic_year_id', yearData.id);
+        }
+
+        const { data: gradesData, error: gradeErr } = await gradesQuery;
 
         if (gradeErr) throw gradeErr;
 
@@ -109,6 +133,10 @@ export default function MasterScoresPage() {
   }, [selectedPeriod]);
 
   const handlePublishScores = async () => {
+    if (!activeYearId) {
+       alert('រកមិនឃើញឆ្នាំសិក្សាសកម្មទេ');
+       return;
+    }
     if (!confirm(`តើអ្នកពិតជាចង់បោះពុម្ពផ្សាយពិន្ទុសម្រាប់ខែ "${selectedPeriod}" មែនទេ?`)) return;
     setIsPublishing(true);
     try {
@@ -116,6 +144,7 @@ export default function MasterScoresPage() {
         .from('grades')
         .update({ status: 'published', updated_at: new Date().toISOString() })
         .eq('period', selectedPeriod)
+        .eq('academic_year_id', activeYearId)
         .eq('status', 'draft');
 
       if (error) throw error;
@@ -131,10 +160,14 @@ export default function MasterScoresPage() {
   };
 
   const handleCalculateSummary = async () => {
+    if (!activeYearId) {
+       alert('រកមិនឃើញឆ្នាំសិក្សាសកម្មទេ');
+       return;
+    }
     if (!confirm(`តើអ្នកពិតជាចង់គណនាពិន្ទុ ${selectedPeriod} សម្រាប់សិស្សទាំងអស់មែនទេ?`)) return;
     setIsCalculating(true);
     try {
-      const res = await calculateSummaryScores(selectedPeriod);
+      const res = await calculateSummaryScores(selectedPeriod, activeYearId);
       if (res.success) {
         alert(`បានគណនា និងរក្សាទុកពិន្ទុជោគជ័យសម្រាប់សិស្សចំនួន ${res.count} នាក់!`);
         // Trigger refetch

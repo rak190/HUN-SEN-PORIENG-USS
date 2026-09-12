@@ -8,12 +8,12 @@ import { computeSummaryGrades } from '@/lib/domain/grading';
 /**
  * Creates an automated backup snapshot before applying bulk grade updates
  */
-export async function createGradeSnapshot(period: string, classIds: string[], label: string) {
+export async function createGradeSnapshot(period: string, academicYearId: string, classIds: string[], label: string) {
   const supabase = await createClient();
   const { user } = await getServerAuth();
 
   try {
-    let query = supabase.from('grades').select('*').eq('period', period);
+    let query = supabase.from('grades').select('*').eq('period', period).eq('academic_year_id', academicYearId);
     if (classIds && classIds.length > 0) {
       query = query.in('class_id', classIds);
     }
@@ -65,7 +65,7 @@ export async function getGradeSnapshots(period?: string) {
 /**
  * 1-Click Rollback: Restores previous grade state from snapshot
  */
-export async function rollbackGradeSnapshot(snapshotId: string) {
+export async function rollbackGradeSnapshot(snapshotId: string, academicYearId: string) {
   const supabase = await createClient();
   const { user, role } = await getServerAuth();
 
@@ -89,13 +89,18 @@ export async function rollbackGradeSnapshot(snapshotId: string) {
     // 2. Identify classes involved
     const classIdsInvolved = [...new Set(backupGrades.map(g => g.class_id))];
 
-    // 3. Delete current grades for this period in these classes
+    // 3. Delete current grades for this period in these classes (and this year, for absolute safety)
     if (classIdsInvolved.length > 0) {
       for (const cid of classIdsInvolved) {
-        await supabase.from('grades').delete().eq('class_id', cid).eq('period', period);
+        await supabase.from('grades').delete()
+          .eq('class_id', cid)
+          .eq('period', period)
+          .eq('academic_year_id', academicYearId);
       }
     } else {
-      await supabase.from('grades').delete().eq('period', period);
+      await supabase.from('grades').delete()
+        .eq('period', period)
+        .eq('academic_year_id', academicYearId);
     }
 
     // 4. Restore original records
@@ -127,7 +132,7 @@ export async function rollbackGradeSnapshot(snapshotId: string) {
 /**
  * Calculates Semester and Annual summary scores according to official MoEYS standard
  */
-export async function calculateSummaryScores(period: string) {
+export async function calculateSummaryScores(period: string, academicYearId: string) {
   // period should be 'sem1-summary', 'sem2-summary', or 'annual'
   let targetMonths: string[] = [];
   let examPeriod = '';
@@ -148,25 +153,40 @@ export async function calculateSummaryScores(period: string) {
 
   const supabase = await createClient();
 
-  // 1. Fetch active students with class info
-  const { data: students, error: studentErr } = await supabase
-    .from('students')
-    .select('id, class_id, classes(grade, track)')
-    .eq('is_active', true);
+  // 1. Fetch active students with class info for the specific academic year
+  // Need to join through student_enrollments
+  const { data: enrollments, error: studentErr } = await supabase
+    .from('student_enrollments')
+    .select(`
+      student_id, 
+      class_id, 
+      classes!inner(grade, track)
+    `)
+    .eq('academic_year_id', academicYearId)
+    .eq('enrollment_status', 'active');
 
-  if (studentErr || !students) return { success: false, error: 'មិនអាចទាញយកទិន្នន័យសិស្សបានទេ' };
+  if (studentErr || !enrollments) return { success: false, error: 'មិនអាចទាញយកទិន្នន័យសិស្សបានទេ' };
 
-  // 2. Fetch grades in target periods
+  const students = enrollments.map((e: any) => ({
+     id: e.student_id,
+     class_id: e.class_id,
+     classes: e.classes
+  }));
+
+  if (students.length === 0) return { success: false, error: 'មិនមានសិស្សសកម្មក្នុងឆ្នាំសិក្សានេះទេ' };
+
+  // 2. Fetch grades in target periods for the specific academic year
   const { data: gradesData, error: gradesErr } = await supabase
     .from('grades')
     .select('student_id, class_id, period, scores')
-    .in('period', allTargetPeriods);
+    .in('period', allTargetPeriods)
+    .eq('academic_year_id', academicYearId);
 
   if (gradesErr || !gradesData) return { success: false, error: 'មិនអាចទាញយកពិន្ទុបានទេ' };
 
   // Create automatic snapshot before running calculation
   const classIds = [...new Set(students.map(s => s.class_id).filter(Boolean))];
-  await createGradeSnapshot(period, classIds as string[], `Backup មុនពេលគណនា ${period}`);
+  await createGradeSnapshot(period, academicYearId, classIds as string[], `Backup មុនពេលគណនា ${period}`);
 
   // 3. Group grades by student and period
   const studentGradesMap = new Map<string, Map<string, Record<string, number>>>();
@@ -214,6 +234,7 @@ export async function calculateSummaryScores(period: string) {
       updates.push({
         student_id: std.id,
         class_id: std.class_id,
+        academic_year_id: academicYearId,
         period: period,
         scores: calculatedScores,
         total_score: parseFloat(totalScore.toFixed(2)),
@@ -227,7 +248,7 @@ export async function calculateSummaryScores(period: string) {
   if (updates.length > 0) {
     const { error: upsertErr } = await supabase
       .from('grades')
-      .upsert(updates, { onConflict: 'student_id,period' });
+      .upsert(updates, { onConflict: 'student_id,period,academic_year_id' });
 
     if (upsertErr) return { success: false, error: upsertErr.message };
   } else {

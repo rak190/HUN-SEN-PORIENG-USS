@@ -44,6 +44,14 @@ const AVAILABLE_REPORTS = [
     description: 'ចំនួនគ្រូបង្រៀន បុគ្គលិកអប់រំ តាមកម្រិតវប្បធម៌ និងមុខវិជ្ជាឯកទេស។',
     lastUpdated: '20 តុលា 2025',
     type: 'Excel'
+  },
+  {
+    id: 'REP-05',
+    title: 'ទិន្នន័យសិស្សសរុប GEIP (GIEP Master Dataset)',
+    category: 'របាយការណ៍រដ្ឋបាល',
+    description: 'ទាញយកទិន្នន័យសិស្ស និងពត៌មានលម្អិតទាំងអស់សម្រាប់បញ្ចូលទៅក្នុងទម្រង់ GIEP របស់ក្រសួង។',
+    lastUpdated: 'ថ្មីៗ',
+    type: 'Excel'
   }
 ];
 
@@ -82,6 +90,8 @@ export default function MoeysReportsPage() {
         await generateSemester1GradesPDF();
       } else if (reportId === 'REP-04') {
         await generateTeacherStatsExcel();
+      } else if (reportId === 'REP-05') {
+        await generateGiepMasterExcel();
       }
     } catch (err: any) {
       console.error('Error generating report:', err);
@@ -93,28 +103,50 @@ export default function MoeysReportsPage() {
 
   const generateStudentStatsExcel = async () => {
     // REP-01: Students joined with classes
+    if (!activeAcademicYear) {
+      alert("មិនមានឆ្នាំសិក្សាសកម្មទេ។");
+      return;
+    }
+
+    const { data: classes } = await supabase
+      .from('classes')
+      .select('id, name, grade, track')
+      .eq('academic_year_id', activeAcademicYear.id);
+
+    const classIds = classes?.map(c => c.id) || [];
+    if (classIds.length === 0) {
+      alert("មិនមានថ្នាក់រៀនសម្រាប់ឆ្នាំសិក្សានេះទេ។");
+      return;
+    }
+
     const { data: students, error } = await supabase
-      .from('students')
-      .select('*, classes(name, grade, track)')
+      .from('active_class_rosters')
+      .select('*')
+      .in('enrollment_class_id', classIds)
       .order('full_name', { ascending: true });
       
     if (error) throw error;
     
+    // Map classes for quick lookup
+    const classMap = new Map(classes?.map(c => [c.id, c]) || []);
+
     // Format data for MoEYS standard
     const excelData = (students || []).map((s: any, index: number) => {
       let enrollType = 'សិស្សថ្មី/ឡើងថ្នាក់';
-      if (s.status === 'repeated' || s.is_repeater) enrollType = 'សិស្សត្រួតថ្នាក់';
-      else if (s.status === 'transferred_in') enrollType = 'សិស្សផ្ទេរចូល';
+      if (s.current_enrollment_status === 'repeated' || s.is_repeater) enrollType = 'សិស្សត្រួតថ្នាក់';
+      else if (s.current_enrollment_status === 'transferred_in') enrollType = 'សិស្សផ្ទេរចូល';
 
       let statusLabel = 'កំពុងសិក្សា';
-      if (s.status === 'transferred_out') statusLabel = 'ផ្ទេរចេញ';
-      else if (s.status === 'dropped_out') statusLabel = 'បោះបង់ការសិក្សា';
+      if (s.current_enrollment_status === 'transferred_out') statusLabel = 'ផ្ទេរចេញ';
+      else if (s.current_enrollment_status === 'dropout' || s.current_enrollment_status === 'dropped_out') statusLabel = 'បោះបង់ការសិក្សា';
       else if (!s.is_active) statusLabel = 'អសកម្ម';
 
       let povertyLabel = 'ទូទៅ';
-      if (s.poverty_status === 'poor_1') povertyLabel = 'ក្រីក្រកម្រិត ១ (ក្រ១)';
-      else if (s.poverty_status === 'poor_2') povertyLabel = 'ក្រីក្រកម្រិត ២ (ក្រ២)';
+      if (s.id_poor === 'level_1') povertyLabel = 'ក្រីក្រកម្រិត ១ (ក្រ១)';
+      else if (s.id_poor === 'level_2') povertyLabel = 'ក្រីក្រកម្រិត ២ (ក្រ២)';
       else if (s.poverty_status === 'near_poor') povertyLabel = 'ងាយរងហានិភ័យ';
+
+      const cls = classMap.get(s.enrollment_class_id) as any;
 
       return {
         'ល.រ (No.)': index + 1,
@@ -122,8 +154,8 @@ export default function MoeysReportsPage() {
         'គោត្តនាម និងនាម (Full Name)': s.full_name,
         'ភេទ (Gender)': s.gender === 'F' || s.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស',
         'ថ្ងៃខែឆ្នាំកំណើត (DOB)': s.dob || 'N/A',
-        'ថ្នាក់រៀន (Class)': s.classes?.name || 'N/A',
-        'កម្រិតថ្នាក់ (Grade)': s.classes?.grade || 'N/A',
+        'ថ្នាក់រៀន (Class)': cls?.name || 'N/A',
+        'កម្រិតថ្នាក់ (Grade)': cls?.grade || 'N/A',
         'បន្ទប់លេខ (Room)': s.room_number || 'N/A',
         'លេខតុ (Desk)': s.desk_number || 'N/A',
         'ប្រភេទសិស្ស (Type)': enrollType,
@@ -140,6 +172,11 @@ export default function MoeysReportsPage() {
 
   const generateMonthlyAttendanceExcel = async () => {
     // REP-02: Attendance for selected month
+    if (!activeAcademicYear) {
+      alert("មិនមានឆ្នាំសិក្សាសកម្មទេ។");
+      return;
+    }
+
     const [yearStr, monthStr] = selectedMonth.split('-');
     const startDate = `${yearStr}-${monthStr}-01`;
     const endDate = new Date(Number(yearStr), Number(monthStr), 0).toISOString().split('T')[0];
@@ -147,6 +184,7 @@ export default function MoeysReportsPage() {
     const { data: attendance, error } = await supabase
       .from('attendance_records')
       .select('*, students(full_name, gender, student_id_number), classes(name)')
+      .eq('academic_year_id', activeAcademicYear.id)
       .gte('date', startDate)
       .lte('date', endDate);
 
@@ -192,9 +230,15 @@ export default function MoeysReportsPage() {
 
   const generateSemester1GradesPDF = async () => {
     // REP-03: Semester 1 Grades (PDF via Canvas)
+    if (!activeAcademicYear) {
+      alert("មិនមានឆ្នាំសិក្សាសកម្មទេ។");
+      return;
+    }
+
     const { data: grades, error } = await supabase
       .from('grades')
       .select('*, students(full_name, gender, student_id_number), classes(name)')
+      .eq('academic_year_id', activeAcademicYear.id)
       .eq('period', 'sem1-exam')
       .order('total_score', { ascending: false });
 
@@ -245,6 +289,109 @@ export default function MoeysReportsPage() {
     }));
 
     exportToExcel(excelData, 'ស្ថិតិគ្រូបង្រៀន_បុគ្គលិក_REP-04');
+  };
+
+  const generateGiepMasterExcel = async () => {
+    // REP-05: GIEP Master Dataset
+    if (!activeAcademicYear) {
+      alert("មិនមានឆ្នាំសិក្សាសកម្មទេ។");
+      return;
+    }
+
+    // 1. Fetch Classes for this year
+    const { data: classes } = await supabase
+      .from('classes')
+      .select('id, name, grade')
+      .eq('academic_year_id', activeAcademicYear.id);
+
+    const classIds = classes?.map(c => c.id) || [];
+    if (classIds.length === 0) {
+      alert("មិនមានថ្នាក់រៀនសម្រាប់ឆ្នាំសិក្សានេះទេ។");
+      return;
+    }
+    const classMap = new Map(classes?.map(c => [c.id, c.name]));
+
+    // 2. Fetch Active Enrollments (active_class_rosters view)
+    const { data: rosters, error: rosterErr } = await supabase
+      .from('active_class_rosters')
+      .select('*')
+      .in('enrollment_class_id', classIds)
+      .order('full_name', { ascending: true });
+
+    if (rosterErr) throw rosterErr;
+
+    // 3. Fetch Health Records for this year
+    const { data: healthRecs, error: healthErr } = await supabase
+      .from('student_health_records')
+      .select('*')
+      .eq('academic_year_id', activeAcademicYear.id);
+
+    if (healthErr) throw healthErr;
+    
+    // Map health records to students (latest by recorded_date if multiple)
+    const healthMap = new Map();
+    healthRecs?.forEach((h: any) => {
+      const existing = healthMap.get(h.student_id);
+      if (!existing || new Date(h.recorded_date) > new Date(existing.recorded_date)) {
+        healthMap.set(h.student_id, h);
+      }
+    });
+
+    // 4. Transform to GIEP Schema
+    const excelData = (rosters || []).map((s: any, index: number) => {
+      const h = healthMap.get(s.id) || {};
+      
+      let enrollType = 'សិស្សថ្មី/ឡើងថ្នាក់';
+      if (s.current_enrollment_status === 'repeated' || s.is_repeater) enrollType = 'សិស្សត្រួតថ្នាក់';
+      else if (s.current_enrollment_status === 'transferred_in') enrollType = 'សិស្សផ្ទេរចូល';
+
+      let statusLabel = 'កំពុងសិក្សា';
+      if (s.current_enrollment_status === 'transferred_out') statusLabel = 'ផ្ទេរចេញ';
+      else if (s.current_enrollment_status === 'dropout' || s.current_enrollment_status === 'dropped_out') statusLabel = 'បោះបង់ការសិក្សា';
+      else if (!s.is_active) statusLabel = 'អសកម្ម';
+
+      let povertyLabel = 'ទូទៅ';
+      if (s.id_poor === 'level_1') povertyLabel = 'ក្រីក្រកម្រិត ១ (ក្រ១)';
+      else if (s.id_poor === 'level_2') povertyLabel = 'ក្រីក្រកម្រិត ២ (ក្រ២)';
+      else if (s.poverty_status === 'near_poor') povertyLabel = 'ងាយរងហានិភ័យ';
+
+      return {
+        'ល.រ': index + 1,
+        'អត្តលេខសិស្ស(GIEP-ID)': s.student_id_number || '',
+        'ឈ្មោះសិស្ស': s.full_name || '',
+        'ឈ្មោះសិស្ស(ឡាតាំង)': s.english_name || '',
+        'ភេទ': s.gender === 'F' || s.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស',
+        'ថ្ងៃខែឆ្នាំកំណើត': s.dob || '',
+        'ថ្នាក់រៀន': classMap.get(s.enrollment_class_id) || '',
+        'ប្រភេទសិស្ស': enrollType,
+        'ស្ថានភាពសិស្ស': statusLabel,
+        'បណ្ណសមធម៌': povertyLabel,
+        'សិស្សអាហារូបករណ៍': s.scholarship === 'yes' ? 'បាទ/ចាស' : 'ទេ',
+        'សិស្សកូនកំព្រា': s.orphan === 'yes' ? 'បាទ/ចាស' : 'ទេ',
+        'សិស្សជនជាតិដើមភាគតិច': s.indigenous === 'yes' ? 'បាទ/ចាស' : 'ទេ',
+        'គម្លាតពីផ្ទះមកសាលា(គីឡូម៉ែត្រ)': s.distance_km || '',
+        'ទម្ងន់(Kg)': h.weight_kg || '',
+        'កម្ពស់(Cm)': h.height_cm ? h.height_cm : (s.height_m ? Math.round(s.height_m * 100) : ''),
+        'BMI': h.bmi || s.bmi || '',
+        'គំហើញ(ភ្នែកឆ្វេង)': h.vision_left || '',
+        'គំហើញ(ភ្នែកស្តាំ)': h.vision_right || '',
+        'ការស្តាប់(ត្រចៀក)': h.hearing || '',
+        'សុខភាពមាត់ធ្មេញ': h.dental || '',
+        'ឈ្មោះឪពុក': s.father_name || '',
+        'មុខរបរឪពុក': s.father_job || '',
+        'លេខទូរស័ព្ទឪពុក': s.father_phone || '',
+        'ឈ្មោះម្តាយ': s.mother_name || '',
+        'មុខរបរម្តាយ': s.mother_job || '',
+        'លេខទូរស័ព្ទម្តាយ': s.mother_phone || '',
+        'ឈ្មោះអាណាព្យាបាល': s.guardian_name || '',
+        'មុខរបរអាណាព្យាបាល': s.guardian_job || '',
+        'លេខទូរស័ព្ទអាណាព្យាបាល': s.guardian_phone || s.parent_phone || '',
+        'សិស្សរៀនយឺត': s.is_slow_learner ? 'បាទ/ចាស' : 'ទេ',
+        'ប្រឈមបោះបង់ការសិក្សា': s.dropout_risk ? 'បាទ/ចាស' : 'ទេ'
+      };
+    });
+
+    exportToExcel(excelData, `GEIP_Master_${activeAcademicYear.name}`);
   };
 
   const exportToExcel = (data: any[], filename: string) => {

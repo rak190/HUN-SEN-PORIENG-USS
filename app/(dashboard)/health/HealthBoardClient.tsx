@@ -275,7 +275,14 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
     setHealthRecords(updatedHealthList);
 
     try {
-      await upsertHealthRecords(recordsToSave);
+      const selectedClass = classes.find(c => c.id === selectedClassId);
+      const activeYearId = selectedClass?.academic_year_id || activeClass?.academic_year_id;
+      
+      if (!activeYearId) {
+        throw new Error('រកមិនឃើញឆ្នាំសិក្សាសកម្មទេ');
+      }
+      
+      await upsertHealthRecords(recordsToSave, activeYearId);
       setToast({
         text: 'បានកំណត់ «ធម្មតា» និងរក្សាទុកទិន្នន័យជូនសិស្សទាំងអស់ដោយជោគជ័យ!',
         type: 'success'
@@ -284,8 +291,8 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
     } catch (err) {
       console.warn('Quick fill save error:', err);
       setToast({
-        text: 'បានកំណត់ «ធម្មតា» លើតារាងរួចរាល់!',
-        type: 'success'
+        text: 'បានកំណត់ «ធម្មតា» លើតារាងរួចរាល់! ' + (err instanceof Error ? err.message : ''),
+        type: 'error'
       });
     } finally {
       setIsSaving(false);
@@ -310,7 +317,14 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
         (r.notes && r.notes.trim() !== '')
       );
 
-      await upsertHealthRecords(recordsToSave);
+      const selectedClass = classes.find(c => c.id === selectedClassId);
+      const activeYearId = selectedClass?.academic_year_id || activeClass?.academic_year_id;
+      
+      if (!activeYearId) {
+        throw new Error('រកមិនឃើញឆ្នាំសិក្សាសកម្មទេ');
+      }
+
+      await upsertHealthRecords(recordsToSave, activeYearId);
 
       // Update in-memory records
       setHealthRecords(prev => {

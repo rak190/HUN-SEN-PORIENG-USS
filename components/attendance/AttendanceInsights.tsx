@@ -36,7 +36,7 @@ export default function AttendanceInsights({ mode }: { mode: 'alerts' | 'history
       const end = endDate.toISOString().slice(0, 10);
       const [students, records, cases] = await Promise.all([
         supabase.from('active_class_rosters').select('id, student_id_number, full_name').eq('enrollment_class_id', activeClass.id),
-        supabase.from('attendance_records').select('student_id, date, status').eq('class_id', activeClass.id).gte('date', start).lt('date', end),
+        supabase.from('attendance_records').select('student_id, date, status').eq('class_id', activeClass.id).eq('academic_year_id', activeClass.academic_year_id).gte('date', start).lt('date', end),
         supabase.from('support_cases').select('student_id').eq('class_id', activeClass.id).neq('status', 'resolved'),
       ]);
       const recordsData = records.data || [];

@@ -167,6 +167,7 @@ export interface AttendanceRecord {
   id: string;
   class_id: string;
   student_id: string;
+  academic_year_id: string;
   date: string;
   status: AttendanceStatus;
   note?: string;
@@ -179,6 +180,7 @@ export interface Grade {
   id: string;
   class_id: string;
   student_id: string;
+  academic_year_id: string;
   period: string;
   scores: Record<string, number>;
   total_score?: number;
@@ -193,6 +195,7 @@ export interface GradeRecord {
   id: string;
   class_id: string;
   student_id: string;
+  academic_year_id: string;
   subject_id?: string;
   period?: string;
   period_id?: string;
@@ -255,14 +258,15 @@ export interface MonthlyReportCard {
 }
 
 export interface StudentHealthRecord {
-  id: string;
+  id?: string;
   student_id: string;
   class_id: string;
+  academic_year_id: string;
   recorded_date: string;
-  weight_kg?: number;
-  height_cm?: number;
-  bmi?: number;
-  vision_left?: string;
+  weight_kg?: number | null;
+  height_cm?: number | null;
+  bmi?: number | null;
+  vision_left?: string | null;
   vision_right?: string;
   hearing?: string;
   dental?: string;

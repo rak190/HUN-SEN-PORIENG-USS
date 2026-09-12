@@ -198,6 +198,7 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
         await supabase.from('student_health_records').upsert({
           student_id: studentId,
           class_id: validatedPayload.class_id || dbRecord.class_id,
+          academic_year_id: validatedPayload.academic_year_id,
           recorded_date: today,
           weight_kg: validatedPayload.weight_kg ? Number(validatedPayload.weight_kg) : null,
           height_cm: heightCm,
@@ -207,7 +208,7 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
           hearing: hearing,
           dental: 'ធម្មតា',
           notes: healthNotes || ''
-        }, { onConflict: 'student_id,recorded_date' });
+        }, { onConflict: 'student_id,recorded_date,academic_year_id' });
       } catch (healthSyncErr) {
         console.warn('Failed to auto-sync to health records:', healthSyncErr);
       }

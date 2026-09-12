@@ -106,12 +106,13 @@ export default function AttendanceBoard() {
       await supabase.from('attendance_records').upsert({
         class_id: activeClass.id,
         student_id: studentId,
+        academic_year_id: activeClass.academic_year_id,
         date: selectedDate,
         status,
         root_cause: rootCauses[studentId] || null,
         recorded_by: user?.id || null,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'class_id,student_id,date' });
+      }, { onConflict: 'student_id,date,academic_year_id' });
 
       setSyncStatus('synced');
     } catch (e) {
@@ -140,6 +141,7 @@ export default function AttendanceBoard() {
     const upsertPayload = students.map((s) => ({
       class_id: activeClass.id,
       student_id: s.id,
+      academic_year_id: activeClass.academic_year_id,
       date: selectedDate,
       status,
       root_cause: rootCauses[s.id] || null,
@@ -147,7 +149,7 @@ export default function AttendanceBoard() {
       updated_at: new Date().toISOString(),
     }));
 
-    await supabase.from('attendance_records').upsert(upsertPayload, { onConflict: 'class_id,student_id,date' });
+    await supabase.from('attendance_records').upsert(upsertPayload, { onConflict: 'student_id,date,academic_year_id' });
     setSyncStatus('synced');
   }
 

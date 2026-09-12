@@ -43,7 +43,8 @@ import {
   Server,
   FileText,
   CalendarDays,
-  Award
+  Award,
+  CheckCircle2
 } from 'lucide-react';
 
 interface MenuItem {
@@ -65,6 +66,7 @@ const MENU_ITEMS: MenuItem[] = [
     children: [
       { id: 'students', label: 'Students Profile', khmerLabel: 'បញ្ជីឈ្មោះសិស្ស', href: '/students', icon: Users, roles: ['teacher'] },
       { id: 'class-info', label: 'Class Info', khmerLabel: 'ព័ត៌មានថ្នាក់រៀន', href: '/classes/info', icon: BookOpen, roles: ['teacher'] },
+      { id: 'profile-completion', label: 'Profile Completion', khmerLabel: 'វឌ្ឍនភាពព័ត៌មាន', href: '/homeroom/profiling', icon: CheckCircle2, roles: ['teacher'], badge: 'ទិន្នន័យ' },
       { id: 'attendance', label: 'Attendance', khmerLabel: 'វត្តមាន', href: '/attendance', icon: Calendar, roles: ['teacher'], badge: 'ព្រមាន' },
       { id: 'health', label: 'Student Health', khmerLabel: 'សុខភាពសិក្សា', href: '/health', icon: Activity, roles: ['teacher'], badge: 'សុខភាព' },
       { id: 'support', label: 'Student Support', khmerLabel: 'គាំទ្រសិស្ស', href: '/support', icon: HeartHandshake, roles: ['teacher'] },
