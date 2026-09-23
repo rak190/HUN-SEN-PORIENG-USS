@@ -409,6 +409,7 @@ export default function MasterScoresPage() {
            setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
         }} 
         selectedPeriod={selectedPeriod}
+        academicYearId={activeYearId || ''}
       />
 
       <MasterScoreRollbackModal

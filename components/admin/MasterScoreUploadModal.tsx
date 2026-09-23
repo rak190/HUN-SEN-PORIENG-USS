@@ -16,6 +16,7 @@ interface MasterScoreUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedPeriod: string;
+  academicYearId: string;
 }
 
 interface VerifiedRow {
@@ -35,7 +36,7 @@ interface VerifiedRow {
   ceilingErrors: string[];
 }
 
-export function MasterScoreUploadModal({ isOpen, onClose, selectedPeriod }: MasterScoreUploadModalProps) {
+export function MasterScoreUploadModal({ isOpen, onClose, selectedPeriod, academicYearId }: MasterScoreUploadModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [sheetUrl, setSheetUrl] = useState('');
   const [status, setStatus] = useState<'idle' | 'fetching' | 'parsing' | 'matching' | 'preview' | 'uploading' | 'success' | 'error'>('idle');
@@ -248,6 +249,7 @@ export function MasterScoreUploadModal({ isOpen, onClose, selectedPeriod }: Mast
         const classIdsInvolved = [...new Set(readyToUpload.map(g => g.class_id))];
         await createGradeSnapshot(
           selectedPeriod, 
+          academicYearId,
           classIdsInvolved, 
           `Auto-Backup មុនពេលអាប់ឡូត ${readyToUpload.length} នាក់ (${new Date().toLocaleDateString('km-KH')})`
         );
