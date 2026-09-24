@@ -23,9 +23,10 @@ import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { ClassGradeImportModal } from '@/components/grades/ClassGradeImportModal';
 import { GeipExportModal } from '@/components/grades/GeipExportModal';
+import { HonorRollExportModal } from '@/components/grades/HonorRollExportModal';
 
 export default function GradesPage() {
-  const { activeClass, isDemoMode } = useAuth();
+  const { activeClass, isDemoMode, profile, activeAcademicYear } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -48,6 +49,7 @@ export default function GradesPage() {
   
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isGeipModalOpen, setIsGeipModalOpen] = useState(false);
+  const [isHonorRollModalOpen, setIsHonorRollModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   
   const supabase = createClient();
@@ -418,6 +420,13 @@ export default function GradesPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsHonorRollModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow-sm font-medium flex items-center gap-2 text-xs transition-all scale-[1.01]"
+          >
+            <Award className="w-4 h-4" />
+            <span>តារាងកិត្តិយសសិស្សពូកែ (A4)</span>
+          </button>
           
           <button
             onClick={() => setIsGeipModalOpen(true)}
@@ -720,6 +729,17 @@ export default function GradesPage() {
         matrixData={matrixData}
         activeSchema={activeSchema}
         maxTotalScore={maxTotalScore}
+      />
+
+      <HonorRollExportModal
+        isOpen={isHonorRollModalOpen}
+        onClose={() => setIsHonorRollModalOpen(false)}
+        className={activeClass?.name || ''}
+        classId={activeClass?.id || ''}
+        students={students}
+        activeSchema={activeSchema}
+        teacherName={profile?.full_name || '........................'}
+        academicYear={activeAcademicYear}
       />
     </div>
   );
