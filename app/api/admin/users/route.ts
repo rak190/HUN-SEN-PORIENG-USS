@@ -180,7 +180,7 @@ export async function POST(req: Request) {
         school_code: resolvedSchoolCode,
         phone: u.phone || null,
         subject: u.subject || null,
-        is_active: true,
+        is_archived: false,
       }]);
 
       if (insertProfileErr) {

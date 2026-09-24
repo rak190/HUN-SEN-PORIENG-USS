@@ -110,8 +110,7 @@ export async function POST(req: Request) {
           school_code: resolvedSchoolCode,
           phone: phone || null,
           subject: subject || null,
-          is_active: true,
-          updated_at: new Date().toISOString(),
+          is_archived: false,
         },
       ], { onConflict: 'username' });
 
