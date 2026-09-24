@@ -36,4 +36,6 @@ ALTER TABLE students
   ADD COLUMN IF NOT EXISTS score_average NUMERIC,
   ADD COLUMN IF NOT EXISTS score_rank INTEGER,
   ADD COLUMN IF NOT EXISTS behavior_history JSONB DEFAULT '[]'::jsonb,
-  ADD COLUMN IF NOT EXISTS teacher_notes JSONB DEFAULT '[]'::jsonb;
+  ADD COLUMN IF NOT EXISTS teacher_notes JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS dropout_risk BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS is_slow_learner BOOLEAN DEFAULT false;
