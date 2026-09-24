@@ -356,3 +356,81 @@ export async function bulkUpdateStudentSeating(updates: {
     return { success: false, error: err.message };
   }
 }
+
+export async function generateLiveExamGoogleSheetAction(examMonth: string, academicYearId: string) {
+  const supabase = await createClient();
+  const { role } = await getServerAuth();
+
+  if (role !== 'admin' && role !== 'principal') {
+    return { success: false, error: 'Unauthorized: Admin access required' };
+  }
+
+  if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+    return { 
+      success: false, 
+      error: 'Google Workspace API មិនទាន់បានកំណត់រចនាសម្ព័ន្ធ (Missing credentials in .env.local). សូមបន្ថែម GOOGLE_SERVICE_ACCOUNT_EMAIL និង GOOGLE_PRIVATE_KEY។' 
+    };
+  }
+
+  try {
+    // 1. Fetch Active Academic Year Label
+    const { data: ayData } = await supabase
+      .from('academic_years')
+      .select('name')
+      .eq('id', academicYearId)
+      .single();
+    const academicYearName = ayData?.name || '២០២៥-២០២៦';
+
+    // 2. Fetch all classes
+    const { data: classData, error: classErr } = await supabase
+      .from('classes')
+      .select('id, name, grade, track')
+      .order('grade')
+      .order('name');
+    if (classErr) throw classErr;
+
+    // 3. Fetch all active student enrollments for the year
+    const { data: dbEnrollments, error: enrollErr } = await supabase
+      .from('student_enrollments')
+      .select(`
+        id,
+        class_id,
+        room_number,
+        desk_number,
+        students!inner(id, student_id_number, full_name, gender, date_of_birth)
+      `)
+      .eq('academic_year_id', academicYearId)
+      .eq('enrollment_status', 'active');
+    
+    if (enrollErr) throw enrollErr;
+
+    // 4. Map to expected StudentRecord format
+    const mappedStudents = dbEnrollments.map((e: any) => ({
+      id: e.students.id,
+      student_id_number: e.students.student_id_number,
+      desk_number: e.desk_number,
+      room_number: e.room_number,
+      full_name: e.students.full_name,
+      gender: e.students.gender,
+      dob: e.students.date_of_birth,
+      class_id: e.class_id
+    }));
+
+    // 5. Generate raw sheet data arrays
+    const { generateMonthlyExamData } = await import('@/lib/monthly-sheet-generator');
+    const sheetsData = generateMonthlyExamData(mappedStudents, classData || [], examMonth, academicYearName);
+
+    // 6. Push to Google Drive via Service
+    const { createLiveExamGoogleSheet } = await import('@/lib/services/googleSheetsService');
+    const result = await createLiveExamGoogleSheet({
+      examMonth,
+      academicYearName,
+      sheetsData
+    });
+
+    return { success: true, url: result.url, spreadsheetId: result.spreadsheetId };
+  } catch (err: any) {
+    console.error('generateLiveExamGoogleSheetAction failed:', err);
+    return { success: false, error: err.message };
+  }
+}

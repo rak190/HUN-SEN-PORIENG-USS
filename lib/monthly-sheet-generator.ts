@@ -61,16 +61,20 @@ function splitDob(dobStr?: string): { day: string; month: string; year: string }
   return { day: '', month: '', year: '' };
 }
 
-/**
- * Generates an official 8-Tab Exam Spreadsheet compatible with MoEYS & Telegram Workflow
- */
-export function generateMonthlyExamWorkbook(
+export interface SheetDataMap {
+  [sheetName: string]: {
+    rows: any[][];
+    cols: { wch: number }[];
+  };
+}
+
+export function generateMonthlyExamData(
   students: StudentRecord[],
   classes: any[],
   periodLabel: string = 'ប្រចាំខែ',
   academicYear: string = '២០២៥-២០២៦'
-): XLSX.WorkBook {
-  const wb = XLSX.utils.book_new();
+): SheetDataMap {
+  const result: SheetDataMap = {};
 
   EXAM_TABS_CONFIG.forEach(tab => {
     // 1. Filter students for this tab
@@ -176,20 +180,20 @@ export function generateMonthlyExamWorkbook(
       // Row 2: Submetrics & Column Headers (Row 9)
       const colHeaderRow: string[] = [
         'លេខតុ', 'អត្តលេខ', 'គោត្តនាម', 'នាម', 'ភេទ', 'ថ្ងៃ', 'ខែ', 'ឆ្នាំ', 'ថ្នាក់', 'បន្ទប់',
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // សរសេរ
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // តែង
-        'ពិន្ទុ',                  // អានល្បឿន
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // គណិត
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // រូប
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // គីមី
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // ជីវៈ
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // ប្រវត្តិ
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // ICT
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // សីល
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // ផែន
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // ភូមិ
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // អង់
-        'វិជ្ជា', 'បំណិន', 'ចរិយា', // កីឡា
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // សរសេរ (K-M)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // តែង (N-P)
+        'ពិន្ទុ',                  // អានល្បឿន (Q)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // គណិត (R-T)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // រូប (U-W)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // គីមី (X-Z)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // ជីវៈ (AA-AC)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // ប្រវត្តិ (AD-AF)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // ICT (AG-AI)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // សីល (AJ-AL)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // ផែន (AM-AO)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // ភូមិ (AP-AR)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // អង់ (AS-AU)
+        'វិជ្ជា', 'បំណិន', 'ចរិយា', // កីឡា (AV-AX)
         'សរុប', 'សរុប', 'ពិន្ទុ', 'សរុប', 'សរុប', 'សរុប', 'សរុប', 'សរុប', 'សរុប', 'សរុប', 'សរុប', 'សរុប', 'សរុប', 'សរុប'
       ];
       sheetRows.push(colHeaderRow);
@@ -207,30 +211,40 @@ export function generateMonthlyExamWorkbook(
         const clsName = std.classes?.name || tab.grade;
 
         const row: any[] = [
-          deskNum,
-          idNum,
-          lastName,
-          firstName,
-          gender,
-          day,
-          month,
-          year,
-          clsName,
-          roomNum
+          deskNum, idNum, lastName, firstName, gender, day, month, year, clsName, roomNum
         ];
 
-        // Fill blanks for score entries (will be filled by teachers in Telegram sheet)
+        // Fill blanks for score entries (40 empty columns)
         for (let k = 10; k < 50; k++) {
           row.push('');
         }
+
+        // Add =SUM formulas for Google Sheets (row is 1-indexed, sheetRows.length + 1)
+        const r = sheetRows.length + 1;
+        row.push(`=SUM(K${r}:M${r})`); // សរសេរ (AY)
+        row.push(`=SUM(N${r}:P${r})`); // តែង (AZ)
+        row.push(`=Q${r}`);            // អានល្បឿន (BA)
+        row.push(`=SUM(R${r}:T${r})`); // គណិត (BB)
+        row.push(`=SUM(U${r}:W${r})`); // រូប (BC)
+        row.push(`=SUM(X${r}:Z${r})`); // គីមី (BD)
+        row.push(`=SUM(AA${r}:AC${r})`); // ជីវៈ (BE)
+        row.push(`=SUM(AD${r}:AF${r})`); // ប្រវត្តិ (BF)
+        row.push(`=SUM(AG${r}:AI${r})`); // ICT (BG)
+        row.push(`=SUM(AJ${r}:AL${r})`); // សីល (BH)
+        row.push(`=SUM(AM${r}:AO${r})`); // ផែនដី (BI)
+        row.push(`=SUM(AP${r}:AR${r})`); // ភូមិ (BJ)
+        row.push(`=SUM(AV${r}:AX${r})`); // កីឡា (BK) - Note: columns AV-AX are កីឡា
+        row.push(`=SUM(AS${r}:AU${r})`); // អង់គ្លេស (BL) - Note: columns AS-AU are អង់
 
         sheetRows.push(row);
       });
 
       // If room was empty, put 1 placeholder row
       if (roomStudents.length === 0) {
-        const dummyRow = [1, '4901', 'គំរូ', 'សិស្ស', 'ប្រុស', 1, 1, 2012, tab.grade, roomNum];
+        const dummyRow: any[] = [1, '4901', 'គំរូ', 'សិស្ស', 'ប្រុស', 1, 1, 2012, tab.grade, roomNum];
         for (let k = 10; k < 50; k++) dummyRow.push('');
+        const r = sheetRows.length + 1;
+        dummyRow.push(`=SUM(K${r}:M${r})`, `=SUM(N${r}:P${r})`, `=Q${r}`, `=SUM(R${r}:T${r})`, `=SUM(U${r}:W${r})`, `=SUM(X${r}:Z${r})`, `=SUM(AA${r}:AC${r})`, `=SUM(AD${r}:AF${r})`, `=SUM(AG${r}:AI${r})`, `=SUM(AJ${r}:AL${r})`, `=SUM(AM${r}:AO${r})`, `=SUM(AP${r}:AR${r})`, `=SUM(AV${r}:AX${r})`, `=SUM(AS${r}:AU${r})`);
         sheetRows.push(dummyRow);
       }
 
@@ -250,24 +264,42 @@ export function generateMonthlyExamWorkbook(
       sheetRows.push([]);
     });
 
-    // 3. Create worksheet
-    const ws = XLSX.utils.aoa_to_sheet(sheetRows);
+    result[tab.sheetName] = {
+      rows: sheetRows,
+      cols: [
+        { wch: 8 },  // លេខតុ
+        { wch: 10 }, // អត្តលេខ
+        { wch: 12 }, // គោត្តនាម
+        { wch: 14 }, // នាម
+        { wch: 8 },  // ភេទ
+        { wch: 6 },  // ថ្ងៃ
+        { wch: 6 },  // ខែ
+        { wch: 8 },  // ឆ្នាំ
+        { wch: 10 }, // ថ្នាក់
+        { wch: 8 },  // បន្ទប់
+      ]
+    };
+  });
 
-    // Set column widths for readability
-    ws['!cols'] = [
-      { wch: 8 },  // លេខតុ
-      { wch: 10 }, // អត្តលេខ
-      { wch: 12 }, // គោត្តនាម
-      { wch: 14 }, // នាម
-      { wch: 8 },  // ភេទ
-      { wch: 6 },  // ថ្ងៃ
-      { wch: 6 },  // ខែ
-      { wch: 8 },  // ឆ្នាំ
-      { wch: 10 }, // ថ្នាក់
-      { wch: 8 },  // បន្ទប់
-    ];
+  return result;
+}
 
-    XLSX.utils.book_append_sheet(wb, ws, tab.sheetName);
+/**
+ * Generates an official 8-Tab Exam Spreadsheet compatible with MoEYS & Telegram Workflow
+ */
+export function generateMonthlyExamWorkbook(
+  students: StudentRecord[],
+  classes: any[],
+  periodLabel: string = 'ប្រចាំខែ',
+  academicYear: string = '២០២៥-២០២៦'
+): XLSX.WorkBook {
+  const wb = XLSX.utils.book_new();
+  const dataMap = generateMonthlyExamData(students, classes, periodLabel, academicYear);
+
+  Object.entries(dataMap).forEach(([sheetName, data]) => {
+    const ws = XLSX.utils.aoa_to_sheet(data.rows);
+    ws['!cols'] = data.cols;
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
   });
 
   return wb;

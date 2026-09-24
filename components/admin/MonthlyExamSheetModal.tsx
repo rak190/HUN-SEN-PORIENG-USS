@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { FileSpreadsheet, Download, CheckCircle2, AlertCircle, Loader2, Sparkles, Send, ExternalLink, ShieldCheck } from 'lucide-react';
+import { FileSpreadsheet, Download, CheckCircle2, AlertCircle, Loader2, Sparkles, Send, ExternalLink, ShieldCheck, Copy } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Modal from '@/components/ui/Modal';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
-import { generateMonthlyExamWorkbook, EXAM_TABS_CONFIG, TabConfig } from '@/lib/monthly-sheet-generator';
+import { generateMonthlyExamWorkbook, EXAM_TABS_CONFIG } from '@/lib/monthly-sheet-generator';
+import { generateLiveExamGoogleSheetAction } from '@/app/(dashboard)/admin/master-scores/actions';
 
 interface MonthlyExamSheetModalProps {
   isOpen: boolean;
@@ -14,10 +15,14 @@ interface MonthlyExamSheetModalProps {
 
 export function MonthlyExamSheetModal({ isOpen, onClose, selectedPeriod }: MonthlyExamSheetModalProps) {
   const [loading, setLoading] = useState(false);
+  const [creatingLive, setCreatingLive] = useState(false);
   const [period, setPeriod] = useState(selectedPeriod || 'mar');
   const [academicYear, setAcademicYear] = useState('២០២៥-២០២៦');
+  const [academicYearId, setAcademicYearId] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [googleUrl, setGoogleUrl] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [copySuccess, setCopySuccess] = useState(false);
   
   const [readiness, setReadiness] = useState<Record<string, { total: number, seated: number }>>({});
   const [loadingReadiness, setLoadingReadiness] = useState(false);
@@ -26,7 +31,17 @@ export function MonthlyExamSheetModal({ isOpen, onClose, selectedPeriod }: Month
 
   useEffect(() => {
     if (isOpen) {
+      setGoogleUrl('');
+      setIsSuccess(false);
+      setErrorMessage('');
       fetchReadiness();
+      
+      supabase.from('academic_years').select('id, name').eq('is_active', true).single().then(({ data }) => {
+        if (data) {
+          setAcademicYear(data.name);
+          setAcademicYearId(data.id);
+        }
+      });
     }
   }, [isOpen]);
 
@@ -80,10 +95,38 @@ export function MonthlyExamSheetModal({ isOpen, onClose, selectedPeriod }: Month
 
   const currentPeriodObj = ACADEMIC_PERIODS.find(p => p.id === period) || ACADEMIC_PERIODS[0];
 
+  const handleCreateLiveSheet = async () => {
+    if (!academicYearId) {
+      setErrorMessage('រកមិនឃើញឆ្នាំសិក្សាទេ។');
+      return;
+    }
+
+    setCreatingLive(true);
+    setErrorMessage('');
+    setIsSuccess(false);
+    setGoogleUrl('');
+
+    try {
+      const res = await generateLiveExamGoogleSheetAction(currentPeriodObj.label, academicYearId);
+      if (!res.success) {
+         throw new Error(res.error);
+      }
+      
+      setGoogleUrl(res.url as string);
+      setIsSuccess(true);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || 'កំហុសក្នុងការបង្កើត Google Sheet');
+    } finally {
+      setCreatingLive(false);
+    }
+  };
+
   const handleGenerateAndDownload = async () => {
     setLoading(true);
     setErrorMessage('');
     setIsSuccess(false);
+    setGoogleUrl('');
 
     try {
       // 1. Fetch all active classes
@@ -142,6 +185,16 @@ export function MonthlyExamSheetModal({ isOpen, onClose, selectedPeriod }: Month
     }
   };
 
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to copy', err);
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -155,138 +208,176 @@ export function MonthlyExamSheetModal({ isOpen, onClose, selectedPeriod }: Month
       title="បង្កើត Google Sheet ប្រឡងប្រចាំខែ (៨ Tabs ស្តង់ដារ MoEYS)"
     >
       <div className="p-6 sm:p-8 space-y-6">
-        <p className="text-xs text-slate-500 font-medium leading-relaxed">
-          ប្រព័ន្ធនឹងបង្កើតឯកសារ Excel ដែលមាន **៨ Tabs តាមកម្រិតថ្នាក់** ដោយស្រង់ឈ្មោះសិស្ស លេខតុ និងក្បាលតារាងមុខវិជ្ជា MoEYS ជាស្រេច។ Admin គ្រាន់តែទាញយក ហើយយកទៅបើកលើ Google Drive រួច Copy Link ផ្ញើចូល Telegram ឱ្យលោកគ្រូអ្នកគ្រូបំពេញជាការស្រេច។
-        </p>
+        {!isSuccess && (
+          <p className="text-xs text-slate-500 font-medium leading-relaxed">
+            ប្រព័ន្ធនឹងបង្កើតឯកសារ Excel ដែលមាន **៨ Tabs តាមកម្រិតថ្នាក់** ដោយស្រង់ឈ្មោះសិស្ស លេខតុ និងក្បាលតារាងមុខវិជ្ជា MoEYS ជាស្រេច។ អ្នកអាចបង្កើតវាដោយផ្ទាល់ចូល Google Drive របស់អ្នកដោយចុច "បង្កើត Google Sheet"។
+          </p>
+        )}
 
         {errorMessage && (
-          <div className="p-4 bg-rose-50 text-rose-700 rounded-xl border border-rose-100 text-sm font-bold flex items-start gap-3">
+          <div className="p-4 bg-rose-50 text-rose-700 rounded-xl border border-rose-100 text-sm font-bold flex items-start gap-3 whitespace-pre-wrap">
             <AlertCircle className="w-5 h-5 shrink-0" />
             <p>{errorMessage}</p>
           </div>
         )}
 
-        {isSuccess && (
-          <div className="p-4 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 text-sm font-bold flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 shrink-0" />
-            <div>
-              <p>បានបង្កើត និងទាញយកឯកសារ Excel ៨ Tabs ដោយជោគជ័យ!</p>
-              <p className="text-xs mt-1 text-emerald-600 font-medium">អ្នកអាចយកឯកសារនេះទៅ Upload លើ Google Sheets ហើយ Copy Link ផ្ញើចូល Telegram របស់សាលា។</p>
+        {isSuccess && googleUrl && (
+          <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm animate-in fade-in duration-300">
+            <div className="flex flex-col items-center text-center space-y-3">
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="w-10 h-10" />
+              </div>
+              <h3 className="text-lg font-black text-emerald-800">Google Sheet ប្រឡងត្រូវបានបង្កើត និងរក្សាទុកក្នុង Google Drive រួចរាល់!</h3>
+              <p className="text-sm font-medium text-emerald-600">ឯកសារនេះត្រូវបានដាក់ក្នុង Folder នៃ Google Drive របស់លោកគ្រូអ្នកគ្រូដោយស្វ័យប្រវត្តិ។</p>
+              
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+                <a 
+                  href={googleUrl} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-md transition-all text-sm flex items-center gap-2"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  បើកមើល Google Sheet
+                </a>
+                <button
+                  onClick={() => copyToClipboard(googleUrl)}
+                  className="px-6 py-2.5 bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-700 font-black rounded-xl shadow-sm transition-all text-sm flex items-center gap-2 cursor-pointer"
+                >
+                  {copySuccess ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                  {copySuccess ? 'បានចម្លង (Copied)' : 'ចម្លង Link ផ្ញើទៅ Telegram'}
+                </button>
+              </div>
             </div>
           </div>
         )}
 
+        {isSuccess && !googleUrl && (
+          <div className="p-4 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 text-sm font-bold flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 shrink-0" />
+            <div>
+              <p>បានទាញយកឯកសារ Excel (.xlsx) ដោយជោគជ័យ!</p>
+              <p className="text-xs mt-1 text-emerald-600 font-medium">សូមកុំភ្លេចយកវាទៅ upload ចូល Google Drive មុនផ្ញើទៅកាន់គ្រូបង្រៀន។</p>
+            </div>
+          </div>
+        )}
+
+        {creatingLive && (
+          <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100 flex flex-col items-center justify-center space-y-3 animate-in fade-in zoom-in duration-300">
+            <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+            <p className="text-sm font-bold text-blue-800 text-center leading-relaxed">
+              កំពុងបង្កើត Google Sheet ៨ Tabs ក្នុង Google Drive របស់ Admin...<br/>
+              <span className="text-xs font-medium text-blue-600 text-opacity-80">សូមរង់ចាំ ២-៣ វិនាទី</span>
+            </p>
+          </div>
+        )}
+
         {/* Form Controls */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-black text-slate-700">ខែប្រឡង / រយៈពេល</label>
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF]"
-            >
-              {ACADEMIC_PERIODS.map((p) => (
-                <option key={p.id} value={p.id}>{p.label}</option>
-              ))}
-            </select>
-          </div>
+        {!isSuccess && !creatingLive && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-700">ខែប្រឡង / រយៈពេល</label>
+                <select
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF]"
+                >
+                  {ACADEMIC_PERIODS.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-black text-slate-700">ឆ្នាំសិក្សា</label>
-            <input
-              type="text"
-              value={academicYear}
-              onChange={(e) => setAcademicYear(e.target.value)}
-              placeholder="២០២៥-២០២៦"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF]"
-            />
-          </div>
-        </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-700">ឆ្នាំសិក្សា</label>
+                <input
+                  type="text"
+                  value={academicYear}
+                  onChange={(e) => setAcademicYear(e.target.value)}
+                  placeholder="២០២៥-២០២៦"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF]"
+                />
+              </div>
+            </div>
 
-        {/* 8-Tab Preview Grid */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              រចនាសម្ព័ន្ធ ៨ Tabs ក្នុងឯកសារតែមួយ (Multi-Tab Template Layout):
-            </label>
-            {loadingReadiness && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {EXAM_TABS_CONFIG.map((t, i) => {
-              const stat = readiness[t.sheetName] || { total: 0, seated: 0 };
-              const isReady = stat.total > 0 && stat.seated === stat.total;
-              const hasMissing = stat.total > 0 && stat.seated < stat.total;
-              
-              return (
-                <div key={i} className={`p-3 border rounded-xl shadow-2xs ${hasMissing ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-slate-200'}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Tab {i + 1}</span>
-                      <p className={`font-extrabold text-xs ${hasMissing ? 'text-orange-900' : 'text-slate-800'}`}>{t.sheetName}</p>
+            {/* 8-Tab Preview Grid */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  រចនាសម្ព័ន្ធ ៨ Tabs ក្នុងឯកសារតែមួយ (Multi-Tab Template Layout):
+                </label>
+                {loadingReadiness && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {EXAM_TABS_CONFIG.map((t, i) => {
+                  const stat = readiness[t.sheetName] || { total: 0, seated: 0 };
+                  const isReady = stat.total > 0 && stat.seated === stat.total;
+                  const hasMissing = stat.total > 0 && stat.seated < stat.total;
+                  
+                  return (
+                    <div key={i} className={`p-3 border rounded-xl shadow-2xs ${hasMissing ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-slate-200'}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Tab {i + 1}</span>
+                          <p className={`font-extrabold text-xs ${hasMissing ? 'text-orange-900' : 'text-slate-800'}`}>{t.sheetName}</p>
+                        </div>
+                        {isReady && stat.total > 0 ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                        ) : hasMissing ? (
+                          <AlertCircle className="w-4 h-4 text-orange-500" />
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-slate-300"></span>
+                        )}
+                      </div>
+                      <div className="mt-2 text-[10px] font-semibold text-slate-600">
+                        {stat.total === 0 ? 'គ្មានសិស្ស' : (
+                          <span className={isReady ? 'text-emerald-700' : 'text-orange-700'}>
+                            មានតុ {stat.seated}/{stat.total}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {isReady && stat.total > 0 ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    ) : hasMissing ? (
-                      <AlertCircle className="w-4 h-4 text-orange-500" />
-                    ) : (
-                      <span className="w-2 h-2 rounded-full bg-slate-300"></span>
-                    )}
-                  </div>
-                  <div className="mt-2 text-[10px] font-semibold text-slate-600">
-                    {stat.total === 0 ? 'គ្មានសិស្ស' : (
-                      <span className={isReady ? 'text-emerald-700' : 'text-orange-700'}>
-                        មានតុ {stat.seated}/{stat.total}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Step-by-Step Telegram Guide */}
-        <div className="p-5 bg-blue-50/80 border border-blue-200 rounded-2xl text-xs space-y-3">
-          <p className="font-extrabold text-blue-900 flex items-center gap-1.5">
-            🚀 របៀបយកឯកសារនេះទៅប្រើប្រាស់ក្នុង Telegram (៣ ជំហានលឿនរហ័ស):
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-semibold text-slate-700">
-            <div className="bg-white p-3 rounded-xl border border-blue-100 shadow-2xs">
-              <span className="font-black text-[#155EEF]">១. ទាញយកឯកសារ Excel</span>
-              <p className="text-[11px] text-slate-500 mt-1">ចុចប៊ូតុងខាងក្រោមដើម្បីទាញយកឯកសារ ៨ Tabs ដែលមានស្រង់ឈ្មោះសិស្សរួចរាល់</p>
+                  );
+                })}
+              </div>
             </div>
-            <div className="bg-white p-3 rounded-xl border border-blue-100 shadow-2xs">
-              <span className="font-black text-[#155EEF]">២. Upload លើ Google Drive</span>
-              <p className="text-[11px] text-slate-500 mt-1">បើក Google Drive រួច Upload ឯកសារនេះ ហើយបើកជា Google Sheet</p>
-            </div>
-            <div className="bg-white p-3 rounded-xl border border-blue-100 shadow-2xs">
-              <span className="font-black text-[#155EEF]">៣. ផ្ញើ Link ចូល Telegram</span>
-              <p className="text-[11px] text-slate-500 mt-1">កំណត់ Share ជា "Anyone with link" រួចផ្ញើតំណភ្ជាប់ចូល Telegram ឱ្យគ្រូបំពេញ</p>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
-      <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-        <button
-          onClick={onClose}
-          disabled={loading}
-          className="px-5 py-2.5 text-slate-600 font-bold hover:bg-slate-200 bg-slate-100 rounded-xl transition-colors text-sm disabled:opacity-50 cursor-pointer"
-        >
-          បិទ
-        </button>
-        <button
-          onClick={handleGenerateAndDownload}
-          disabled={loading}
-          className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-md shadow-emerald-500/20 transition-all text-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
-        >
-          {loading ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> កំពុងបង្កើតឯកសារ...</>
-          ) : (
-            <><Download className="w-4 h-4" /> ទាញយក Excel ៨ Tabs ផ្លូវការ</>
-          )}
-        </button>
+      <div className="p-6 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-end gap-3">
+        {!isSuccess && !creatingLive && (
+          <button
+            onClick={handleGenerateAndDownload}
+            disabled={loading}
+            className="px-5 py-2.5 text-slate-600 font-bold border border-slate-300 hover:bg-slate-200 bg-white rounded-xl transition-colors text-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            ទាញយកជា File .xlsx (Offline Backup)
+          </button>
+        )}
+        
+        {!isSuccess && !creatingLive && (
+          <button
+            onClick={handleCreateLiveSheet}
+            disabled={loading}
+            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-md shadow-emerald-500/20 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <Sparkles className="w-4 h-4" /> 
+            បង្កើត Google Sheet ដោយផ្ទាល់ (Direct to Google Drive)
+          </button>
+        )}
+
+        {(isSuccess || creatingLive) && (
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 text-slate-600 font-bold hover:bg-slate-200 bg-slate-100 rounded-xl transition-colors text-sm cursor-pointer"
+          >
+            បិទ (Close)
+          </button>
+        )}
       </div>
     </Modal>
   );
