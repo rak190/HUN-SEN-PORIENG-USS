@@ -105,10 +105,20 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
     mappedStudents = mappedStudents.filter(s => s.homeroom_teacher === filterTeacher);
   }
 
+  // Fetch Global Stats
+  const { count: femaleCount } = await supabase.from('active_class_rosters').select('*', { count: 'exact', head: true }).in('gender', ['F', 'ស្រី']);
+  const { count: maleCount } = await supabase.from('active_class_rosters').select('*', { count: 'exact', head: true }).in('gender', ['M', 'ប្រុស']);
+
   return (
     <MasterStudentsClient 
       initialStudents={mappedStudents} 
       totalCount={totalCount}
+      globalStats={{
+        total: totalCount,
+        female: femaleCount || 0,
+        male: maleCount || 0,
+        classes: classOptions.length
+      }}
       currentPage={page}
       pageSize={pageSize}
       filters={{

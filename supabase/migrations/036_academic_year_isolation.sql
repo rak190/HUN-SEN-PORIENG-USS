@@ -5,7 +5,6 @@ BEGIN;
 DROP POLICY IF EXISTS "Teachers modify students in class" ON students;
 DROP POLICY IF EXISTS "Teachers modify attendance in class" ON attendance_records;
 DROP POLICY IF EXISTS "Teachers modify grades in class" ON grades;
-DROP POLICY IF EXISTS "Teachers modify grade records in class" ON grade_records;
 DROP POLICY IF EXISTS "Teachers modify health in class" ON student_health_records;
 DROP POLICY IF EXISTS "Teachers modify visits in class" ON home_visits;
 DROP POLICY IF EXISTS "Teachers modify interventions in class" ON support_interventions;
@@ -44,17 +43,6 @@ CREATE POLICY "Teachers modify grades in class" ON grades FOR ALL USING (
     SELECT 1 FROM classes 
     JOIN academic_years ON academic_years.id = classes.academic_year_id
     WHERE classes.id = grades.class_id 
-      AND classes.teacher_id = auth.uid()
-      AND academic_years.is_active = TRUE
-  )
-);
-
-CREATE POLICY "Teachers modify grade records in class" ON grade_records FOR ALL USING (
-  is_admin_or_principal() OR
-  EXISTS (
-    SELECT 1 FROM classes 
-    JOIN academic_years ON academic_years.id = classes.academic_year_id
-    WHERE classes.id = grade_records.class_id 
       AND classes.teacher_id = auth.uid()
       AND academic_years.is_active = TRUE
   )

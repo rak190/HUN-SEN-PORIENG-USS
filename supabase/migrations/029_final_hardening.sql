@@ -341,28 +341,6 @@ CREATE POLICY "Attendance manage scope" ON attendance_records FOR ALL USING (
   ))
 );
 
--- Grade Records
-DROP POLICY IF EXISTS "Grade records viewable by all" ON grade_records;
-DROP POLICY IF EXISTS "Teachers modify grade records in class" ON grade_records;
-
-CREATE POLICY "Grade records select scope" ON grade_records FOR SELECT USING (
-  is_admin() OR 
-  EXISTS (SELECT 1 FROM classes WHERE classes.id = grade_records.class_id AND (
-    (is_principal() AND classes.school_id = user_school_id()) OR classes.teacher_id = auth.uid()
-  ))
-);
-CREATE POLICY "Grade records manage scope" ON grade_records FOR ALL USING (
-  is_admin() OR 
-  EXISTS (SELECT 1 FROM classes WHERE classes.id = grade_records.class_id AND (
-    (is_principal() AND classes.school_id = user_school_id()) OR classes.teacher_id = auth.uid()
-  ))
-) WITH CHECK (
-  is_admin() OR 
-  EXISTS (SELECT 1 FROM classes WHERE classes.id = grade_records.class_id AND (
-    (is_principal() AND classes.school_id = user_school_id()) OR classes.teacher_id = auth.uid()
-  ))
-);
-
 -- Documents
 DROP POLICY IF EXISTS "Documents viewable by all" ON documents;
 DROP POLICY IF EXISTS "Teachers manage own documents" ON documents;

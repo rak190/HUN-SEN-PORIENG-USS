@@ -6,7 +6,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { 
   Users, Search, Filter, FileSpreadsheet, 
   Download, Edit2, Check, X, ShieldCheck,
-  ArrowRightLeft, UserX, ChevronLeft, ChevronRight, GraduationCap
+  ArrowRightLeft, UserX, ChevronLeft, ChevronRight, GraduationCap, ChevronDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -21,12 +21,18 @@ import AdminBasicRegistrationModal from '@/components/admin/AdminBasicRegistrati
 import AdminBasicImportModal from '@/components/admin/AdminBasicImportModal';
 import GIEPImportManager from './components/GIEPImportManager';
 import StudentGoogleSheetGrid from './components/StudentGoogleSheetGrid';
-import AdminStudentRequestsDrawer from './components/AdminStudentRequestsDrawer';
+import AdminStudentRequestsQueue from './components/AdminStudentRequestsDrawer';
 import { fetchExportData, getPendingStudentRequests, batchRegisterBasicStudents } from './actions';
 
 interface MasterStudentsClientProps {
   initialStudents: any[];
   totalCount: number;
+  globalStats?: {
+    total: number;
+    female: number;
+    male: number;
+    classes: number;
+  };
   currentPage: number;
   pageSize: number;
   filters: {
@@ -45,6 +51,7 @@ interface MasterStudentsClientProps {
 export default function MasterStudentsClient({
   initialStudents,
   totalCount,
+  globalStats,
   currentPage,
   pageSize,
   filters,
@@ -65,10 +72,12 @@ export default function MasterStudentsClient({
   const [isGiepImportModalOpen, setIsGiepImportModalOpen] = useState(false);
   const [isPromotionModalOpen, setIsPromotionModalOpen] = useState(false);
   
-  const [activeTab, setActiveTab] = useState<'list' | 'grid'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'grid' | 'requests'>('list');
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
-  const [isRequestsDrawerOpen, setIsRequestsDrawerOpen] = useState(false);
   const [isSavingGrid, setIsSavingGrid] = useState(false);
+
+  const [importExportMenuOpen, setImportExportMenuOpen] = useState(false);
+  const [classOpsMenuOpen, setClassOpsMenuOpen] = useState(false);
 
   // Fetch pending requests on mount and after actions
   const fetchRequests = async () => {
@@ -98,6 +107,18 @@ export default function MasterStudentsClient({
     }, 500);
     return () => clearTimeout(handler);
   }, [localSearch]);
+
+  // Click outside listener for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target as Element).closest('.action-dropdown')) {
+        setImportExportMenuOpen(false);
+        setClassOpsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const updateFilter = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -299,104 +320,179 @@ export default function MasterStudentsClient({
     <div className="space-y-6 animate-fadeIn select-none p-4 md:p-8 bg-slate-50/50 min-h-screen">
       {/* Header */}
       <header className="flex flex-col md:flex-row md:items-start justify-between gap-4 pb-2">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 flex items-center gap-2">
-              <Users className="w-8 h-8 text-[#155EEF]" />
-              ទិន្នន័យសិស្សទូទាំងសាលា
-            </h1>
-            {pendingRequests.length > 0 && (
-              <button 
-                onClick={() => setIsRequestsDrawerOpen(true)}
-                className="animate-pulse bg-orange-100 text-orange-700 px-3 py-1.5 rounded-full text-xs font-black border border-orange-200 flex items-center gap-1.5 hover:bg-orange-200 transition-colors shadow-sm"
-              >
-                <div className="w-2 h-2 rounded-full bg-orange-500 animate-ping" />
-                សំណើសិស្សថ្មី ({pendingRequests.length})
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2 mt-2 bg-slate-200/50 p-1 rounded-xl w-fit">
-            <button
-              onClick={() => setActiveTab('list')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'list' ? 'bg-white text-[#155EEF] shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-            >
-              បញ្ជីរាយនាមសិស្ស
-            </button>
-            <button
-              onClick={() => setActiveTab('grid')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${activeTab === 'grid' ? 'bg-[#155EEF] text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              បញ្ចូលទិន្នន័យបឋម (Google Sheet Grid)
-            </button>
+        <div className="flex flex-col gap-3">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 flex items-center gap-2">
+            <GraduationCap className="w-8 h-8 text-[#155EEF]" />
+            ការគ្រប់គ្រងទិន្នន័យសិស្ស
+          </h1>
+          
+          {/* Sub-header stats row */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm text-sm">
+              <span className="text-slate-500 font-semibold">សរុប:</span>
+              <span className="font-bold text-slate-800">{globalStats?.total || totalCount}</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm text-sm">
+              <span className="text-slate-500 font-semibold">ស្រី:</span>
+              <span className="font-bold text-pink-600">{globalStats?.female || 0}</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm text-sm">
+              <span className="text-slate-500 font-semibold">ប្រុស:</span>
+              <span className="font-bold text-blue-600">{globalStats?.male || 0}</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm text-sm">
+              <span className="text-slate-500 font-semibold">ថ្នាក់សកម្ម:</span>
+              <span className="font-bold text-emerald-600">{globalStats?.classes || 0}</span>
+            </div>
           </div>
         </div>
         
-        <div className="flex flex-wrap gap-2">
-          <button 
-            onClick={() => setIsPromotionModalOpen(true)}
-            className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
-          >
-            <GraduationCap className="w-4 h-4" /> ឡើងថ្នាក់ (Promote)
-          </button>
+        {/* Consolidated Action Hierarchy */}
+        <div className="flex flex-wrap items-center gap-2 relative z-20">
+          
+          {/* Secondary Actions (Dropdowns) */}
+          <div className="flex items-center gap-2">
+            
+            {/* Class Operations Dropdown */}
+            <div className="relative action-dropdown">
+              <button 
+                onClick={() => {
+                  setClassOpsMenuOpen(!classOpsMenuOpen);
+                  setImportExportMenuOpen(false);
+                }}
+                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3.5 py-2 rounded-xl text-sm font-medium flex items-center gap-2 transition-all shadow-sm"
+              >
+                សកម្មភាពថ្នាក់ <ChevronDown className="w-4 h-4" />
+              </button>
+              
+              {classOpsMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden py-1 z-50 animate-in fade-in slide-in-from-top-2">
+                  <button 
+                    onClick={() => { setIsMigrationModalOpen(true); setClassOpsMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-[#155EEF] flex items-center gap-2 transition-colors"
+                  >
+                    <ArrowRightLeft className="w-4 h-4" /> ផ្ទេរប្តូរថ្នាក់សិស្ស
+                  </button>
+                  <button 
+                    onClick={() => { setIsPromotionModalOpen(true); setClassOpsMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-teal-600 flex items-center gap-2 transition-colors"
+                  >
+                    <GraduationCap className="w-4 h-4" /> ឡើងថ្នាក់សិស្ស
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Import / Export Dropdown */}
+            <div className="relative action-dropdown">
+              <button 
+                onClick={() => {
+                  setImportExportMenuOpen(!importExportMenuOpen);
+                  setClassOpsMenuOpen(false);
+                }}
+                className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3.5 py-2 rounded-xl text-sm font-medium flex items-center gap-2 transition-all shadow-sm"
+              >
+                នាំចូល & នាំចេញ <ChevronDown className="w-4 h-4" />
+              </button>
+              
+              {importExportMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden py-1 z-50 animate-in fade-in slide-in-from-top-2">
+                  <div className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">នាំចូល (Import)</div>
+                  <button 
+                    onClick={() => { setIsBasicImportModalOpen(true); setImportExportMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" /> នាំចូលឯកសារ Excel/CSV
+                  </button>
+                  <button 
+                    onClick={() => { setIsGiepImportModalOpen(true); setImportExportMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-purple-600 flex items-center gap-2 transition-colors"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" /> នាំចូលទិន្នន័យ GIEP
+                  </button>
+                  <div className="h-px bg-slate-100 my-1"></div>
+                  <div className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">ទាញយក (Export & Templates)</div>
+                  <button 
+                    onClick={() => { handleExport(); setImportExportMenuOpen(false); }}
+                    disabled={isExporting || totalCount === 0}
+                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" /> ទាញយកបញ្ជីសិស្ស (Excel)
+                  </button>
+                  <button 
+                    onClick={() => { handleExportPDF(); setImportExportMenuOpen(false); }}
+                    disabled={isExporting || totalCount === 0}
+                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-red-600 flex items-center gap-2 transition-colors disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" /> ទាញយកបញ្ជីសិស្ស (PDF)
+                  </button>
+                  <button 
+                    onClick={() => { handleDownloadTemplate(); setImportExportMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-slate-400" /> ទាញយកគំរូទម្រង់ Excel
+                  </button>
+                </div>
+              )}
+            </div>
+            
+          </div>
+
+          {/* Primary CTA */}
           <button 
             onClick={() => setIsBasicRegistrationModalOpen(true)}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow font-medium px-4 py-2 rounded-xl flex items-center gap-2 text-sm transition-all"
           >
-            បញ្ជូលតាមប្រអប់ (Grid)
+            <span className="font-black text-lg leading-none mb-0.5">+</span> ចុះឈ្មោះសិស្សថ្មី
           </button>
-          <button 
-            onClick={() => setIsGiepImportModalOpen(true)}
-            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
-          >
-            <FileSpreadsheet className="w-4 h-4" /> GIEP Import
-          </button>
-          <button 
-            onClick={() => setIsBasicImportModalOpen(true)}
-            className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
-          >
-            <FileSpreadsheet className="w-4 h-4" /> នាំចូលពី Excel
-          </button>
-          <button 
-            onClick={handleDownloadTemplate}
-            className="px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-colors border border-slate-200 shadow-sm flex items-center justify-center gap-2"
-          >
-             ទាញយកគំរូ Excel
-          </button>
-          <button 
-            onClick={handleExportPDF}
-            disabled={isExporting || totalCount === 0}
-            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isExporting ? <span className="animate-spin text-xl leading-none">⟳</span> : <Download className="w-4 h-4" />}
-            {isExporting ? 'កំពុងទាញយក...' : 'ទាញយក PDF'}
-          </button>
-          <button 
-            onClick={handleExport}
-            disabled={isExporting || totalCount === 0}
-            className="px-6 py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isExporting ? <span className="animate-spin text-xl leading-none">⟳</span> : <Download className="w-4 h-4" />}
-            {isExporting ? 'កំពុងទាញយក...' : 'ទាញយក (Export)'}
-          </button>
+          
         </div>
       </header>
 
-      {/* Mini Stats Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-2">
-        <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">
-          <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-black text-white tracking-tight leading-none">{totalCount}</h2>
-            <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all shadow-2xs">
-              <Users className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
-            </div>
-          </div>
-          <p className="text-sm font-bold text-blue-100 mt-4">សិស្សសរុប (រកឃើញ)</p>
-        </div>
+      {/* Segmented Sub-Tab Navigation Bar */}
+      <div className="bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 inline-flex flex-wrap items-center gap-1.5 mb-2 backdrop-blur-sm mt-4">
+        <button
+          onClick={() => setActiveTab('list')}
+          className={`${
+            activeTab === 'list'
+              ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 rounded-xl px-4 py-2 text-sm font-medium transition-all flex items-center gap-2'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-xl px-4 py-2 text-sm font-medium transition-all flex items-center gap-2'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          តារាងសិស្សសរុប
+        </button>
+        <button
+          onClick={() => setActiveTab('grid')}
+          className={`${
+            activeTab === 'grid'
+              ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 rounded-xl px-4 py-2 text-sm font-medium transition-all flex items-center gap-2'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-xl px-4 py-2 text-sm font-medium transition-all flex items-center gap-2'
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4" />
+          បញ្ចូលទិន្នន័យបឋម (Google Sheet Grid)
+        </button>
+        <button
+          onClick={() => setActiveTab('requests')}
+          className={`${
+            activeTab === 'requests'
+              ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 rounded-xl px-4 py-2 text-sm font-medium transition-all flex items-center gap-2'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-xl px-4 py-2 text-sm font-medium transition-all flex items-center gap-2'
+          }`}
+        >
+          <UserX className="w-4 h-4" />
+          សំណើសិស្សថ្មីពីគ្រូ
+          {pendingRequests.length > 0 && (
+            <span className="ml-1 px-2 py-0.5 text-xs font-bold rounded-full bg-rose-500 text-white shadow-sm animate-in zoom-in">
+              {pendingRequests.length}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* Master Data Grid or Spreadsheet */}
-      {activeTab === 'grid' ? (
+      {/* Views */}
+      {activeTab === 'grid' && (
         <div className="mt-6">
           <StudentGoogleSheetGrid 
             activeClasses={filterOptions.classes}
@@ -404,13 +500,6 @@ export default function MasterStudentsClient({
             onCancel={() => setActiveTab('list')}
             onSave={async (students) => {
               setIsSavingGrid(true);
-              // We need an academic_year_id. The grid batch register expects it.
-              // For simplicity, we fetch it or pass it. We can fetch active year in action or just pass it if we have it.
-              // Wait, action can fetch active year if not passed. Let's assume we pass the active one or the action finds it.
-              // The server action bulk_quick_register_students requires target_year_id.
-              // Since we don't have it in props directly, I will modify the action to fetch it if not provided, or we can fetch it here.
-              // Actually, I'll pass a dummy 'fetch-active' string and let the server action handle it, OR better, let's fetch it via a helper or pass it.
-              // The action takes academicYearId. Let's pass a placeholder and modify the action to resolve it.
               const res = await batchRegisterBasicStudents(students, 'fetch-active');
               setIsSavingGrid(false);
               
@@ -424,7 +513,20 @@ export default function MasterStudentsClient({
             }}
           />
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'requests' && (
+        <AdminStudentRequestsQueue
+          requests={pendingRequests}
+          activeAcademicYearId="fetch-active"
+          onRefresh={() => {
+            fetchRequests();
+            router.refresh();
+          }}
+        />
+      )}
+
+      {activeTab === 'list' && (
         <div className="bg-white rounded-[24px] shadow-xs border border-slate-100/80 overflow-hidden mt-6">
           
           {/* Mission Control Header */}
@@ -767,18 +869,6 @@ export default function MasterStudentsClient({
           }}
         />
       )}
-      
-      <AdminStudentRequestsDrawer
-        isOpen={isRequestsDrawerOpen}
-        onClose={() => setIsRequestsDrawerOpen(false)}
-        requests={pendingRequests}
-        activeAcademicYearId="fetch-active" // The server action resolves this via rpc if needed, or we must pass the actual ID.
-        // The approveStudentRequest action passes it to rpc. Let's fix the server action to find active year if "fetch-active" is passed.
-        onRefresh={() => {
-          fetchRequests();
-          router.refresh();
-        }}
-      />
     </div>
   );
 }

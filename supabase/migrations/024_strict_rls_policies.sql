@@ -73,18 +73,6 @@ CREATE POLICY "Teachers modify grades in class" ON grades FOR ALL USING (
   EXISTS (SELECT 1 FROM classes WHERE classes.id = grades.class_id AND classes.teacher_id = auth.uid())
 );
 
-CREATE POLICY "Grade records viewable by assigned teacher or admin" ON grade_records FOR SELECT USING (
-  is_admin_or_principal() OR
-  EXISTS (SELECT 1 FROM classes WHERE classes.id = grade_records.class_id AND classes.teacher_id = auth.uid())
-);
-CREATE POLICY "Teachers modify grade records in class" ON grade_records FOR ALL USING (
-  is_admin_or_principal() OR
-  EXISTS (SELECT 1 FROM classes WHERE classes.id = grade_records.class_id AND classes.teacher_id = auth.uid())
-) WITH CHECK (
-  is_admin_or_principal() OR
-  EXISTS (SELECT 1 FROM classes WHERE classes.id = grade_records.class_id AND classes.teacher_id = auth.uid())
-);
-
 -- Documents
 CREATE POLICY "Documents viewable by uploader or admin" ON documents FOR SELECT USING (
   uploader_id = auth.uid() OR is_admin_or_principal()

@@ -2,7 +2,7 @@
 DROP TABLE IF EXISTS grades CASCADE;
 
 CREATE TABLE grades (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
     student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     period TEXT NOT NULL, -- e.g., 'sem-1', 'oct'

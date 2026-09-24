@@ -32,7 +32,6 @@ ALTER TABLE academic_years ENABLE ROW LEVEL SECURITY;
 ALTER TABLE grade_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE student_enrollments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE school_infrastructure ENABLE ROW LEVEL SECURITY;
-ALTER TABLE grade_records ENABLE ROW LEVEL SECURITY;
 
 -- 1. DROP ALL EXISTING POLICIES FROM ALL TABLES TO AVOID CONFLICTS
 DO $$
@@ -84,12 +83,6 @@ CREATE POLICY "Grades viewable by all" ON grades FOR SELECT USING (auth.role() =
 CREATE POLICY "Teachers modify grades in class" ON grades FOR ALL USING (
   is_admin_or_principal() OR
   EXISTS (SELECT 1 FROM classes WHERE classes.id = grades.class_id AND classes.teacher_id = auth.uid())
-);
-
-CREATE POLICY "Grade records viewable by all" ON grade_records FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "Teachers modify grade records in class" ON grade_records FOR ALL USING (
-  is_admin_or_principal() OR
-  EXISTS (SELECT 1 FROM classes WHERE classes.id = grade_records.class_id AND classes.teacher_id = auth.uid())
 );
 
 -- Documents

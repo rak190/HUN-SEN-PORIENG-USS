@@ -81,22 +81,6 @@ CREATE POLICY "Grades manage scope" ON grades FOR ALL USING (
   ))
 );
 
--- Grade Records
-DROP POLICY IF EXISTS "Grade records manage scope" ON grade_records;
-CREATE POLICY "Grade records manage scope" ON grade_records FOR ALL USING (
-  is_admin() OR 
-  EXISTS (SELECT 1 FROM classes WHERE classes.id = grade_records.class_id AND (
-    (is_principal() AND classes.school_id = user_school_id()) OR 
-    (classes.teacher_id = auth.uid() AND EXISTS (SELECT 1 FROM academic_years WHERE id = classes.academic_year_id AND is_active = TRUE))
-  ))
-) WITH CHECK (
-  is_admin() OR 
-  EXISTS (SELECT 1 FROM classes WHERE classes.id = grade_records.class_id AND (
-    (is_principal() AND classes.school_id = user_school_id()) OR 
-    (classes.teacher_id = auth.uid() AND EXISTS (SELECT 1 FROM academic_years WHERE id = classes.academic_year_id AND is_active = TRUE))
-  ))
-);
-
 -- Student Health Records
 DROP POLICY IF EXISTS "Health manage scope" ON student_health_records;
 CREATE POLICY "Health manage scope" ON student_health_records FOR ALL USING (
