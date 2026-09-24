@@ -6,8 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search, Mic, ArrowUpRight, Award, Globe, Share2,
   MessageCircle, Mail, CalendarCheck, ClipboardList,
-  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall, FileSpreadsheet, UserPlus,
-  CheckCircle2, ShieldAlert
+  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall, FileSpreadsheet, UserPlus
 } from 'lucide-react';
 import { ActivityLog, Profile, AtRiskStudent } from '@/types';
 import { createActivityLog, deleteActivityLog } from './actions';
@@ -220,43 +219,6 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
          onClose={() => setShowStudentRequestModal(false)}
          classId={stats.classId}
       />
-
-      {/* ── EWS Inline Banner Card ── */}
-      {atRiskStudents.length > 0 ? (
-        <div className="rounded-[20px] border border-rose-200 bg-rose-50/80 shadow-sm overflow-hidden">
-          <button
-            onClick={() => setShowEwsModal(true)}
-            className="w-full flex items-center justify-between px-5 py-4 gap-3 hover:bg-rose-100/60 transition-colors text-left cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center shrink-0">
-                <ShieldAlert className="w-5 h-5 text-rose-600 animate-pulse" />
-              </div>
-              <div>
-                <p className="font-extrabold text-rose-700 text-sm leading-snug">
-                  ការប្រកាសអាសន្ន EWS: មានសិស្ស {atRiskStudents.length} នាក់ ប្រឈមនឹងហានិភ័យ
-                </p>
-                <p className="text-xs font-semibold text-rose-500 mt-0.5">
-                  {atRiskStudents.filter(s => s.severity === 'high').length} នាក់ ហានិភ័យខ្ពស់ •{' '}
-                  {atRiskStudents.filter(s => s.severity === 'medium').length} នាក់ ហានិភ័យមធ្យម
-                </p>
-              </div>
-            </div>
-            <span className="text-xs font-black text-rose-600 bg-rose-100 px-3 py-1.5 rounded-full shrink-0 border border-rose-200/80 hover:bg-rose-200 transition-colors">
-              មើលលម្អិត →
-            </span>
-          </button>
-        </div>
-      ) : (
-        <div className="rounded-[20px] border border-emerald-200 bg-emerald-50/60 px-5 py-3 flex items-center gap-3">
-          <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          </div>
-          <p className="text-sm font-bold text-emerald-700">
-            ថ្នាក់រៀនមានស្ថានភាពល្អប្រសើរ — គ្មានសិស្សប្រឈមហានិភ័យ EWS ទេ
-          </p>
-        </div>
-      )}
 
       {/* EWS Modal (Full-Screen Frosted Glass Portal) */}
       <Modal
