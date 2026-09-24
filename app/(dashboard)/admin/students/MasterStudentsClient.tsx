@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { 
   Users, Search, Filter, FileSpreadsheet, 
-  Download, Edit2, Check, X, ShieldCheck, Trash2,
+  Download, Edit2, Check, X, ShieldCheck, Trash2, Loader2,
   ArrowRightLeft, UserX, ChevronLeft, ChevronRight, GraduationCap, ChevronDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -75,6 +75,13 @@ export default function MasterStudentsClient({
   const [activeTab, setActiveTab] = useState<'list' | 'grid' | 'requests'>('list');
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [isSavingGrid, setIsSavingGrid] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const handleTabChange = (tab: 'list' | 'grid' | 'requests') => {
+    startTransition(() => {
+      setActiveTab(tab);
+    });
+  };
 
   const [importExportMenuOpen, setImportExportMenuOpen] = useState(false);
   const [classOpsMenuOpen, setClassOpsMenuOpen] = useState(false);
@@ -140,17 +147,19 @@ export default function MasterStudentsClient({
   }, []);
 
   const updateFilter = (key: string, value: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value && value !== 'all') {
-      params.set(key, value);
-    } else {
-      params.delete(key);
-    }
-    // Reset to page 1 when filters change (except when changing page)
-    if (key !== 'page') {
-      params.delete('page');
-    }
-    router.push(`${pathname}?${params.toString()}`);
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value && value !== 'all') {
+        params.set(key, value);
+      } else {
+        params.delete(key);
+      }
+      // Reset to page 1 when filters change (except when changing page)
+      if (key !== 'page') {
+        params.delete('page');
+      }
+      router.push(`${pathname}?${params.toString()}`);
+    });
   };
 
   const handleExportPDF = async () => {
@@ -471,7 +480,7 @@ export default function MasterStudentsClient({
       {/* Segmented Sub-Tab Navigation Bar */}
       <div className="bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 inline-flex flex-wrap items-center gap-1.5 mb-2 backdrop-blur-sm mt-4">
         <button
-          onClick={() => setActiveTab('list')}
+          onClick={() => handleTabChange('list')}
           className={`${
             activeTab === 'list'
               ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 rounded-xl px-4 py-2 text-sm font-medium transition-all flex items-center gap-2'
@@ -482,7 +491,7 @@ export default function MasterStudentsClient({
           តារាងសិស្សសរុប
         </button>
         <button
-          onClick={() => setActiveTab('grid')}
+          onClick={() => handleTabChange('grid')}
           className={`${
             activeTab === 'grid'
               ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 rounded-xl px-4 py-2 text-sm font-medium transition-all flex items-center gap-2'
@@ -493,7 +502,7 @@ export default function MasterStudentsClient({
           បញ្ចូលទិន្នន័យបឋម (Google Sheet Grid)
         </button>
         <button
-          onClick={() => setActiveTab('requests')}
+          onClick={() => handleTabChange('requests')}
           className={`${
             activeTab === 'requests'
               ? 'bg-white text-blue-600 shadow-sm border border-slate-200/60 rounded-xl px-4 py-2 text-sm font-medium transition-all flex items-center gap-2'
@@ -511,6 +520,16 @@ export default function MasterStudentsClient({
       </div>
 
       {/* Views */}
+      <div className="relative">
+        {isPending && (
+          <div className="absolute inset-0 z-50 flex items-start justify-center pt-20 bg-white/60 dark:bg-slate-900/60 backdrop-blur-[2px] rounded-[24px]">
+            <div className="flex flex-col items-center gap-2 bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700">
+              <Loader2 className="w-6 h-6 animate-spin text-[#155EEF]" />
+              <span className="font-kantumruy text-sm font-bold text-slate-700 dark:text-slate-200">កំពុងផ្ទុកទិន្នន័យ...</span>
+            </div>
+          </div>
+        )}
+
       {activeTab === 'grid' && (
         <div className="mt-6">
           <StudentGoogleSheetGrid 
@@ -833,8 +852,9 @@ export default function MasterStudentsClient({
 
         </div>
       )}
+      </div>
 
-      {/* Modals */}
+      {/* Modals & Drawers */}
       <AdminBasicRegistrationModal
         isOpen={isBasicRegistrationModalOpen}
         onClose={() => setIsBasicRegistrationModalOpen(false)}

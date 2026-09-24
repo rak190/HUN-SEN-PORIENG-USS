@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Save, AlertCircle, CheckCircle, Trash2, Plus, Copy, RotateCcw, X, Info } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Trash2, Plus, Copy, RotateCcw, X, Info, Loader2 } from 'lucide-react';
 
 export interface GridStudent {
   _id: string; // internal id for React key
@@ -251,8 +251,19 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
   const errorCount = rows.filter(r => !r.isValid && r.errors.length > 0).length;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-220px)] min-h-[500px] animate-fadeIn">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-220px)] min-h-[500px] animate-fadeIn relative">
       
+      {isSaving && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 bg-white p-6 rounded-2xl shadow-xl border border-slate-100">
+            <Loader2 className="w-8 h-8 animate-spin text-[#155EEF]" />
+            <span className="font-kantumruy text-sm font-bold text-slate-800">
+              កំពុងដំណើរការទិន្នន័យសិស្ស ({rows.filter(r => r.isValid && (r.student_id || r.full_name)).length} នាក់)...
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Action Bar */}
       <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3 w-full sm:w-auto">

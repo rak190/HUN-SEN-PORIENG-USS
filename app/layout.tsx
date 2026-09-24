@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans, Kantumruy_Pro, Moul, Siemreap } from "next/font/goog
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { VersionGuardian } from "@/components/VersionGuardian";
+import NextTopLoader from 'nextjs-toploader';
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -62,6 +63,17 @@ export default function RootLayout({
   return (
     <html lang="km" className={`h-full antialiased ${plusJakarta.variable} ${kantumruy.variable} ${moul.variable} ${siemreap.variable}`}>
       <body className="min-h-full flex flex-col bg-white text-slate-800 font-sans">
+        <NextTopLoader
+          color="#155EEF"
+          initialPosition={0.08}
+          crawlSpeed={200}
+          height={3}
+          crawl={true}
+          showSpinner={false}
+          easing="ease"
+          speed={200}
+          shadow="0 0 10px #155EEF,0 0 5px #155EEF"
+        />
         <AuthProvider>
           <VersionGuardian />
           {children}
