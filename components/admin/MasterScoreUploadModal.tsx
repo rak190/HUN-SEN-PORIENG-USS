@@ -27,7 +27,7 @@ interface VerifiedRow {
   student_id_number?: string;
   desk_number: string;
   class_name: string;
-  scores: Record<string, number>;
+  scores: Record<string, number | null>;
   total_score: number;
   average_score: number;
   status: 'draft';
@@ -511,8 +511,12 @@ export function MasterScoreUploadModal({ isOpen, onClose, selectedPeriod, academ
                             {row.excel_name || row.student_name}
                           </td>
                           <td className="p-3 font-bold text-blue-600">{row.class_name}</td>
-                          <td className="p-3 font-mono font-black text-slate-800 text-right">{row.total_score}</td>
-                          <td className="p-3 font-mono font-black text-emerald-600 text-right">{row.average_score}</td>
+                          <td className="p-3 font-mono font-black text-slate-800 text-right">
+                            {Object.values(row.scores).every(s => s === null) ? <span className="text-rose-500 text-xs px-2 py-0.5 bg-rose-50 rounded">អវត្តមាន</span> : row.total_score}
+                          </td>
+                          <td className="p-3 font-mono font-black text-emerald-600 text-right">
+                            {Object.values(row.scores).every(s => s === null) ? '-' : row.average_score}
+                          </td>
                           <td className="p-3">
                             {row.isNameMismatch ? (
                               <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-bold inline-flex items-center gap-1">

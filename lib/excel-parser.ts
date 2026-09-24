@@ -47,8 +47,8 @@ export interface ParsedStudentScore {
   genderRaw?: string;
   className: string;
   extractedGrade: string;
-  scores: Record<string, number>;
-  rawSubMetrics?: Record<string, number[]>;
+  scores: Record<string, number | null>;
+  rawSubMetrics?: Record<string, (number | null)[]>;
 }
 
 export function convertKhmerToArabic(str: string): string {
@@ -96,7 +96,7 @@ export function checkNameMatch(excelName?: string, dbName?: string): { match: bo
  * Validates scores against MoEYS subject ceilings
  */
 export function validateScoreCeilings(
-  scores: Record<string, number>,
+  scores: Record<string, number | null>,
   grade?: string | number | null,
   track?: string | null
 ): { isValid: boolean; warnings: string[]; errors: string[] } {
@@ -124,6 +124,7 @@ export function validateScoreCeilings(
   }
 
   for (const [subjKey, score] of Object.entries(scores)) {
+    if (score === null || score === undefined) continue;
     if (score < 0) {
       errors.push(`មុខវិជ្ជា ${subjKey} មានពិន្ទុអវិជ្ជមាន (${score})`);
     }
@@ -146,7 +147,7 @@ export function validateScoreCeilings(
  * Dynamically computes total score and average for a single student
  */
 export function calculateStudentTotalScore(
-  scores: Record<string, number>,
+  scores: Record<string, number | null>,
   grade?: string | number | null,
   track?: string | null
 ): { totalScore: number; maxTotal: number; averageScore: number; subjectCount: number } {
@@ -156,8 +157,8 @@ export function calculateStudentTotalScore(
   
   // Calculate total score combining subject totals
   schema.subjects.forEach(sub => {
-    if (scores[sub.id] !== undefined) {
-      totalScore += scores[sub.id];
+    if (scores[sub.id] !== undefined && scores[sub.id] !== null) {
+      totalScore += scores[sub.id] as number;
       subjectCount++;
     } else if (sub.id === 'khmer') {
       const dict = scores['khmer_dictation'] || 0;
@@ -259,6 +260,10 @@ export async function parseMasterExcel(file: File): Promise<ParseResult> {
                  const mappedKey = SUBJECT_MAP[val.toLowerCase()];
                  if (mappedKey) {
                     detectedSubjectsMap.set(mappedKey, val);
+                    const existingIdx = subjectCols.findIndex(s => s.key === mappedKey);
+                    if (existingIdx !== -1) {
+                        subjectCols.splice(existingIdx, 1);
+                    }
                     if (!subjectCols.find(s => s.startCol === c)) {
                        subjectCols.push({ name: val, startCol: c, key: mappedKey });
                     }
@@ -320,8 +325,8 @@ export async function parseMasterExcel(file: File): Promise<ParseResult> {
                  if (sheetMatch && sheetMatch[1]) extractedGrade = sheetMatch[1];
               }
 
-              const scores: Record<string, number> = {};
-              const rawSubMetrics: Record<string, number[]> = {};
+              const scores: Record<string, number | null> = {};
+              const rawSubMetrics: Record<string, (number | null)[]> = {};
 
               subjectCols.forEach((subj, idx) => {
                  const nextSubj = subjectCols[idx + 1];
@@ -331,24 +336,40 @@ export async function parseMasterExcel(file: File): Promise<ParseResult> {
                  }
                  
                  let finalScore = 0;
-                 const subVals: number[] = [];
+                 let hasAnyValid = false;
+                 const subVals: (number | null)[] = [];
                  for (let i = 0; i < maxColsToRead && i < 3; i++) {
-                    const parsedNum = parseFloat(row[subj.startCol + i]);
-                    if (!isNaN(parsedNum)) {
-                      finalScore += parsedNum;
-                      subVals.push(parsedNum);
+                    const rawVal = row[subj.startCol + i]?.toString().trim();
+                    if (!rawVal || ['-', 'ច', 'ឈ', 'អ'].includes(rawVal.toUpperCase())) {
+                       subVals.push(null);
+                    } else {
+                       const parsedNum = parseFloat(rawVal);
+                       if (!isNaN(parsedNum)) {
+                         finalScore += parsedNum;
+                         hasAnyValid = true;
+                         subVals.push(parsedNum);
+                       } else {
+                         subVals.push(null);
+                       }
                     }
                  }
                  
-                 if (finalScore >= 0 && subVals.length > 0) {
+                 if (hasAnyValid) {
                     scores[subj.key] = parseFloat(finalScore.toFixed(2));
+                    rawSubMetrics[subj.key] = subVals;
+                 } else {
+                    scores[subj.key] = null;
                     rawSubMetrics[subj.key] = subVals;
                  }
               });
 
               // Combine khmer_dictation and khmer_composition if khmer not directly present
-              if (!scores['khmer'] && (scores['khmer_dictation'] !== undefined || scores['khmer_composition'] !== undefined)) {
-                scores['khmer'] = (scores['khmer_dictation'] || 0) + (scores['khmer_composition'] || 0);
+              if (scores['khmer'] === undefined && (scores['khmer_dictation'] !== undefined || scores['khmer_composition'] !== undefined)) {
+                 if (scores['khmer_dictation'] === null && scores['khmer_composition'] === null) {
+                    scores['khmer'] = null;
+                 } else {
+                    scores['khmer'] = (scores['khmer_dictation'] || 0) + (scores['khmer_composition'] || 0);
+                 }
               }
 
               parsedStudents.push({
