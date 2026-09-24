@@ -241,6 +241,7 @@ export interface AtRiskStudent {
   name: string;
   reasons: string[];
   severity: 'low' | 'medium' | 'high';
+  phone?: string | null;
 }
 
 

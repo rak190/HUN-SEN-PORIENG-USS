@@ -247,32 +247,74 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     created_at: a.created_at,
   }));
 
-  // 7. Fetch real At-Risk students based on new risk_level schema
-  let atRiskQuery = supabase
-    .from('students')
-    .select('id, full_name, risk_level, behavior_history')
-    .in('risk_level', ['high', 'medium']);
-    
+  // 7. Fetch at-risk students using reliable signal columns from active_class_rosters
+  // Signals: dropout_risk flag, is_slow_learner flag, and current-month unexcused absences >= 3
+  const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+
+  let rosterAtRiskQuery = supabase
+    .from('active_class_rosters')
+    .select('id, full_name, dropout_risk, is_slow_learner, gender, father_phone, mother_phone, guardian_phone, emergency_contact_phone');
+
   if (effectiveClassId) {
-    atRiskQuery = atRiskQuery.eq('class_id', effectiveClassId);
+    rosterAtRiskQuery = rosterAtRiskQuery.eq('enrollment_class_id', effectiveClassId);
+  } else if (activeClassIds.length > 0) {
+    rosterAtRiskQuery = rosterAtRiskQuery.in('enrollment_class_id', activeClassIds);
   }
-  
-  const { data: atRiskData } = await atRiskQuery;
-  const atRiskStudents = (atRiskData || []).map(s => {
-    let reasons: string[] = [];
-    if (Array.isArray(s.behavior_history)) {
-      reasons = s.behavior_history;
-    }
-    if (reasons.length === 0) {
-       reasons = [s.risk_level === 'high' ? 'អវត្តមានច្រើន / ពិន្ទុធ្លាក់ចុះខ្លាំង' : 'ត្រូវការការតាមដានបន្ថែម'];
-    }
-    return {
-      id: s.id,
-      name: s.full_name,
-      reasons: reasons,
-      severity: s.risk_level as 'high' | 'medium'
+  const { data: rosterData } = await rosterAtRiskQuery;
+
+  // Fetch current-month absence summaries for the relevant class scope
+  let absenceQuery = supabase
+    .from('monthly_attendance_summaries')
+    .select('student_id, absent_count, permission_count')
+    .eq('month', currentMonth);
+  if (effectiveClassId) {
+    absenceQuery = absenceQuery.eq('class_id', effectiveClassId);
+  } else if (activeClassIds.length > 0) {
+    absenceQuery = absenceQuery.in('class_id', activeClassIds);
+  }
+  const { data: absenceData } = await absenceQuery;
+
+  // Build a student → absence map for O(1) lookup
+  const absenceMap: Record<string, { absent: number; permission: number }> = {};
+  (absenceData || []).forEach((r: any) => {
+    absenceMap[r.student_id] = {
+      absent: r.absent_count || 0,
+      permission: r.permission_count || 0,
     };
   });
 
+  // EWS threshold: ≥ 3 unexcused absences in current month
+  const EWS_ABSENCE_THRESHOLD = 3;
+
+  const atRiskStudents = (rosterData || [])
+    .map((s: any) => {
+      const abs = absenceMap[s.id] || { absent: 0, permission: 0 };
+      const highAbsence = abs.absent >= EWS_ABSENCE_THRESHOLD;
+
+      const reasons: string[] = [];
+      if (s.dropout_risk) reasons.push('ប្រឈមបោះបង់ការសិក្សា');
+      if (s.is_slow_learner) reasons.push('រៀនយឺត – ត្រូវការការគាំទ្របន្ថែម');
+      if (highAbsence) reasons.push(`អវត្តមានឥតច្បាប់ ${abs.absent} ថ្ងៃក្នុងខែនេះ`);
+
+      // Only include students that actually have a risk signal
+      if (reasons.length === 0) return null;
+
+      const severity: 'high' | 'medium' =
+        s.dropout_risk || abs.absent >= 5 ? 'high' : 'medium';
+
+      const phone =
+        s.father_phone || s.mother_phone || s.guardian_phone || s.emergency_contact_phone || null;
+
+      return {
+        id: s.id,
+        name: s.full_name,
+        reasons,
+        severity,
+        phone,
+      };
+    })
+    .filter(Boolean) as import('@/types').AtRiskStudent[];
+
   return <DashboardClient stats={stats} activities={activities} profile={profile} atRiskStudents={atRiskStudents} />;
 }
+

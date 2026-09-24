@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search, Mic, ArrowUpRight, Award, Globe, Share2,
   MessageCircle, Mail, CalendarCheck, ClipboardList,
-  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall, FileSpreadsheet, UserPlus
+  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall, FileSpreadsheet, UserPlus,
+  CheckCircle2, ShieldAlert
 } from 'lucide-react';
 import { ActivityLog, Profile, AtRiskStudent } from '@/types';
 import { createActivityLog, deleteActivityLog } from './actions';
@@ -220,6 +221,43 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
          classId={stats.classId}
       />
 
+      {/* ── EWS Inline Banner Card ── */}
+      {atRiskStudents.length > 0 ? (
+        <div className="rounded-[20px] border border-rose-200 bg-rose-50/80 shadow-sm overflow-hidden">
+          <button
+            onClick={() => setShowEwsModal(true)}
+            className="w-full flex items-center justify-between px-5 py-4 gap-3 hover:bg-rose-100/60 transition-colors text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-rose-500/15 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-5 h-5 text-rose-600 animate-pulse" />
+              </div>
+              <div>
+                <p className="font-extrabold text-rose-700 text-sm leading-snug">
+                  ការប្រកាសអាសន្ន EWS: មានសិស្ស {atRiskStudents.length} នាក់ ប្រឈមនឹងហានិភ័យ
+                </p>
+                <p className="text-xs font-semibold text-rose-500 mt-0.5">
+                  {atRiskStudents.filter(s => s.severity === 'high').length} នាក់ ហានិភ័យខ្ពស់ •{' '}
+                  {atRiskStudents.filter(s => s.severity === 'medium').length} នាក់ ហានិភ័យមធ្យម
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-black text-rose-600 bg-rose-100 px-3 py-1.5 rounded-full shrink-0 border border-rose-200/80 hover:bg-rose-200 transition-colors">
+              មើលលម្អិត →
+            </span>
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-[20px] border border-emerald-200 bg-emerald-50/60 px-5 py-3 flex items-center gap-3">
+          <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          </div>
+          <p className="text-sm font-bold text-emerald-700">
+            ថ្នាក់រៀនមានស្ថានភាពល្អប្រសើរ — គ្មានសិស្សប្រឈមហានិភ័យ EWS ទេ
+          </p>
+        </div>
+      )}
+
       {/* EWS Modal (Full-Screen Frosted Glass Portal) */}
       <Modal
         isOpen={showEwsModal}
@@ -232,49 +270,71 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
           </div>
         }
         title={`សិស្សប្រឈមហានិភ័យ (${stats.classNameKh})`}
-        subtitle="Early Warning System (EWS)"
+        subtitle="Early Warning System (EWS) — ខែបច្ចុប្បន្ន"
       >
         <div className="p-6 sm:p-8 space-y-4">
           {atRiskStudents.length > 0 ? (
             atRiskStudents.map((student) => (
               <div
                 key={student.id}
-                className="p-4 border border-slate-100/90 rounded-2xl bg-white shadow-xs hover:border-[#155EEF]/30 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between transition-all"
+                className={`p-4 border rounded-2xl bg-white shadow-xs flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between transition-all ${
+                  student.severity === 'high'
+                    ? 'border-rose-200 hover:border-rose-400'
+                    : 'border-amber-200 hover:border-amber-400'
+                }`}
               >
-                <div>
-                  <h4 className="font-extrabold text-slate-900 flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-extrabold text-slate-900 flex items-center gap-2 flex-wrap">
                     {student.name}
-                    {student.severity === 'high' && (
-                      <span className="px-2.5 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-extrabold rounded-full">
-                        ហានិភ័យខ្ពស់
-                      </span>
-                    )}
+                    <span className={`px-2.5 py-0.5 text-[10px] font-extrabold rounded-full ${
+                      student.severity === 'high'
+                        ? 'bg-rose-100 text-rose-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {student.severity === 'high' ? 'ហានិភ័យខ្ពស់' : 'ហានិភ័យមធ្យម'}
+                    </span>
                   </h4>
                   <ul className="mt-2 space-y-1">
                     {student.reasons.map((r, i) => (
-                      <li
-                        key={i}
-                        className="text-xs font-semibold text-slate-600 flex items-start gap-1.5"
-                      >
-                        <span className="text-rose-500 mt-0.5">•</span> {r}
+                      <li key={i} className="text-xs font-semibold text-slate-600 flex items-start gap-1.5">
+                        <span className={`mt-0.5 ${student.severity === 'high' ? 'text-rose-500' : 'text-amber-500'}`}>•</span>
+                        {r}
                       </li>
                     ))}
                   </ul>
+                  {student.phone && (
+                    <a
+                      href={`tel:${student.phone}`}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-[#155EEF] mt-2 transition-colors"
+                    >
+                      <PhoneCall className="w-3.5 h-3.5" />
+                      {student.phone}
+                    </a>
+                  )}
                 </div>
-                <div className="shrink-0 w-full sm:w-auto">
-                  <Link
-                    href="/parents"
-                    onClick={() => setShowEwsModal(false)}
-                    className="w-full sm:w-auto px-4 py-2.5 bg-rose-50 hover:bg-[#155EEF] hover:text-white text-rose-700 font-extrabold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                <div className="shrink-0 w-full sm:w-auto flex flex-col gap-2">
+                  {student.phone && (
+                    <a
+                      href={`tel:${student.phone}`}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-emerald-50 hover:bg-emerald-500 hover:text-white text-emerald-700 font-extrabold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 border border-emerald-200"
+                    >
+                      <PhoneCall className="w-3.5 h-3.5" />
+                      <span>ហៅអាណាព្យាបាល</span>
+                    </a>
+                  )}
+                  <button
+                    onClick={() => { setShowEwsModal(false); setShowStudentRequestModal(true); }}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 font-extrabold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 border border-rose-200"
                   >
-                    <PhoneCall className="w-3.5 h-3.5" />
-                    <span>ចុះហៅអាណាព្យាបាល</span>
-                  </Link>
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>ដាក់ស្នើ / ផ្ទេរ</span>
+                  </button>
                 </div>
               </div>
             ))
           ) : (
             <div className="text-center py-12">
+              <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
               <p className="text-slate-500 font-bold text-sm">
                 មិនមានសិស្សប្រឈមហានិភ័យទេក្នុងខែនេះ។
               </p>
