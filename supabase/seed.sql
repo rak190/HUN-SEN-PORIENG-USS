@@ -6,7 +6,7 @@ DO $$
 DECLARE
     new_user_id UUID := 'a0000000-0000-0000-0000-000000000000';
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'admin@kruai.com' OR id = new_user_id) THEN
+    IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'admin@kruai.app' OR id = new_user_id) THEN
         INSERT INTO auth.users (
             instance_id,
             id,
@@ -24,7 +24,7 @@ BEGIN
             new_user_id,
             'authenticated',
             'authenticated',
-            'admin@kruai.com',
+            'admin@kruai.app',
             crypt('adminpassword123', gen_salt('bf')),
             current_timestamp,
             '{"provider":"email","providers":["email"]}',
