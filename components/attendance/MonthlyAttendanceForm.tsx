@@ -116,6 +116,175 @@ export default function MonthlyAttendanceForm() {
     }
   };
 
+  const handlePrintPDF = () => {
+    if (!activeClass?.id) {
+      alert('សូមជ្រើសរើសថ្នាក់រៀនជាមុនសិន');
+      return;
+    }
+
+    const [yearStr, monthStr] = selectedMonth.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const khmerMonths = ['មករា', 'កុម្ភៈ', 'មីនា', 'មេសា', 'ឧសភា', 'មិថុនា', 'កក្កដា', 'សីហា', 'កញ្ញា', 'តុលា', 'វិច្ឆិកា', 'ធ្នូ'];
+    const monthLabel = khmerMonths[month - 1];
+    
+    // Attempt to parse academic year from string (e.g. "2024-2025") or fallback
+    let academicYear = '2024-2025';
+    if (activeClass.academic_year?.name) {
+      academicYear = activeClass.academic_year.name;
+    } else {
+      academicYear = `${year}-${year + 1}`;
+    }
+    
+    const rowsHtml = students.map((std, idx) => {
+      const summary = formData[std.id] || { absent_count: 0, permission_count: 0, late_count: 0 };
+      const absentTotal = (summary.absent_count || 0);
+      const permissionTotal = (summary.permission_count || 0);
+      const totalAbsences = absentTotal + permissionTotal;
+      
+      let daysHtml = '';
+      for (let i = 1; i <= 31; i++) {
+        if (i > daysInMonth) {
+          daysHtml += `<td style="border: 1px solid #94a3b8; background-color: #f1f5f9;"></td>`;
+        } else {
+          const dateStr = `${yearStr}-${monthStr}-${i.toString().padStart(2, '0')}`;
+          const dayRecord = rawDailyRecords.find(r => r.student_id === std.id && r.date === dateStr);
+          
+          let displayChar = '';
+          let cellColor = '#1e3a8a';
+          if (dayRecord) {
+            if (dayRecord.status === 'permission') { displayChar = 'ច'; }
+            if (dayRecord.status === 'absent') { displayChar = 'អ'; cellColor = '#e11d48'; }
+            // present stays blank
+          }
+          daysHtml += `<td style="border: 1px solid #94a3b8; padding: 2px; text-align: center; font-weight: bold; color: ${cellColor}">${displayChar}</td>`;
+        }
+      }
+
+      return `
+        <tr style="background-color: ${idx % 2 === 1 ? '#f8fafc' : '#ffffff'};">
+          <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; font-weight: bold;">${idx + 1}</td>
+          <td style="border: 1px solid #94a3b8; padding: 4px 2px; font-family: monospace; font-size: 9px; text-align: center;">${std.student_id_number || '-'}</td>
+          <td style="border: 1px solid #94a3b8; padding: 4px 4px; font-weight: bold; text-align: left; color: #0f172a; white-space: nowrap;">${std.full_name}</td>
+          <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center;">${std.gender === 'F' || std.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស'}</td>
+          ${daysHtml}
+          <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; font-weight: bold; color: #1e3a8a;">${permissionTotal || ''}</td>
+          <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; font-weight: bold; color: #e11d48;">${absentTotal || ''}</td>
+          <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: center; font-weight: black; color: #0f172a; background-color: #eff6ff;">${totalAbsences || ''}</td>
+          <td style="border: 1px solid #94a3b8; padding: 4px 2px; text-align: left; font-size: 8px;">${summary.root_cause || ''}</td>
+        </tr>
+      `;
+    }).join('');
+
+    let daysHeaderHtml = '';
+    for (let i = 1; i <= 31; i++) {
+      daysHeaderHtml += `<th style="width: 18px; background-color: #eff6ff; color: #1e3a8a; padding: 4px 2px;">${i}</th>`;
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Attendance_Report_${activeClass.name}_${selectedMonth}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&family=Moul&family=Siemreap&display=swap" rel="stylesheet">
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          * { box-sizing: border-box; }
+          body {
+            font-family: 'Kantumruy Pro', 'Siemreap', sans-serif;
+            font-size: 9.5px; color: #0f172a; margin: 0; padding: 0; background-color: #fff;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .font-muol { font-family: 'Moul', serif; }
+          .header-grid { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
+          .header-left { text-align: center; line-height: 1.5; font-size: 11px; font-family: 'Moul', serif; }
+          .header-right { text-align: center; line-height: 1.5; font-size: 11px; }
+          .main-title { text-align: center; margin: 10px 0 15px; }
+          .main-title h1 { font-family: 'Moul', serif; font-size: 16px; margin: 0 0 5px; color: #1e3a8a; }
+          .main-title p { font-size: 11px; margin: 0; color: #475569; font-weight: 600; }
+          table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+          th { border: 1px solid #94a3b8; padding: 6px 4px; font-weight: 700; text-align: center; color: #1e293b; }
+          .signatures { margin-top: 30px; display: flex; justify-content: space-between; text-align: center; font-size: 11px; page-break-inside: avoid; }
+          .signature-col { width: 250px; }
+          .signature-space { height: 60px; }
+        </style>
+      </head>
+      <body>
+        <div class="header-grid">
+          <div class="header-left">
+            <div>ក្រសួងអប់រំ យុវជន និងកីឡា</div>
+            <div>មន្ទីរអប់រំ យុវជន និងកីឡាខេត្តព្រៃវែង</div>
+            <div>វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</div>
+          </div>
+          <div class="header-right">
+            <div class="font-muol">ព្រះរាជាណាចក្រកម្ពុជា</div>
+            <div class="font-muol" style="font-size: 10px;">ជាតិ សាសនា ព្រះមហាក្សត្រ</div>
+            <div style="letter-spacing: 2px;">***</div>
+          </div>
+        </div>
+
+        <div class="main-title">
+          <h1>បញ្ជីវត្តមានសិស្សប្រចាំខែ ${monthLabel} ឆ្នាំសិក្សា ${academicYear}</h1>
+          <p>កម្រិតថ្នាក់៖ <strong style="color: #1e3a8a;">${activeClass.name}</strong> • គ្រូបន្ទុកថ្នាក់៖ <strong>${user?.full_name || '................................'}</strong></p>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th rowspan="2" style="width: 25px; background-color: #f1f5f9;">ល.រ</th>
+              <th rowspan="2" style="width: 60px; background-color: #f1f5f9;">អត្តលេខ</th>
+              <th rowspan="2" style="min-width: 120px; text-align: left; padding-left: 6px; background-color: #f1f5f9;">គោត្តនាម និងនាម</th>
+              <th rowspan="2" style="width: 35px; background-color: #f1f5f9;">ភេទ</th>
+              <th colspan="31" style="background-color: #eff6ff; color: #1e3a8a;">ថ្ងៃទី ១ ដល់ ៣១</th>
+              <th colspan="3" style="background-color: #dbeafe; color: #1e3a8a; font-weight: 900;">សរុបអវត្តមាន</th>
+              <th rowspan="2" style="width: 50px; background-color: #f1f5f9;">ផ្សេងៗ</th>
+            </tr>
+            <tr>
+              ${daysHeaderHtml}
+              <th style="width: 30px; background-color: #dbeafe; color: #1e3a8a;">ច</th>
+              <th style="width: 30px; background-color: #dbeafe; color: #e11d48;">អ</th>
+              <th style="width: 35px; background-color: #dbeafe; color: #1e3a8a; font-weight: 900;">សរុប</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="signatures">
+          <div class="signature-col">
+            <div class="font-muol">បានឃើញ និងឯកភាព</div>
+            <div style="font-weight: bold; margin-top: 2px;">នាយកសាលា</div>
+            <div class="signature-space"></div>
+          </div>
+          <div class="signature-col">
+            <div style="color: #64748b; font-size: 10px;">ថ្ងៃទី......... ខែ......... ឆ្នាំ២០២...</div>
+            <div class="font-muol" style="margin-top: 2px;">គ្រូបន្ទុកថ្នាក់</div>
+            <div class="signature-space"></div>
+          </div>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank', 'width=1200,height=850');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+    }
+  };
+
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasUnsavedChanges) {
@@ -564,7 +733,7 @@ export default function MonthlyAttendanceForm() {
             <Download className="w-4 h-4" /> {exporting ? 'កំពុងទាញយក...' : 'ទាញយក Excel (Matrix)'}
           </button>
           <button 
-            onClick={() => window.print()}
+            onClick={handlePrintPDF}
             className="flex items-center gap-2 px-4 py-2 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-colors shadow-sm cursor-pointer"
           >
             <Printer className="w-4 h-4" /> បោះពុម្ពបញ្ជីវត្តមាន (A4)
