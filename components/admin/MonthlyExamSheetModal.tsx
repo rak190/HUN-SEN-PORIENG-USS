@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FileSpreadsheet, Download, CheckCircle2, AlertCircle, Loader2, Sparkles, Send, ExternalLink, ShieldCheck } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import Modal from '@/components/ui/Modal';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
-import { generateMonthlyExamWorkbook, EXAM_TABS_CONFIG } from '@/lib/monthly-sheet-generator';
+import { generateMonthlyExamWorkbook, EXAM_TABS_CONFIG, TabConfig } from '@/lib/monthly-sheet-generator';
 
 interface MonthlyExamSheetModalProps {
   isOpen: boolean;
@@ -18,10 +18,65 @@ export function MonthlyExamSheetModal({ isOpen, onClose, selectedPeriod }: Month
   const [academicYear, setAcademicYear] = useState('២០២៥-២០២៦');
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  
+  const [readiness, setReadiness] = useState<Record<string, { total: number, seated: number }>>({});
+  const [loadingReadiness, setLoadingReadiness] = useState(false);
 
   const supabase = createClient();
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (isOpen) {
+      fetchReadiness();
+    }
+  }, [isOpen]);
+
+  const fetchReadiness = async () => {
+    setLoadingReadiness(true);
+    try {
+      const { data: dbClasses } = await supabase.from('classes').select('id, grade, track');
+      const { data: dbEnrollments } = await supabase
+        .from('student_enrollments')
+        .select('class_id, room_number, desk_number')
+        .eq('enrollment_status', 'active');
+      
+      const stats: Record<string, { total: number, seated: number }> = {};
+      EXAM_TABS_CONFIG.forEach(t => {
+        stats[t.sheetName] = { total: 0, seated: 0 };
+      });
+
+      if (dbClasses && dbEnrollments) {
+        dbEnrollments.forEach(e => {
+          const cls = dbClasses.find(c => c.id === e.class_id);
+          if (!cls) return;
+          
+          EXAM_TABS_CONFIG.forEach(t => {
+             const matchGrade = String(cls.grade) === t.grade;
+             if (!matchGrade) return;
+             let matchTrack = true;
+             if (t.track) {
+                const clsTrack = (cls.track || '').toLowerCase();
+                if (t.track === 'science') {
+                   matchTrack = clsTrack.includes('sci') || clsTrack.includes('ពិត');
+                } else if (t.track === 'social') {
+                   matchTrack = clsTrack.includes('soc') || clsTrack.includes('សង្គម');
+                }
+             }
+             if (matchTrack) {
+                stats[t.sheetName].total += 1;
+                if (e.room_number && e.desk_number) {
+                  stats[t.sheetName].seated += 1;
+                }
+             }
+          });
+        });
+      }
+      setReadiness(stats);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingReadiness(false);
+    }
+  };
 
   const currentPeriodObj = ACADEMIC_PERIODS.find(p => p.id === period) || ACADEMIC_PERIODS[0];
 
@@ -39,21 +94,36 @@ export function MonthlyExamSheetModal({ isOpen, onClose, selectedPeriod }: Month
 
       if (classErr) throw classErr;
 
-      // 2. Fetch all active students with class information
-      const { data: dbStudents, error: stdErr } = await supabase
-        .from('students')
-        .select('id, student_id_number, desk_number, room_number, full_name, gender, dob, class_id, classes(id, name, grade, track)')
-        .eq('is_active', true);
+      // 2. Fetch all active students via student_enrollments
+      const { data: dbEnrollments, error: stdErr } = await supabase
+        .from('student_enrollments')
+        .select(`
+          id, class_id, desk_number, room_number,
+          students!inner(id, student_id_number, full_name, gender, date_of_birth)
+        `)
+        .eq('enrollment_status', 'active');
 
       if (stdErr) throw stdErr;
 
-      if (!dbStudents || dbStudents.length === 0) {
+      if (!dbEnrollments || dbEnrollments.length === 0) {
         throw new Error('មិនទាន់មានទិន្នន័យសិស្សក្នុងប្រព័ន្ធសម្រាប់បង្កើត Sheet នៅឡើយទេ។');
       }
 
+      // Map to expected StudentRecord format
+      const mappedStudents = dbEnrollments.map((e: any) => ({
+        id: e.students.id,
+        student_id_number: e.students.student_id_number,
+        desk_number: e.desk_number,
+        room_number: e.room_number,
+        full_name: e.students.full_name,
+        gender: e.students.gender,
+        dob: e.students.date_of_birth,
+        class_id: e.class_id
+      }));
+
       // 3. Generate 8-Tab Exam Workbook
       const wb = generateMonthlyExamWorkbook(
-        dbStudents as any,
+        mappedStudents as any,
         dbClasses || [],
         currentPeriodObj.label,
         academicYear
@@ -135,20 +205,44 @@ export function MonthlyExamSheetModal({ isOpen, onClose, selectedPeriod }: Month
 
         {/* 8-Tab Preview Grid */}
         <div className="space-y-2">
-          <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            រចនាសម្ព័ន្ធ ៨ Tabs ក្នុងឯកសារតែមួយ (Multi-Tab Template Layout):
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              រចនាសម្ព័ន្ធ ៨ Tabs ក្នុងឯកសារតែមួយ (Multi-Tab Template Layout):
+            </label>
+            {loadingReadiness && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {EXAM_TABS_CONFIG.map((t, i) => (
-              <div key={i} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between shadow-2xs">
-                <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Tab {i + 1}</span>
-                  <p className="font-extrabold text-xs text-slate-800">{t.sheetName}</p>
+            {EXAM_TABS_CONFIG.map((t, i) => {
+              const stat = readiness[t.sheetName] || { total: 0, seated: 0 };
+              const isReady = stat.total > 0 && stat.seated === stat.total;
+              const hasMissing = stat.total > 0 && stat.seated < stat.total;
+              
+              return (
+                <div key={i} className={`p-3 border rounded-xl shadow-2xs ${hasMissing ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Tab {i + 1}</span>
+                      <p className={`font-extrabold text-xs ${hasMissing ? 'text-orange-900' : 'text-slate-800'}`}>{t.sheetName}</p>
+                    </div>
+                    {isReady && stat.total > 0 ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    ) : hasMissing ? (
+                      <AlertCircle className="w-4 h-4 text-orange-500" />
+                    ) : (
+                      <span className="w-2 h-2 rounded-full bg-slate-300"></span>
+                    )}
+                  </div>
+                  <div className="mt-2 text-[10px] font-semibold text-slate-600">
+                    {stat.total === 0 ? 'គ្មានសិស្ស' : (
+                      <span className={isReady ? 'text-emerald-700' : 'text-orange-700'}>
+                        មានតុ {stat.seated}/{stat.total}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

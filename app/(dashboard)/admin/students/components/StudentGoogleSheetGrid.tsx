@@ -11,6 +11,8 @@ export interface GridStudent {
   gender: string;
   class_name: string;
   dob: string;
+  room_number: string;
+  desk_number: string;
   isValid: boolean;
   errors: string[];
 }
@@ -50,6 +52,8 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
       gender: '',
       class_name: '',
       dob: '',
+      room_number: '',
+      desk_number: '',
       isValid: false,
       errors: []
     };
@@ -66,7 +70,7 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
     else if (['f', 'female', 'ស្រី', 'ស'].includes(gLower)) normalizedGender = 'ស្រី';
     
     // Check required (Only validate if at least one field is partially filled to avoid red empty rows)
-    const hasData = row.student_id || row.full_name || row.gender || row.class_name || row.dob;
+    const hasData = row.student_id || row.full_name || row.gender || row.class_name || row.dob || row.room_number || row.desk_number;
     
     if (hasData) {
       if (!row.student_id.trim()) errors.push('អត្តលេខមិនអាចទទេ');
@@ -177,7 +181,7 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
     const pasteRows = pasteData.split(/\r?\n/).filter(line => line.trim() !== '');
     
     // Define column order matching the grid
-    const colOrder: (keyof GridStudent)[] = ['no', 'student_id', 'full_name', 'gender', 'class_name', 'dob'];
+    const colOrder: (keyof GridStudent)[] = ['no', 'student_id', 'full_name', 'gender', 'class_name', 'dob', 'room_number', 'desk_number'];
     const startColIndex = colOrder.indexOf(startField);
     
     if (startColIndex === -1) return;
@@ -217,7 +221,7 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
 
   const handleSave = () => {
     // Filter out completely empty rows
-    const dataToSave = rows.filter(r => r.student_id || r.full_name || r.gender || r.class_name || r.dob);
+    const dataToSave = rows.filter(r => r.student_id || r.full_name || r.gender || r.class_name || r.dob || r.room_number || r.desk_number);
     
     if (dataToSave.length === 0) {
       alert('សូមបញ្ចូលទិន្នន័យយ៉ាងហោចណាស់១ជួរ!');
@@ -240,6 +244,8 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
         gender: r.gender,
         class_id: matchedClass?.id,
         dob: r.dob,
+        room_number: r.room_number,
+        desk_number: r.desk_number,
         status: 'new'
       };
     });
@@ -323,12 +329,14 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
               <th className="w-24 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">ភេទ*</th>
               <th className="w-32 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">ថ្នាក់*</th>
               <th className="w-40 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">ថ្ងៃខែឆ្នាំកំណើត</th>
+              <th className="w-24 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">លេខបន្ទប់</th>
+              <th className="w-24 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">លេខតុ</th>
               <th className="w-12 p-2 border border-slate-200 text-center text-xs font-black text-slate-600"></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row, rowIndex) => {
-              const hasData = row.student_id || row.full_name || row.gender || row.class_name || row.dob;
+              const hasData = row.student_id || row.full_name || row.gender || row.class_name || row.dob || row.room_number || row.desk_number;
               const isInvalid = hasData && !row.isValid;
               
               return (
@@ -337,7 +345,7 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
                     {rowIndex + 1}
                   </td>
                   
-                  {['student_id', 'full_name', 'gender', 'class_name', 'dob'].map((field) => {
+                  {['student_id', 'full_name', 'gender', 'class_name', 'dob', 'room_number', 'desk_number'].map((field) => {
                     const typedField = field as keyof GridStudent;
                     let hasErrorForField = false;
                     let errorTooltip = '';

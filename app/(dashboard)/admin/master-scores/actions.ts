@@ -314,3 +314,45 @@ export async function validateMonthlyScoreDataIntegrity(period: string, academic
   }
 }
 
+export async function bulkUpdateStudentSeating(updates: { 
+  enrollmentId: string, 
+  studentId: string,
+  roomNumber: string, 
+  deskNumber: string, 
+  newStudentId?: string 
+}[]) {
+  const supabase = await createClient();
+  const { role } = await getServerAuth();
+
+  if (role !== 'admin' && role !== 'principal') {
+    return { success: false, error: 'Unauthorized: Admin access required' };
+  }
+
+  try {
+    for (const update of updates) {
+      if (update.newStudentId) {
+         // Update missing student_id in students table
+         const { error: studentErr } = await supabase
+           .from('students')
+           .update({ student_id_number: update.newStudentId })
+           .eq('id', update.studentId);
+         if (studentErr) throw studentErr;
+      }
+
+      // Update room_number and desk_number in student_enrollments
+      const { error: enrollErr } = await supabase
+        .from('student_enrollments')
+        .update({ 
+          room_number: update.roomNumber ? String(update.roomNumber) : null, 
+          desk_number: update.deskNumber ? String(update.deskNumber) : null 
+        })
+        .eq('id', update.enrollmentId);
+      if (enrollErr) throw enrollErr;
+    }
+    
+    return { success: true, message: `បានធ្វើបច្ចុប្បន្នភាពកន្លែងអង្គុយចំនួន ${updates.length} សិស្សដោយជោគជ័យ` };
+  } catch (err: any) {
+    console.error('bulkUpdateStudentSeating failed:', err);
+    return { success: false, error: err.message };
+  }
+}

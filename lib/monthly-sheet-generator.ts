@@ -91,18 +91,20 @@ export function generateMonthlyExamWorkbook(
       return true;
     });
 
-    // Sort students by room, class, and desk number or name
+    // Sort students strictly by Room -> Desk -> Class -> Name
     tabStudents.sort((a, b) => {
       const rA = parseInt((a.room_number || '').replace(/\D/g, '') || '0', 10);
       const rB = parseInt((b.room_number || '').replace(/\D/g, '') || '0', 10);
       if (rA && rB && rA !== rB) return rA - rB;
 
+      const dA = parseInt(a.desk_number || '0', 10);
+      const dB = parseInt(b.desk_number || '0', 10);
+      if (dA && dB && dA !== dB) return dA - dB;
+
       const cA = a.classes?.name || '';
       const cB = b.classes?.name || '';
       if (cA !== cB) return cA.localeCompare(cB);
-      const dA = parseInt(a.desk_number || '0', 10);
-      const dB = parseInt(b.desk_number || '0', 10);
-      if (dA && dB) return dA - dB;
+
       return a.full_name.localeCompare(b.full_name, 'km');
     });
 

@@ -22,6 +22,7 @@ import AdminBasicImportModal from '@/components/admin/AdminBasicImportModal';
 import GIEPImportManager from './components/GIEPImportManager';
 import StudentGoogleSheetGrid from './components/StudentGoogleSheetGrid';
 import AdminStudentRequestsQueue from './components/AdminStudentRequestsDrawer';
+import QuickSeatingUpdateModal from '@/components/admin/QuickSeatingUpdateModal';
 import { fetchExportData, getPendingStudentRequests, batchRegisterBasicStudents, bulkArchiveStudents } from './actions';
 
 interface MasterStudentsClientProps {
@@ -71,6 +72,7 @@ export default function MasterStudentsClient({
   const [isBasicImportModalOpen, setIsBasicImportModalOpen] = useState(false);
   const [isGiepImportModalOpen, setIsGiepImportModalOpen] = useState(false);
   const [isPromotionModalOpen, setIsPromotionModalOpen] = useState(false);
+  const [isSeatingModalOpen, setIsSeatingModalOpen] = useState(false);
   
   const [activeTab, setActiveTab] = useState<'list' | 'grid' | 'requests'>('list');
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
@@ -406,6 +408,12 @@ export default function MasterStudentsClient({
                     className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-teal-600 flex items-center gap-2 transition-colors"
                   >
                     <GraduationCap className="w-4 h-4" /> ឡើងថ្នាក់សិស្ស
+                  </button>
+                  <button 
+                    onClick={() => { setIsSeatingModalOpen(true); setClassOpsMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-orange-600 flex items-center gap-2 transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" /> បញ្ចូលកន្លែងអង្គុយរហ័ស
                   </button>
                 </div>
               )}
@@ -915,6 +923,14 @@ export default function MasterStudentsClient({
           }}
         />
       )}
+      
+      <QuickSeatingUpdateModal 
+        isOpen={isSeatingModalOpen}
+        onClose={() => {
+          setIsSeatingModalOpen(false);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }
