@@ -2,185 +2,138 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  FolderOpen, FileText, Upload, Download, FileSpreadsheet, File, Search,
-  Clock, CheckCircle2, Trash2, FileCheck, Eye, ExternalLink, Calendar,
-  MoreVertical, RefreshCw
+  FolderOpen, FileText, Printer, FileSpreadsheet, 
+  BarChart2, Award, Download, Users, FileCheck, CheckSquare,
+  AlertCircle
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
-import { Document } from '@/types';
-import * as XLSX from 'xlsx';
+import { Student, AcademicYear } from '@/types';
+import { getCurriculumSchemaForClass } from '@/lib/curriculum';
+import { computeSummaryGrades } from '@/lib/domain/grading';
 
-const OFFICIAL_TEMPLATES = [
-  { id: 'tpl-1', title: 'ទម្រង់បញ្ជីរាយនាមសិស្ស', type: 'excel', format: '.xlsx', size: '24 KB', date: '01 តុលា 2026', author: 'MoEYS / GEIP' },
-  { id: 'tpl-2', title: 'ទម្រង់ស្រង់វត្តមានប្រចាំខែ', type: 'pdf', format: '.pdf', size: '1.2 MB', date: '01 តុលា 2026', author: 'សាលារៀន' },
-  { id: 'tpl-3', title: 'កិច្ចសន្យាអប់រំសិស្ស', type: 'word', format: '.docx', size: '45 KB', date: '15 កញ្ញា 2026', author: 'នាយកសាលា' },
-  { id: 'tpl-4', title: 'ពាក្យស្នើសុំច្បាប់ឈប់សម្រាក', type: 'pdf', format: '.pdf', size: '500 KB', date: '01 តុលា 2026', author: 'រដ្ឋបាល' },
-  { id: 'tpl-5', title: 'សៀវភៅតាមដានសុខភាព', type: 'excel', format: '.xlsx', size: '88 KB', date: '10 កញ្ញា 2026', author: 'GEIP' },
-];
+// Print Modals
+import { ClassRosterExportModal } from '@/components/documents/ClassRosterExportModal';
+import { ProfilingSummaryExportModal } from '@/components/documents/ProfilingSummaryExportModal';
+import { AttendanceExportModal } from '@/components/documents/AttendanceExportModal';
+import { GeipExportModal } from '@/components/grades/GeipExportModal';
+import { HonorRollExportModal } from '@/components/grades/HonorRollExportModal';
 
-const UPLOADED_FILES = [
-  { id: 'upl-1', title: 'កិច្ចសន្យាសិស្ស_សុខ_សាន្ត.pdf', status: 'approved', uploader: 'អ្នកគ្រូ ម៉ារី', date: '22 តុលា 2026', size: '1.5 MB' },
-  { id: 'upl-2', title: 'របាយការណ៍ប្រជុំមាតាបិតា_ខែ១០.pdf', status: 'pending', uploader: 'អ្នកគ្រូ ម៉ារី', date: '25 តុលា 2026', size: '3.2 MB' },
-];
-
-const EXPORTED_REPORTS = [
-  { id: 'exp-1', title: 'GEIP_Master_Data_Class_10A.xlsx', type: 'excel', date: '26 តុលា 2026, 09:30 AM', generatedBy: 'អ្នកគ្រូ ម៉ារី', rows: 45 },
-  { id: 'exp-2', title: 'Monthly_Attendance_Report_Oct.pdf', type: 'pdf', date: '25 តុលា 2026, 14:15 PM', generatedBy: 'អ្នកគ្រូ ម៉ារី', rows: 45 },
-  { id: 'exp-3', title: 'Student_Report_Cards_Term1.zip', type: 'archive', date: '20 តុលា 2026, 10:00 AM', generatedBy: 'អ្នកគ្រូ ម៉ារី', rows: 45 },
-];
+// Templates
+import { printInternalRegulations, printLeaveRequestSlip, printDisciplinaryForm } from '@/components/documents/SchoolTemplatesPrint';
 
 export default function DocumentsPage() {
-  const { activeClass, profile } = useAuth();
+  const { activeClass, profile, activeAcademicYear } = useAuth();
   const supabase = createClient();
   
-  const [activeTab, setActiveTab] = useState<'templates' | 'uploads' | 'exports'>('templates');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isDragging, setIsDragging] = useState(false);
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'live' | 'templates'>('live');
+  const [loading, setLoading] = useState(false);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [matrixData, setMatrixData] = useState<Record<string, Record<string, number>>>({});
+
+  // Modals state
+  const [isRosterOpen, setIsRosterOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isAttendanceOpen, setIsAttendanceOpen] = useState(false);
+  const [isGeipOpen, setIsGeipOpen] = useState(false);
+  const [isHonorRollOpen, setIsHonorRollOpen] = useState(false);
+
+  // GEIP configuration
+  const activeSchema = getCurriculumSchemaForClass(activeClass?.grade, activeClass?.track);
+  const maxTotalScore = activeSchema.subjects.reduce((sum, sub) => sum + sub.maxScore, 0);
 
   useEffect(() => {
-    if (activeClass?.id) fetchDocuments();
+    if (activeClass?.id) {
+      fetchLiveClassData();
+    }
   }, [activeClass?.id]);
 
-  const fetchDocuments = async () => {
+  const fetchLiveClassData = async () => {
     if (!activeClass) return;
-    const { data, error } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('class_id', activeClass.id)
-      .order('created_at', { ascending: false });
+    setLoading(true);
     
-    if (data) {
-      setDocuments(data as Document[]);
-    }
-  };
+    // Fetch Active Class Roster
+    const { data: rosterData } = await supabase
+      .from('active_class_rosters')
+      .select('*')
+      .eq('enrollment_class_id', activeClass.id);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeClass || !profile) return;
-    setUploading(true);
-    try {
-      const res = await fetch('/api/r2/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: file.name, fileType: file.type || 'application/octet-stream' })
+    // Map to Student type format
+    const formattedStudents: Student[] = (rosterData || []).map(r => ({
+      id: r.id,
+      full_name: r.full_name,
+      student_id_number: r.student_id_number,
+      gender: r.gender,
+      date_of_birth: r.date_of_birth,
+      current_address: r.current_address,
+      guardian_name: r.guardian_name,
+      father_name: r.father_name,
+      mother_name: r.mother_name,
+      guardian_phone: r.guardian_phone,
+      father_phone: r.father_phone,
+      mother_phone: r.mother_phone,
+      id_poor: r.id_poor,
+      poor_id_status: r.poor_id_status,
+      status: r.status,
+      orphan: r.orphan,
+      is_orphan: r.is_orphan,
+      indigenous: r.indigenous,
+      disability: r.disability,
+      is_active: true,
+      is_slow_learner: r.is_slow_learner,
+      class_id: r.enrollment_class_id
+    }));
+
+    setStudents(formattedStudents);
+
+    // Also fetch grades for GEIP master matrix
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const monthKey = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][new Date().getMonth()];
+    
+    const { data: gradesData } = await supabase
+      .from('grades')
+      .select('student_id, period, scores')
+      .eq('class_id', activeClass.id)
+      .eq('period', monthKey)
+      .eq('status', 'published');
+
+    const flatColumns = activeSchema.subjects.flatMap(sub => {
+      const cols = [];
+      if (sub.subMetrics) sub.subMetrics.forEach(metric => cols.push(`${sub.id}_${metric.id}`));
+      cols.push(sub.id);
+      return cols;
+    });
+
+    const newMap: Record<string, Record<string, number>> = {};
+    if (gradesData) {
+      formattedStudents.forEach(s => {
+        newMap[s.id] = computeSummaryGrades(gradesData, s.id, monthKey, flatColumns);
       });
-      const { url, objectKey, error: r2Error } = await res.json();
-      
-      if (r2Error) throw new Error(r2Error);
-
-      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' }});
-
-      let type: Document['type'] = 'other';
-      if (file.name.endsWith('.pdf')) type = 'pdf';
-      else if (file.name.match(/\.(xls|xlsx)$/i)) type = 'excel';
-      else if (file.name.match(/\.(doc|docx)$/i)) type = 'word';
-      else if (file.name.match(/\.(zip|rar)$/i)) type = 'archive';
-      else if (file.name.match(/\.(png|jpg|jpeg)$/i)) type = 'image';
-
-      let size = (file.size / 1024).toFixed(1) + ' KB';
-      if (file.size > 1024 * 1024) size = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
-
-      const { error: dbError } = await supabase.from('documents').insert({
-        class_id: activeClass.id,
-        uploader_id: profile.id,
-        title: file.name,
-        type,
-        file_url: objectKey,
-        size,
-        category: 'upload',
-        status: 'pending'
-      });
-
-      if (dbError) throw dbError;
-      
-      fetchDocuments();
-      alert('ឯកសារបញ្ជូនបានជោគជ័យ!');
-    } catch (err: any) {
-      console.error(err);
-      alert('មានកំហុសក្នុងការបញ្ជូនឯកសារ៖ ' + err.message);
-    } finally {
-      setUploading(false);
     }
+    setMatrixData(newMap);
+    
+    setLoading(false);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('តើអ្នកពិតជាចង់លុបឯកសារនេះមែនទេ?')) return;
-    await supabase.from('documents').delete().eq('id', id);
-    fetchDocuments();
+  const getPeriodLabel = () => {
+    const months = ['មករា', 'កុម្ភៈ', 'មីនា', 'មេសា', 'ឧសភា', 'មិថុនា', 'កក្កដា', 'សីហា', 'កញ្ញា', 'តុលា', 'វិច្ឆិកា', 'ធ្នូ'];
+    return `ខែ${months[new Date().getMonth()]}`;
   };
+  const periodKey = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'][new Date().getMonth()];
 
-  const handleView = async (objectKey: string) => {
-    if (!objectKey) {
-      alert('ឯកសារមិនមាននៅក្នុងប្រព័ន្ធទេ');
-      return;
-    }
-    const res = await fetch(`/api/r2/download?key=${encodeURIComponent(objectKey)}`);
-    const { url } = await res.json();
-    if (url) window.open(url, '_blank');
-  };
-
-  const handleDownloadTemplate = (tpl: typeof OFFICIAL_TEMPLATES[0]) => {
-    try {
-      if (tpl.id === 'tpl-1' || tpl.type === 'excel') {
-        const sampleHeaders = [
-          { 'អត្តលេខ': '2026-001', 'គោត្តនាម_នាម': 'សុខ សាន្ត', 'ភេទ': 'ប្រុស', 'ថ្ងៃខែឆ្នាំកំណើត': '2008-05-12', 'ទូរស័ព្ទអាណាព្យាបាល': '012 345 678', 'ស្ថានភាពក្រីក្រ': 'none' },
-          { 'អត្តលេខ': '2026-002', 'គោត្តនាម_នាម': 'ចាន់ ធារី', 'ភេទ': 'ស្រី', 'ថ្ងៃខែឆ្នាំកំណើត': '2008-08-20', 'ទូរស័ព្ទអាណាព្យាបាល': '098 765 432', 'ស្ថានភាពក្រីក្រ': 'level_1' },
-        ];
-        const ws = XLSX.utils.json_to_sheet(sampleHeaders);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'ទម្រង់សិស្ស');
-        XLSX.writeFile(wb, `${tpl.title}.xlsx`);
-      } else {
-        // Text template download
-        const content = `ព្រះរាជាណាចក្រកម្ពុជា\nជាតិ សាសនា ព្រះមហាក្សត្រ\n\n${tpl.title}\n\nស្ថាប័ន៖ វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង\nកាលបរិច្ឆេទ៖ ${new Date().toLocaleDateString('km-KH')}\n\n(ទម្រង់ផ្លូវការសម្រាប់បំពេញឯកសាររដ្ឋបាលសាលារៀន)`;
-        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${tpl.title}.txt`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert('មានបញ្ហាក្នុងការទាញយកគំរូឯកសារ');
-    }
-  };
-
-  const getIconForType = (type: string, className: string = "w-6 h-6") => {
-    switch (type) {
-      case 'excel': return <FileSpreadsheet className={`${className} text-emerald-600`} />;
-      case 'word': return <FileText className={`${className} text-blue-600`} />;
-      case 'pdf': return <File className={`${className} text-rose-600`} />;
-      case 'archive': return <FolderOpen className={`${className} text-amber-600`} />;
-      default: return <FileText className={`${className} text-slate-500`} />;
-    }
-  };
-
-  const getBgForType = (type: string) => {
-    switch (type) {
-      case 'excel': return 'bg-emerald-50 border-emerald-100';
-      case 'word': return 'bg-blue-50 border-blue-100';
-      case 'pdf': return 'bg-rose-50 border-rose-100';
-      case 'archive': return 'bg-amber-50 border-amber-100';
-      default: return 'bg-slate-50 border-slate-100';
-    }
-  };
+  const isEmpty = students.length === 0;
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
-      {/* Modern Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 flex items-center gap-2.5">
             <FolderOpen className="w-8 h-8 text-[#155EEF]" />
             <span>មជ្ឈមណ្ឌលឯកសារ</span>
           </h1>
           <p className="text-xs font-bold text-[#64748B] mt-1 flex items-center gap-1.5">
-            <span>• ទីតាំងផ្ទុកទម្រង់ឯកសារផ្លូវការ ឯកសារបញ្ជូន និងរបាយការណ៍</span>
+            <span>• ទាញយករបាយការណ៍ និងទម្រង់រដ្ឋបាលផ្លូវការ</span>
           </p>
         </div>
       </div>
@@ -188,212 +141,222 @@ export default function DocumentsPage() {
       {/* Tabs */}
       <div className="flex space-x-2 border-b border-slate-200 pb-px overflow-x-auto">
         <button
+          onClick={() => setActiveTab('live')}
+          className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${activeTab === 'live' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+        >
+          <FileCheck className="w-4 h-4" /> ឯកសារថ្នាក់រៀនផ្ទាល់
+        </button>
+
+        <button
           onClick={() => setActiveTab('templates')}
           className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${activeTab === 'templates' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
-          <FileCheck className="w-4 h-4" /> ទម្រង់ឯកសារផ្លូវការ
-        </button>
-
-        <button
-          onClick={() => setActiveTab('uploads')}
-          className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${activeTab === 'uploads' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-        >
-          <Upload className="w-4 h-4" /> ឯកសារបានបញ្ជូន
-        </button>
-        
-        <button
-          onClick={() => setActiveTab('exports')}
-          className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${activeTab === 'exports' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
-        >
-          <Download className="w-4 h-4" /> របាយការណ៍បានទាញយក
+          <Download className="w-4 h-4" /> ឯកសារគំរូរដ្ឋបាលផ្លូវការ
         </button>
       </div>
 
+      {/* Empty State Guard for Live Documents */}
+      {activeTab === 'live' && isEmpty && !loading && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-8 text-center flex flex-col items-center justify-center">
+          <AlertCircle className="w-12 h-12 text-amber-500 mb-4" />
+          <h3 className="text-lg font-black text-amber-800 mb-2">មិនទាន់មានទិន្នន័យសិស្សសម្រាប់ថ្នាក់នេះទេ</h3>
+          <p className="text-sm font-medium text-amber-700">សូមបញ្ចូលទិន្នន័យសិស្ស និងពិន្ទុជាមុនសិន ទើបអាចទាញយករបាយការណ៍ផ្លូវការបាន។</p>
+        </div>
+      )}
+
       {/* Main Content Area */}
-      <div className="bg-white rounded-[24px] border border-slate-200 shadow-2xs overflow-hidden">
+      <div className="bg-transparent border-0">
         
-        {/* Tab 1: Templates */}
-        {activeTab === 'templates' && (
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-black text-slate-800">ទម្រង់ឯកសារពីក្រសួង និងសាលា</h2>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="ស្វែងរកទម្រង់ឯកសារ..." 
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:border-[#155EEF] outline-none" 
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {OFFICIAL_TEMPLATES.filter(t => t.title.includes(searchQuery)).map(tpl => (
-                <div key={tpl.id} className="group border border-slate-200 rounded-2xl p-5 hover:shadow-lg hover:border-indigo-200 transition-all bg-white relative overflow-hidden">
-                  <div className={`absolute top-0 right-0 w-16 h-16 -mr-8 -mt-8 rounded-full opacity-20 ${getBgForType(tpl.type).split(' ')[0]}`}></div>
-                  
-                  <div className="flex items-start justify-between mb-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${getBgForType(tpl.type)}`}>
-                      {getIconForType(tpl.type)}
-                    </div>
-                    <span className="text-[10px] font-black px-2 py-1 bg-slate-100 text-slate-500 rounded-md uppercase tracking-wider">{tpl.format}</span>
-                  </div>
-                  
-                  <h3 className="font-extrabold text-slate-800 text-sm mb-1 leading-snug line-clamp-2">{tpl.title}</h3>
-                  <p className="text-xs font-bold text-slate-500 mb-4 flex items-center gap-1.5"><Clock className="w-3 h-3" /> ដាក់បញ្ចូល៖ {tpl.date}</p>
-                  
-                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                    <div className="text-xs font-bold text-slate-400">ដោយ៖ <span className="text-slate-600">{tpl.author}</span></div>
-                    <button onClick={() => handleDownloadTemplate(tpl)} className="p-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-lg transition-colors group-hover:scale-105 duration-200 cursor-pointer">
-                      <Download className="w-4 h-4" />
-                    </button>
-                  </div>
+        {/* Tab 1: Live Documents */}
+        {activeTab === 'live' && !isEmpty && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-4">
+                  <Users className="w-6 h-6" />
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: Uploads */}
-        {activeTab === 'uploads' && (
-          <div className="p-6 space-y-6">
-            {/* Upload Zone */}
-            <div 
-              className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all ${isDragging ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-300 hover:border-indigo-400 bg-slate-50/50'}`}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(e) => { e.preventDefault(); setIsDragging(false); }}
-            >
-              <div className="w-16 h-16 bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center mx-auto mb-4">
-                <Upload className="w-8 h-8 text-indigo-500" />
+                <h3 className="font-extrabold text-slate-800 text-base mb-1">បញ្ជីរាយនាមសិស្សផ្លូវការប្រចាំថ្នាក់</h3>
+                <p className="text-xs font-medium text-slate-500 mb-4 leading-relaxed">
+                  របាយការណ៍បញ្ជីរាយនាមសិស្សរួមមានព័ត៌មានផ្ទាល់ខ្លួន ទីលំនៅ និងបណ្ណក្រីក្រ។
+                </p>
               </div>
-              <h3 className="font-black text-slate-800 text-lg mb-1">ទាញទម្លាក់ឯកសារនៅទីនេះ</h3>
-              <p className="text-sm font-bold text-slate-500 mb-6">ឬចុចប៊ូតុងខាងក្រោមដើម្បីជ្រើសរើសឯកសារពីកុំព្យូទ័ររបស់អ្នក (PDF, JPG, PNG, DOCX)</p>
-              <label className={`inline-flex items-center justify-center px-6 py-3 rounded-xl text-white font-black text-sm shadow-md cursor-pointer transition-colors ${uploading ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
-                {uploading ? 'កំពុងបញ្ជូនឯកសារ...' : 'ជ្រើសរើសឯកសារ'}
-                <input type="file" className="hidden" disabled={uploading} onChange={handleFileUpload} />
-              </label>
-            </div>
-
-            {/* Uploaded List */}
-            <div>
-              <h3 className="font-black text-slate-800 text-base mb-4 flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-500" /> ឯកសារដែលបានបញ្ជូនរួច
-              </h3>
-              <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 border-b border-slate-200 font-black text-slate-600">
-                    <tr>
-                      <th className="px-6 py-4">ឈ្មោះឯកសារ</th>
-                      <th className="px-6 py-4">ទំហំ</th>
-                      <th className="px-6 py-4">កាលបរិច្ឆេទបញ្ជូន</th>
-                      <th className="px-6 py-4">ស្ថានភាព</th>
-                      <th className="px-6 py-4 text-right">សកម្មភាព</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
-                    {documents.filter(d => d.category === 'upload').map(file => (
-                      <tr key={file.id} className="hover:bg-slate-50 transition-colors group">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <File className={`w-5 h-5 ${getBgForType(file.type).split(' ')[0].replace('bg-', 'text-')}`} />
-                            <span>{file.title}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-slate-500">{file.size}</td>
-                        <td className="px-6 py-4 text-slate-500">{new Date(file.created_at).toLocaleDateString('en-GB')}</td>
-                        <td className="px-6 py-4">
-                          {file.status === 'approved' ? (
-                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs flex items-center gap-1 w-max">
-                              <CheckCircle2 className="w-3 h-3" /> បានទទួល
-                            </span>
-                          ) : (
-                            <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs flex items-center gap-1 w-max">
-                              <Clock className="w-3 h-3" /> កំពុងពិនិត្យ
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleView(file.file_url)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg cursor-pointer"><Eye className="w-4 h-4" /></button>
-                            <button onClick={() => handleDelete(file.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"><Trash2 className="w-4 h-4" /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {documents.filter(d => d.category === 'upload').length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                          មិនទាន់មានឯកសារបានបញ្ជូននៅឡើយទេ
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 3: Exports */}
-        {activeTab === 'exports' && (
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-black text-slate-800">របាយការណ៍ដែលបានទាញយករួច</h2>
-              <button className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-bold text-xs transition-colors">
-                <RefreshCw className="w-4 h-4" /> ធ្វើបច្ចុប្បន្នភាព
+              <button onClick={() => setIsRosterOpen(true)} className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer">
+                <Printer className="w-4 h-4" /> Export / Print A4
               </button>
             </div>
 
-            <div className="border border-slate-200 rounded-2xl overflow-hidden">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 border-b border-slate-200 font-black text-slate-600">
-                  <tr>
-                    <th className="px-6 py-4">ឈ្មោះរបាយការណ៍</th>
-                    <th className="px-6 py-4">ទាញយកដោយ</th>
-                    <th className="px-6 py-4">កាលបរិច្ឆេទ</th>
-                    <th className="px-6 py-4 text-right">ទាញយកម្ដងទៀត</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
-                  {documents.filter(d => d.category === 'export').map(exp => (
-                    <tr key={exp.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getBgForType(exp.type)}`}>
-                            {getIconForType(exp.type, "w-4 h-4")}
-                          </div>
-                          <div>
-                            <div className="text-slate-800">{exp.title}</div>
-                            <div className="text-[10px] text-slate-400 font-medium mt-0.5">ទំហំ {exp.size}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-500">លោកគ្រូ/អ្នកគ្រូ</td>
-                      <td className="px-6 py-4 text-slate-500 flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {new Date(exp.created_at).toLocaleDateString('en-GB')}</td>
-                      <td className="px-6 py-4 text-right">
-                        <button onClick={() => handleView(exp.file_url)} className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-xl text-xs transition-colors cursor-pointer">
-                          <Download className="w-3.5 h-3.5" /> ទាញយក
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {documents.filter(d => d.category === 'export').length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
-                        មិនទាន់មានរបាយការណ៍ត្រូវបានទាញយកទេ
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4">
+                  <BarChart2 className="w-6 h-6" />
+                </div>
+                <h3 className="font-extrabold text-slate-800 text-base mb-1">របាយការណ៍ស្ថិតិជីវប្រវត្តិសិស្ស</h3>
+                <p className="text-xs font-medium text-slate-500 mb-4 leading-relaxed">
+                  សរុបស្ថិតិសិស្សក្រីក្រ សិស្សកំព្រា ពិការភាព និងសិស្សត្រួតថ្នាក់សម្រាប់ការគ្រប់គ្រង។
+                </p>
+              </div>
+              <button onClick={() => setIsProfileOpen(true)} className="w-full py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer">
+                <Printer className="w-4 h-4" /> Export / Print A4
+              </button>
             </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4">
+                  <CheckSquare className="w-6 h-6" />
+                </div>
+                <h3 className="font-extrabold text-slate-800 text-base mb-1">បញ្ជីវត្តមានសិស្សប្រចាំខែ</h3>
+                <p className="text-xs font-medium text-slate-500 mb-4 leading-relaxed">
+                  បញ្ជីវត្តមានសិស្សប្រចាំខែ (៣១ ថ្ងៃ) ស្រង់ចេញពីទិន្នន័យជាក់ស្ដែងដោយស្វ័យប្រវត្តិ។
+                </p>
+              </div>
+              <button onClick={() => setIsAttendanceOpen(true)} className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-xl flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer">
+                <Printer className="w-4 h-4" /> Export / Print A4
+              </button>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-4">
+                  <FileSpreadsheet className="w-6 h-6" />
+                </div>
+                <h3 className="font-extrabold text-slate-800 text-base mb-1">តារាងលទ្ធផលសិក្សា និងចំណាត់ថ្នាក់</h3>
+                <p className="text-xs font-medium text-slate-500 mb-4 leading-relaxed">
+                  តារាង GEIP ៣.១.៤ (Master Score Sheet) សម្រាប់បូកសរុបលទ្ធផលប្រចាំខែ ឬឆមាស។
+                </p>
+              </div>
+              <button onClick={() => setIsGeipOpen(true)} className="w-full py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-xl flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer">
+                <FileSpreadsheet className="w-4 h-4" /> Export GEIP A4
+              </button>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-4">
+                  <Award className="w-6 h-6" />
+                </div>
+                <h3 className="font-extrabold text-slate-800 text-base mb-1">តារាងកិត្តិយសសិស្សពូកែ</h3>
+                <p className="text-xs font-medium text-slate-500 mb-4 leading-relaxed">
+                  បញ្ជីរាយនាមសិស្សពូកែ Top 5, Top 10 ប្រចាំខែ ឬប្រចាំឆមាស។
+                </p>
+              </div>
+              <button onClick={() => setIsHonorRollOpen(true)} className="w-full py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold rounded-xl flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer">
+                <Award className="w-4 h-4" /> Export Honor Roll
+              </button>
+            </div>
+
+          </div>
+        )}
+
+        {/* Tab 2: Templates */}
+        {activeTab === 'templates' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center mb-4 border border-slate-200">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <h3 className="font-extrabold text-slate-800 text-base mb-1">បទបញ្ជាផ្ទៃក្នុងសាលារៀន</h3>
+                <p className="text-xs font-medium text-slate-500 mb-4 leading-relaxed">
+                  ឯកសារបទបញ្ជាផ្ទៃក្នុង និងវិន័យសម្រាប់សិស្សានុសិស្សទូទៅ។
+                </p>
+              </div>
+              <button onClick={printInternalRegulations} className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer">
+                <Printer className="w-4 h-4" /> Print A4 Template
+              </button>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center mb-4 border border-slate-200">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <h3 className="font-extrabold text-slate-800 text-base mb-1">គំរូលិខិតសុំច្បាប់ឈប់សម្រាក</h3>
+                <p className="text-xs font-medium text-slate-500 mb-4 leading-relaxed">
+                  ទម្រង់ស្នើសុំច្បាប់សម្រាប់មាតាបិតាបំពេញពេលកូនឈប់សម្រាក (កាត់ A5)។
+                </p>
+              </div>
+              <button onClick={printLeaveRequestSlip} className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer">
+                <Printer className="w-4 h-4" /> Print A4 Template
+              </button>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+              <div>
+                <div className="w-12 h-12 bg-slate-100 text-slate-600 rounded-xl flex items-center justify-center mb-4 border border-slate-200">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <h3 className="font-extrabold text-slate-800 text-base mb-1">គំរូកិច្ចសន្យាសិស្សកែលម្អកំហុស</h3>
+                <p className="text-xs font-medium text-slate-500 mb-4 leading-relaxed">
+                  ទម្រង់កិច្ចសន្យាអប់រំសម្រាប់សិស្សប្រព្រឹត្តខុសបទបញ្ជាផ្ទៃក្នុងសាលា។
+                </p>
+              </div>
+              <button onClick={printDisciplinaryForm} className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-sm transition-colors cursor-pointer">
+                <Printer className="w-4 h-4" /> Print A4 Template
+              </button>
+            </div>
+
           </div>
         )}
 
       </div>
+
+      {/* Modals Mounting */}
+      <ClassRosterExportModal
+        isOpen={isRosterOpen}
+        onClose={() => setIsRosterOpen(false)}
+        className={activeClass?.name || ''}
+        classId={activeClass?.id || ''}
+        students={students}
+        teacherName={profile?.full_name || '........................'}
+        academicYear={activeAcademicYear}
+      />
+      
+      <ProfilingSummaryExportModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        className={activeClass?.name || ''}
+        classId={activeClass?.id || ''}
+        students={students}
+        teacherName={profile?.full_name || '........................'}
+        academicYear={activeAcademicYear}
+      />
+
+      <AttendanceExportModal
+        isOpen={isAttendanceOpen}
+        onClose={() => setIsAttendanceOpen(false)}
+        className={activeClass?.name || ''}
+        classId={activeClass?.id || ''}
+        students={students}
+        teacherName={profile?.full_name || '........................'}
+        academicYear={activeAcademicYear}
+      />
+
+      <GeipExportModal
+        isOpen={isGeipOpen}
+        onClose={() => setIsGeipOpen(false)}
+        className={activeClass?.name || ''}
+        periodLabel={getPeriodLabel()}
+        periodKey={periodKey}
+        students={students}
+        matrixData={matrixData}
+        activeSchema={activeSchema}
+        maxTotalScore={maxTotalScore}
+      />
+
+      <HonorRollExportModal
+        isOpen={isHonorRollOpen}
+        onClose={() => setIsHonorRollOpen(false)}
+        className={activeClass?.name || ''}
+        classId={activeClass?.id || ''}
+        students={students}
+        activeSchema={activeSchema}
+        teacherName={profile?.full_name || '........................'}
+        academicYear={activeAcademicYear}
+      />
+
     </div>
   );
 }
