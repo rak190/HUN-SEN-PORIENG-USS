@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search, Mic, ArrowUpRight, Award, Globe, Share2,
   MessageCircle, Mail, CalendarCheck, ClipboardList,
-  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall, FileSpreadsheet, UserPlus
+  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall, FileSpreadsheet, UserPlus,
+  CheckCircle2
 } from 'lucide-react';
 import { ActivityLog, Profile, AtRiskStudent } from '@/types';
 import { createActivityLog, deleteActivityLog } from './actions';
