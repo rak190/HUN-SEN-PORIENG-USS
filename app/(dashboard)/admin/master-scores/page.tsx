@@ -192,13 +192,15 @@ export default function MasterScoresPage() {
 
   const missingClasses = classesStatus.filter(c => c.status === 'missing');
 
+  const [activeTab, setActiveTab] = useState<'scores' | 'logistics' | 'reports'>('scores');
+
   if (loading && classesStatus.length === 0) {
     return <div className="p-12 text-center text-slate-500 font-bold animate-pulse">កំពុងផ្ទុកទិន្នន័យ...</div>;
   }
 
   return (
     <div className="space-y-6 animate-fadeIn select-none p-4 md:p-8 bg-slate-50 min-h-screen">
-      {/* Header & Controls */}
+      {/* Header */}
       <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 flex items-center gap-2">
@@ -210,195 +212,362 @@ export default function MasterScoresPage() {
           </p>
         </div>
         
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-200">
-            <span className="text-xs font-bold text-slate-500 hidden sm:block">ខែ៖</span>
-            <select 
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="appearance-none bg-transparent text-slate-700 py-1 pr-6 focus:outline-none font-bold text-sm cursor-pointer"
-            >
-              {ACADEMIC_PERIODS.map(p => (
-                <option key={p.id} value={p.id}>{p.label}</option>
-              ))}
-            </select>
-          </div>
+        {/* Streamlined Action Bar (Visible only in Scores Tab) */}
+        {activeTab === 'scores' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-200">
+              <span className="text-xs font-bold text-slate-500 hidden sm:block">ខែ៖</span>
+              <select 
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="appearance-none bg-transparent text-slate-700 py-1 pr-6 focus:outline-none font-bold text-sm cursor-pointer"
+              >
+                {ACADEMIC_PERIODS.map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </select>
+            </div>
 
-          <button 
-            onClick={() => setIsMonthlyExamSheetModalOpen(true)}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4" /> បង្កើត Sheet ប្រឡង (៨ Tabs)
-          </button>
-
-          <button 
-            onClick={() => setIsExamRoomPrintModalOpen(true)}
-            className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl text-sm transition-all border border-blue-200 shadow-2xs flex items-center gap-2 cursor-pointer"
-          >
-            <Printer className="w-4 h-4 text-[#155EEF]" /> បោះពុម្ពបិទមុខបន្ទប់ & ស្លាកតុ
-          </button>
-
-          <button 
-            onClick={() => setIsGEIPExportModalOpen(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-indigo-500/20 flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" /> ទាញទិន្នន័យចេញ GEIP
-          </button>
-
-          {(selectedPeriod === 'sem1-summary' || selectedPeriod === 'sem2-summary' || selectedPeriod === 'annual') && (
             <button 
-              onClick={handleCalculateSummary}
-              disabled={isCalculating}
-              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-orange-500/20 flex items-center gap-2 disabled:opacity-50"
+              onClick={() => setIsUploadModalOpen(true)}
+              className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-all border border-slate-200 shadow-sm flex items-center gap-2 cursor-pointer"
             >
-              {isCalculating ? 'កំពុងគណនា...' : 'គណនាពិន្ទុឆមាស/ប្រចាំឆ្នាំ'}
+              <Upload className="w-4 h-4 text-[#155EEF]" /> នាំចូលពិន្ទុ
             </button>
-          )}
-
-          <button 
-            onClick={() => setIsRollbackModalOpen(true)}
-            className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-sm transition-all border border-amber-200 shadow-sm flex items-center gap-2 cursor-pointer"
-          >
-            <RotateCcw className="w-4 h-4 text-amber-600" /> ប្រវត្តិ & ស្តារពិន្ទុ
-          </button>
-
-          <button 
-            onClick={() => setIsUploadModalOpen(true)}
-            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-all border border-slate-200 shadow-sm flex items-center gap-2 cursor-pointer"
-          >
-            <Upload className="w-4 h-4 text-[#155EEF]" /> អាប់ឡូតពិន្ទុ
-          </button>
-          
-          <button 
-            onClick={handlePublishScores}
-            disabled={isPublishing || draftCount === 0}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 disabled:shadow-none cursor-pointer"
-          >
-            <Send className="w-4 h-4" /> {isPublishing ? 'កំពុងបោះពុម្ព...' : 'បោះពុម្ពផ្សាយ'}
-          </button>
-        </div>
+            
+            <button 
+              onClick={handlePublishScores}
+              disabled={isPublishing || draftCount === 0}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-sm transition-all shadow-sm shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 disabled:shadow-none cursor-pointer"
+            >
+              <Send className="w-4 h-4" /> {isPublishing ? 'កំពុងប្រកាស...' : 'ប្រកាសផ្សាយពិន្ទុ'}
+              {draftCount > 0 && (
+                <span className="px-1.5 py-0.5 text-xs bg-blue-800 rounded-full">{draftCount}</span>
+              )}
+            </button>
+          </div>
+        )}
       </header>
 
-      {/* Mini Stats Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-2">
-        <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">
-          <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-black text-white tracking-tight leading-none">{classesStatus.length}</h2>
-            <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all shadow-2xs">
-              <Building2 className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
-            </div>
-          </div>
-          <p className="text-sm font-bold text-blue-100 mt-4">ថ្នាក់សរុប</p>
-        </div>
-
-        <div className="bg-rose-500 rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-rose-400/30">
-          <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-black text-white tracking-tight leading-none">{missingClasses.length}</h2>
-            <div className="w-9 h-9 bg-rose-400 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
-              <AlertCircle className="w-4 h-4 text-rose-50" />
-            </div>
-          </div>
-          <p className="text-sm font-bold text-rose-100 mt-4">មិនទាន់មានពិន្ទុ</p>
-        </div>
-
-        <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
-          <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{draftCount}</h2>
-            <div className="w-9 h-9 bg-yellow-100 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
-              <Clock className="w-4 h-4 text-yellow-900" />
-            </div>
-          </div>
-          <p className="text-sm font-bold text-yellow-950 mt-4">រង់ចាំបោះពុម្ពផ្សាយ</p>
-        </div>
-
-        <div className="bg-emerald-500 rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-emerald-400/30">
-          <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-black text-white tracking-tight leading-none">{publishedClassesCount}</h2>
-            <div className="w-9 h-9 bg-emerald-400 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
-              <CheckCircle2 className="w-4 h-4 text-emerald-50" />
-            </div>
-          </div>
-          <p className="text-sm font-bold text-emerald-100 mt-4">បានបោះពុម្ពផ្សាយរួច</p>
-        </div>
+      {/* Segmented Sub-Tabs */}
+      <div className="bg-slate-100/90 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 inline-flex flex-wrap items-center gap-1.5 mb-6 backdrop-blur-sm">
+        <button
+          onClick={() => setActiveTab('scores')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+            activeTab === 'scores' 
+              ? 'bg-white dark:bg-slate-700 text-[#155EEF] dark:text-blue-400 shadow-sm ring-1 ring-slate-200/50 dark:ring-slate-600/50' 
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4" />
+          តារាងពិន្ទុប្រឡង
+        </button>
+        <button
+          onClick={() => setActiveTab('logistics')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+            activeTab === 'logistics' 
+              ? 'bg-white dark:bg-slate-700 text-[#155EEF] dark:text-blue-400 shadow-sm ring-1 ring-slate-200/50 dark:ring-slate-600/50' 
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <CheckCircle2 className="w-4 h-4" />
+          រៀបចំការប្រឡង & សន្លឹកកិច្ចការ
+        </button>
+        <button
+          onClick={() => setActiveTab('reports')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+            activeTab === 'reports' 
+              ? 'bg-white dark:bg-slate-700 text-[#155EEF] dark:text-blue-400 shadow-sm ring-1 ring-slate-200/50 dark:ring-slate-600/50' 
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
+          }`}
+        >
+          <Filter className="w-4 h-4" />
+          របាយការណ៍ & សវនកម្ម
+        </button>
       </div>
 
-      {/* Live Tracking Table */}
-      <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 overflow-hidden flex flex-col mt-8">
-        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2 mr-4">
-               <Building2 className="w-5 h-5 text-[#155EEF]" />
-               តាមដានស្ថានភាពថ្នាក់ (Live Tracking)
-            </h2>
-            <select 
-              value={filterStatus} 
-              onChange={e => setFilterStatus(e.target.value)}
-              className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#155EEF]/20 shadow-sm cursor-pointer"
+      {/* View Rendering based on activeTab */}
+      {activeTab === 'scores' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Mini Stats Row */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-2">
+            <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">
+              <div className="flex justify-between items-start">
+                <h2 className="text-4xl font-black text-white tracking-tight leading-none">{classesStatus.length}</h2>
+                <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all shadow-2xs">
+                  <Building2 className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
+                </div>
+              </div>
+              <p className="text-sm font-bold text-blue-100 mt-4">ថ្នាក់សរុប</p>
+            </div>
+
+            <div className="bg-rose-500 rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-rose-400/30">
+              <div className="flex justify-between items-start">
+                <h2 className="text-4xl font-black text-white tracking-tight leading-none">{missingClasses.length}</h2>
+                <div className="w-9 h-9 bg-rose-400 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+                  <AlertCircle className="w-4 h-4 text-rose-50" />
+                </div>
+              </div>
+              <p className="text-sm font-bold text-rose-100 mt-4">មិនទាន់មានពិន្ទុ</p>
+            </div>
+
+            <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
+              <div className="flex justify-between items-start">
+                <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{draftCount}</h2>
+                <div className="w-9 h-9 bg-yellow-100 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+                  <Clock className="w-4 h-4 text-yellow-900" />
+                </div>
+              </div>
+              <p className="text-sm font-bold text-yellow-950 mt-4">រង់ចាំបោះពុម្ពផ្សាយ</p>
+            </div>
+
+            <div className="bg-emerald-500 rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-emerald-400/30">
+              <div className="flex justify-between items-start">
+                <h2 className="text-4xl font-black text-white tracking-tight leading-none">{publishedClassesCount}</h2>
+                <div className="w-9 h-9 bg-emerald-400 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-50" />
+                </div>
+              </div>
+              <p className="text-sm font-bold text-emerald-100 mt-4">បានបោះពុម្ពផ្សាយរួច</p>
+            </div>
+          </div>
+
+          {/* Live Tracking Table */}
+          <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 overflow-hidden flex flex-col mt-8">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-extrabold text-slate-800 flex items-center gap-2 mr-4">
+                  <Building2 className="w-5 h-5 text-[#155EEF]" />
+                  តាមដានស្ថានភាពថ្នាក់ (Live Tracking)
+                </h2>
+                <select 
+                  value={filterStatus} 
+                  onChange={e => setFilterStatus(e.target.value)}
+                  className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#155EEF]/20 shadow-sm cursor-pointer"
+                >
+                  <option value="all">គ្រប់ស្ថានភាពទាំងអស់</option>
+                  <option value="published">🟢 បានបោះពុម្ពផ្សាយរួច</option>
+                  <option value="draft">🟡 រង់ចាំបោះពុម្ពផ្សាយ</option>
+                  <option value="missing">🔴 មិនទាន់មានពិន្ទុ</option>
+                </select>
+              </div>
+              <div className="relative w-full sm:w-64 group">
+                <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#155EEF] transition-colors" />
+                <input
+                  type="text"
+                  placeholder="ស្វែងរកឈ្មោះថ្នាក់ ឬ គ្រូ..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-11 pr-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#155EEF]/20 transition-all shadow-sm"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">ថ្នាក់រៀន</th>
+                    <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">គ្រូបន្ទុកថ្នាក់</th>
+                    <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 text-center">ស្ថានភាពពិន្ទុប្រចាំខែ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredClasses.map((c) => (
+                    <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="font-extrabold text-slate-800 text-sm">{c.name}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="font-bold text-slate-600 text-xs">{c.teacher}</span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {c.status === 'published' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-xs font-bold shadow-sm">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> បានបោះពុម្ពផ្សាយ
+                          </span>
+                        )}
+                        {c.status === 'draft' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-full text-xs font-bold shadow-sm">
+                            <Clock className="w-3.5 h-3.5" /> រង់ចាំការបោះពុម្ពផ្សាយ
+                          </span>
+                        )}
+                        {c.status === 'missing' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-100 rounded-full text-xs font-bold shadow-sm">
+                            <AlertCircle className="w-3.5 h-3.5" /> មិនទាន់មានពិន្ទុ
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredClasses.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="p-12 text-center text-slate-500 font-bold">គ្មានទិន្នន័យ</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'logistics' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeIn">
+          {/* Card 1 */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-4 justify-between h-full hover:shadow-md transition-shadow">
+            <div>
+              <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center mb-4">
+                <FileSpreadsheet className="w-6 h-6 text-emerald-600" />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-800">សន្លឹកកិច្ចការប្រឡង (Google Sheet ៨ Tabs)</h3>
+              <p className="text-sm font-medium text-slate-500 mt-2 leading-relaxed">
+                បង្កើត និងភ្ជាប់ Google Sheet ៨ Tabs ទៅកាន់ Google Drive របស់សាលា ដើម្បីឱ្យគ្រូវាយពិន្ទុផ្ទាល់។
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 mb-2">
+              <span className="text-xs font-bold text-slate-500">ជ្រើសរើសខែប្រឡង៖</span>
+              <select 
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="appearance-none bg-transparent text-slate-700 py-1 pr-6 focus:outline-none font-bold text-sm cursor-pointer"
+              >
+                {ACADEMIC_PERIODS.map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+            
+            <button 
+              onClick={() => setIsMonthlyExamSheetModalOpen(true)}
+              className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <option value="all">គ្រប់ស្ថានភាពទាំងអស់</option>
-              <option value="published">🟢 បានបោះពុម្ពផ្សាយរួច</option>
-              <option value="draft">🟡 រង់ចាំបោះពុម្ពផ្សាយ</option>
-              <option value="missing">🔴 មិនទាន់មានពិន្ទុ</option>
-            </select>
+              <FileSpreadsheet className="w-4 h-4" /> បើកផ្ទាំងគ្រប់គ្រង Google Sheet (៨ Tabs)
+            </button>
           </div>
-          <div className="relative w-full sm:w-64 group">
-            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#155EEF] transition-colors" />
-            <input
-              type="text"
-              placeholder="ស្វែងរកឈ្មោះថ្នាក់ ឬ គ្រូ..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-slate-200 rounded-xl py-2.5 pl-11 pr-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#155EEF]/20 transition-all shadow-sm"
-            />
-          </div>
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">ថ្នាក់រៀន</th>
-                <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">គ្រូបន្ទុកថ្នាក់</th>
-                <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 text-center">ស្ថានភាពពិន្ទុប្រចាំខែ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredClasses.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="font-extrabold text-slate-800 text-sm">{c.name}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="font-bold text-slate-600 text-xs">{c.teacher}</span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    {c.status === 'published' && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full text-xs font-bold shadow-sm">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> បានបោះពុម្ពផ្សាយ
-                      </span>
-                    )}
-                    {c.status === 'draft' && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded-full text-xs font-bold shadow-sm">
-                        <Clock className="w-3.5 h-3.5" /> រង់ចាំការបោះពុម្ពផ្សាយ
-                      </span>
-                    )}
-                    {c.status === 'missing' && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-700 border border-rose-100 rounded-full text-xs font-bold shadow-sm">
-                        <AlertCircle className="w-3.5 h-3.5" /> មិនទាន់មានពិន្ទុ
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {filteredClasses.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="p-12 text-center text-slate-500 font-bold">គ្មានទិន្នន័យ</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          {/* Card 2 */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-4 justify-between h-full hover:shadow-md transition-shadow">
+            <div>
+              <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4">
+                <Printer className="w-6 h-6 text-[#155EEF]" />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-800">បន្ទប់ប្រឡង & ស្លាកលេខតុ</h3>
+              <p className="text-sm font-medium text-slate-500 mt-2 leading-relaxed">
+                បោះពុម្ពបញ្ជីបិទតាមទ្វារបន្ទប់ប្រឡង និងស្លាកលេខតុសម្រាប់បិទលើតុកូនសិស្ស។
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 mb-2 opacity-0 select-none pointer-events-none">
+              {/* Invisible spacer to align buttons perfectly with Card 1 */}
+              <span className="text-xs">Spacer</span>
+            </div>
+
+            <button 
+              onClick={() => setIsExamRoomPrintModalOpen(true)}
+              className="w-full px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl text-sm transition-all border border-blue-200 shadow-2xs flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Printer className="w-4 h-4 text-[#155EEF]" /> បោះពុម្ពបន្ទប់ប្រឡង & លេខតុ
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {activeTab === 'reports' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fadeIn">
+          {/* Card 1 */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-4 justify-between hover:shadow-md transition-shadow">
+            <div>
+              <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center mb-4">
+                <Download className="w-6 h-6 text-indigo-600" />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-800">របាយការណ៍ GEIP ៣.១.៤</h3>
+              <p className="text-sm font-medium text-slate-500 mt-2 leading-relaxed">
+                នាំចេញទិន្នន័យសិស្សរៀនយឺត និងតម្រូវការថ្នាក់បំប៉នស្របតាមស្តង់ដារក្រសួង។
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 mb-2 mt-4">
+              <span className="text-xs font-bold text-slate-500">ជ្រើសរើសខែ៖</span>
+              <select 
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="appearance-none bg-transparent text-slate-700 py-1 pr-6 focus:outline-none font-bold text-sm cursor-pointer"
+              >
+                {ACADEMIC_PERIODS.map(p => (
+                  <option key={p.id} value={p.id}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <button 
+              onClick={() => setIsGEIPExportModalOpen(true)}
+              className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-indigo-500/20 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Download className="w-4 h-4" /> នាំចេញទិន្នន័យ GEIP ៣.១.៤
+            </button>
+          </div>
+
+          {/* Card 2 */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-4 justify-between hover:shadow-md transition-shadow">
+            <div>
+              <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center mb-4">
+                <Filter className="w-6 h-6 text-orange-600" />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-800">គណនាពិន្ទុឆមាស និងប្រចាំឆ្នាំ</h3>
+              <p className="text-sm font-medium text-slate-500 mt-2 leading-relaxed">
+                គណនាពិន្ទុឆមាស និងប្រចាំឆ្នាំ ផ្អែកតាមរូបមន្តរបស់ក្រសួង។
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 mb-2 mt-4">
+              <span className="text-xs font-bold text-slate-500">ជ្រើសរើសឆមាស៖</span>
+              <select 
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="appearance-none bg-transparent text-slate-700 py-1 pr-6 focus:outline-none font-bold text-sm cursor-pointer"
+              >
+                <option value="sem1-summary">ឆមាសទី១ (Sem 1)</option>
+                <option value="sem2-summary">ឆមាសទី២ (Sem 2)</option>
+                <option value="annual">ប្រចាំឆ្នាំ (Annual)</option>
+              </select>
+            </div>
+
+            <button 
+              onClick={handleCalculateSummary}
+              disabled={isCalculating || !(selectedPeriod === 'sem1-summary' || selectedPeriod === 'sem2-summary' || selectedPeriod === 'annual')}
+              className="w-full px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm transition-all shadow-sm shadow-orange-500/20 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4" /> {isCalculating ? 'កំពុងគណនា...' : 'គណនាសរុប'}
+            </button>
+          </div>
+
+          {/* Card 3 */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-4 justify-between hover:shadow-md transition-shadow">
+            <div>
+              <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center mb-4">
+                <RotateCcw className="w-6 h-6 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-800">ប្រវត្តិកែប្រែទិន្នន័យ & Rollback</h3>
+              <p className="text-sm font-medium text-slate-500 mt-2 leading-relaxed">
+                ពិនិត្យមើលប្រវត្តិនៃការកែប្រែពិន្ទុ និងទាញយកទិន្នន័យចាស់ត្រឡប់មកវិញក្នុងករណីមានការច្រឡំ។
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 mb-2 mt-4 opacity-0 select-none pointer-events-none">
+              <span className="text-xs">Spacer</span>
+            </div>
+
+            <button 
+              onClick={() => setIsRollbackModalOpen(true)}
+              className="w-full px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-sm transition-all border border-amber-200 shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4 text-amber-600" /> ពិនិត្យប្រវត្តិ & Rollback
+            </button>
+          </div>
+        </div>
+      )}
 
       <MasterScoreUploadModal 
         isOpen={isUploadModalOpen} 
