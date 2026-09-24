@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Award, CheckCircle2, AlertCircle, X, Printer, UserCircle } from 'lucide-react';
+import { Award, CheckCircle2, AlertCircle, X, Printer, UserCircle, FileText } from 'lucide-react';
 import { Student, Profile, AcademicYear } from '@/types';
 import { CurriculumSchema, SubjectSchema } from '@/lib/curriculum';
 import { computeSummaryGrades } from '@/lib/domain/grading';
@@ -181,6 +181,62 @@ export function HonorRollExportModal({
     if (scope === 'semester') return SEMESTERS.find(s => s.key === periodKey)?.label || '';
     if (scope === 'annual') return `ឆ្នាំសិក្សា ${academicYear?.name || '២០២៣-២០២៤'}`;
     return '';
+  };
+
+  const handleExportExcel = async () => {
+    const { 
+      createOfficialMoEYSWorkbook, 
+      applyMoEYSHeaders, 
+      applyStandardTableStyles, 
+      autoAdjustColumnWidths, 
+      addSignatureBlock,
+      downloadExcel
+    } = await import('@/lib/excel/styledExcelGenerator');
+
+    const totalCols = 9; 
+    const periodLabel = getPeriodLabel();
+    const { workbook, worksheet, startRow } = createOfficialMoEYSWorkbook({
+      sheetName: `កិត្តិយស_${periodLabel}`,
+      orientation: 'portrait',
+      documentTitle: 'តារាងកិត្តិយសសិស្សពូកែ',
+      schoolName: 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង'
+    });
+
+    applyMoEYSHeaders(
+      worksheet, 
+      totalCols, 
+      'តារាងកិត្តិយសសិស្សពូកែ',
+      `ថ្នាក់ ${className} | ${periodLabel} | ឆ្នាំសិក្សា ${academicYear?.name || '២០២៣-២០២៤'}`
+    );
+
+    // Headers
+    const headers = ['ចំណាត់ថ្នាក់', 'អត្តលេខ', 'គោត្តនាម និងនាម', 'ភេទ', 'ថ្ងៃខែឆ្នាំកំណើត', 'ពិន្ទុសរុប', 'មធ្យមភាគ', 'កម្រិតតម្លៃ', 'ផ្សេងៗ'];
+    const headerRow = worksheet.getRow(startRow);
+    headers.forEach((h, i) => {
+      headerRow.getCell(i + 1).value = h;
+    });
+
+    // Data
+    rankedStudents.forEach((std, idx) => {
+      const row = worksheet.getRow(startRow + 1 + idx);
+      row.getCell(1).value = std.rank;
+      row.getCell(2).value = std.student_id_number || '-';
+      row.getCell(3).value = std.full_name;
+      row.getCell(4).value = std.gender === 'F' || std.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស';
+      row.getCell(5).value = std.date_of_birth ? new Date(std.date_of_birth).toLocaleDateString('en-GB') : '-';
+      row.getCell(6).value = std.totalScore;
+      row.getCell(7).value = std.average;
+      row.getCell(8).value = std.gradeKh;
+      row.getCell(9).value = std.rank <= 3 ? 'សិស្សឆ្នើម' : std.rank <= 5 ? 'សិស្សពូកែ' : '';
+    });
+
+    applyStandardTableStyles(worksheet, startRow, startRow + 1, rankedStudents.length, totalCols);
+    
+    // Auto widths
+    autoAdjustColumnWidths(worksheet, totalCols, [10, 12, 25, 8, 14, 10, 10, 12, 12]);
+    addSignatureBlock(worksheet, startRow + 1 + rankedStudents.length + 3, totalCols, teacherName);
+
+    await downloadExcel(workbook, `HonorRoll_${className}_${periodLabel}.xlsx`);
   };
 
   const handlePrintPDF = () => {
@@ -445,14 +501,24 @@ export function HonorRollExportModal({
               </h3>
             </div>
           </div>
-          <button
-            onClick={handlePrintPDF}
-            disabled={isLoading || rankedStudents.length === 0}
-            className="w-full md:w-auto px-6 py-3.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-sm rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Printer className="w-4 h-4" />
-            <span>មើលទម្រង់គំរូ & បោះពុម្ព A4</span>
-          </button>
+          <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+            <button
+              onClick={handlePrintPDF}
+              disabled={isLoading || rankedStudents.length === 0}
+              className="px-6 py-3.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-sm rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Printer className="w-4 h-4" />
+              <span>មើលទម្រង់គំរូ & បោះពុម្ព A4</span>
+            </button>
+            <button
+              onClick={handleExportExcel}
+              disabled={isLoading || rankedStudents.length === 0}
+              className="px-6 py-3.5 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-black text-sm rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FileText className="w-4 h-4" />
+              <span>ទាញយកជា Excel</span>
+            </button>
+          </div>
         </div>
         
         {isLoading && (

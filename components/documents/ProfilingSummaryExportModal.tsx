@@ -167,6 +167,70 @@ export function ProfilingSummaryExportModal({
     }
   };
 
+  const handleExportExcel = async () => {
+    const { 
+      createOfficialMoEYSWorkbook, 
+      applyMoEYSHeaders, 
+      applyStandardTableStyles, 
+      autoAdjustColumnWidths, 
+      addSignatureBlock,
+      downloadExcel
+    } = await import('@/lib/excel/styledExcelGenerator');
+
+    const totalCols = 2; // Very simple table
+    const { workbook, worksheet, startRow } = createOfficialMoEYSWorkbook({
+      sheetName: 'ស្ថិតិជីវប្រវត្តិ',
+      orientation: 'portrait',
+      documentTitle: 'របាយការណ៍ស្ថិតិជីវប្រវត្តិសិស្ស',
+      schoolName: 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង'
+    });
+
+    applyMoEYSHeaders(
+      worksheet, 
+      totalCols, 
+      `របាយការណ៍ស្ថិតិជីវប្រវត្តិសិស្សប្រចាំថ្នាក់ ${className}`,
+      `ឆ្នាំសិក្សា ${academicYear?.name || '២០២៣-២០២៤'}`
+    );
+
+    // Some pre-table stats
+    worksheet.mergeCells(startRow, 1, startRow, 2);
+    const statHeader = worksheet.getCell(startRow, 1);
+    statHeader.value = `សិស្សសរុប: ${stats.total} នាក់ | សិស្សស្រីសរុប: ${stats.female} នាក់`;
+    statHeader.font = { name: 'Khmer OS Battambang', size: 11, bold: true };
+    statHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    // Headers
+    const tableStart = startRow + 2;
+    worksheet.mergeCells(tableStart, 1, tableStart, 2);
+    const tableTitle = worksheet.getCell(tableStart, 1);
+    tableTitle.value = 'ការបែងចែកចំណាត់ថ្នាក់សិស្ស (Student Profiling Categories)';
+    tableTitle.font = { name: 'Khmer OS Battambang', size: 10, bold: true };
+    tableTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    tableTitle.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+    tableTitle.alignment = { horizontal: 'left', vertical: 'middle' };
+
+    const dataRows = [
+      ['សិស្សមានបណ្ណក្រីក្រកម្រិត ១ (Poor ID 1)', stats.poor1],
+      ['សិស្សមានបណ្ណក្រីក្រកម្រិត ២ (Poor ID 2)', stats.poor2],
+      ['សិស្សត្រួតថ្នាក់ (Repeater)', stats.repeater],
+      ['សិស្សកំព្រា (Orphan / Vulnerable)', stats.orphan],
+      ['សិស្សជនជាតិដើមភាគតិច (Indigenous)', stats.indigenous],
+      ['សិស្សមានពិការភាព (Disability / Special Needs)', stats.disability],
+    ];
+
+    dataRows.forEach((row, idx) => {
+      const r = worksheet.getRow(tableStart + 1 + idx);
+      r.getCell(1).value = row[0];
+      r.getCell(2).value = `${row[1]} នាក់`;
+    });
+
+    applyStandardTableStyles(worksheet, tableStart, tableStart + 1, dataRows.length, totalCols);
+    autoAdjustColumnWidths(worksheet, totalCols, [60, 20]);
+    addSignatureBlock(worksheet, tableStart + 1 + dataRows.length + 3, totalCols, teacherName);
+
+    await downloadExcel(workbook, `ProfilingSummary_${className}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -180,9 +244,14 @@ export function ProfilingSummaryExportModal({
         <p className="text-sm text-slate-600 mb-6">
           របាយការណ៍នេះបង្ហាញពីស្ថិតិសរុបនៃស្ថានភាពជីវភាព សុខភាព និងការសិក្សារបស់សិស្សក្នុងថ្នាក់របស់អ្នក។
         </p>
-        <button onClick={handlePrintPDF} className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer">
-          <Printer className="w-4 h-4" /> មើលទម្រង់គំរូ & បោះពុម្ព A4
-        </button>
+        <div className="flex gap-4">
+          <button onClick={handlePrintPDF} className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer">
+            <Printer className="w-4 h-4" /> មើលទម្រង់គំរូ & បោះពុម្ព A4
+          </button>
+          <button onClick={handleExportExcel} className="flex-1 py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer">
+            <FileText className="w-4 h-4" /> ទាញយកជា Excel
+          </button>
+        </div>
       </div>
     </Modal>
   );

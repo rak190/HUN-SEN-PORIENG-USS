@@ -27,24 +27,61 @@ export function ClassRosterExportModal({
 }: ClassRosterExportModalProps) {
   if (!isOpen) return null;
 
-  const handleExportExcel = () => {
-    const formattedStudents = students.map((std, idx) => ({
-      'ល.រ': idx + 1,
-      'អត្តលេខ': std.student_id_number || '-',
-      'គោត្តនាម និងនាម': std.full_name,
-      'ភេទ': std.gender === 'F' || std.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស',
-      'ថ្ងៃខែឆ្នាំកំណើត': std.date_of_birth ? new Date(std.date_of_birth).toLocaleDateString('en-GB') : '-',
-      'ទីកន្លែងកំណើត / អាស័យដ្ឋានបច្ចុប្បន្ន': std.current_address || '-',
-      'ឈ្មោះអាណាព្យាបាល': std.guardian_name || std.father_name || std.mother_name || '-',
-      'លេខទូរស័ព្ទ': std.guardian_phone || std.father_phone || std.mother_phone || '-',
-      'បណ្ណក្រីក្រ': std.id_poor === 'level_1' ? 'កម្រិត ១' : std.id_poor === 'level_2' ? 'កម្រិត ២' : '-',
-      'ផ្សេងៗ': std.status === 'repeater' ? 'ត្រួតថ្នាក់' : std.status === 'transfer' ? 'ផ្ទេរចូល' : ''
-    }));
+  const handleExportExcel = async () => {
+    const { 
+      createOfficialMoEYSWorkbook, 
+      applyMoEYSHeaders, 
+      applyStandardTableStyles, 
+      autoAdjustColumnWidths, 
+      addSignatureBlock,
+      downloadExcel
+    } = await import('@/lib/excel/styledExcelGenerator');
 
-    const ws = XLSX.utils.json_to_sheet(formattedStudents);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `បញ្ជីរាយនាមសិស្សថ្នាក់_${className}`);
-    XLSX.writeFile(wb, `ClassRoster_${className}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    const totalCols = 10;
+    const { workbook, worksheet, startRow } = createOfficialMoEYSWorkbook({
+      sheetName: 'បញ្ជីរាយនាមសិស្ស',
+      orientation: 'portrait',
+      documentTitle: 'បញ្ជីរាយនាមសិស្សផ្លូវការ',
+      schoolName: 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង'
+    });
+
+    applyMoEYSHeaders(
+      worksheet, 
+      totalCols, 
+      `បញ្ជីរាយនាមសិស្សផ្លូវការប្រចាំថ្នាក់ ${className}`,
+      `ឆ្នាំសិក្សា ${academicYear?.name || '២០២៣-២០២៤'}`
+    );
+
+    // Headers
+    const headers = ['ល.រ', 'អត្តលេខ', 'គោត្តនាម និងនាម', 'ភេទ', 'ថ្ងៃខែឆ្នាំកំណើត', 'ទីកន្លែងកំណើត / អាស័យដ្ឋានបច្ចុប្បន្ន', 'ឈ្មោះអាណាព្យាបាល', 'លេខទូរស័ព្ទ', 'បណ្ណក្រីក្រ', 'ផ្សេងៗ'];
+    const headerRow = worksheet.getRow(startRow);
+    headers.forEach((h, i) => {
+      headerRow.getCell(i + 1).value = h;
+    });
+
+    // Data
+    students.forEach((std, idx) => {
+      const row = worksheet.getRow(startRow + 1 + idx);
+      row.getCell(1).value = idx + 1;
+      row.getCell(2).value = std.student_id_number || '-';
+      row.getCell(3).value = std.full_name;
+      row.getCell(4).value = std.gender === 'F' || std.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស';
+      row.getCell(5).value = std.date_of_birth ? new Date(std.date_of_birth).toLocaleDateString('en-GB') : '-';
+      row.getCell(6).value = std.current_address || '-';
+      row.getCell(7).value = std.guardian_name || std.father_name || std.mother_name || '-';
+      row.getCell(8).value = std.guardian_phone || std.father_phone || std.mother_phone || '-';
+      row.getCell(9).value = std.id_poor === 'level_1' ? 'កម្រិត ១' : std.id_poor === 'level_2' ? 'កម្រិត ២' : '-';
+      row.getCell(10).value = std.status === 'repeater' ? 'ត្រួតថ្នាក់' : std.status === 'transfer' ? 'ផ្ទេរចូល' : '';
+    });
+
+    applyStandardTableStyles(worksheet, startRow, startRow + 1, students.length, totalCols);
+    
+    // Auto widths with minimums for specific columns
+    autoAdjustColumnWidths(worksheet, totalCols, [6, 12, 22, 6, 14, 25, 20, 12, 10, 10]);
+
+    addSignatureBlock(worksheet, startRow + 1 + students.length + 2, totalCols, teacherName);
+
+    await downloadExcel(workbook, `ClassRoster_${className}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   const handlePrintPDF = () => {

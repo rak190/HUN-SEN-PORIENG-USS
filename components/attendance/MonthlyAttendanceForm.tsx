@@ -70,44 +70,117 @@ export default function MonthlyAttendanceForm() {
         return;
       }
 
-      // Build rows for the monthly grid
-      const rows = students.map((s, idx) => {
-        const row: any = {
-          'ល.រ': idx + 1,
-          'អត្តលេខ': s.student_id_number || 'N/A',
-          'ឈ្មោះសិស្ស': s.full_name || 'N/A',
-          'ភេទ': s.gender === 'F' || s.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស',
-        };
+      const { 
+        createOfficialMoEYSWorkbook, 
+        applyMoEYSHeaders, 
+        applyStandardTableStyles, 
+        autoAdjustColumnWidths, 
+        addSignatureBlock,
+        downloadExcel
+      } = await import('@/lib/excel/styledExcelGenerator');
 
-        // Add 31 days columns
+      const totalCols = 4 + 31 + 3; // base(4) + days(31) + totals(3)
+      const { workbook, worksheet, startRow } = createOfficialMoEYSWorkbook({
+        sheetName: `វត្តមាន_${selectedMonth}`,
+        orientation: 'landscape',
+        documentTitle: 'បញ្ជីវត្តមានសិស្សប្រចាំខែ',
+        schoolName: 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង'
+      });
+
+      const currentYearStr = selectedMonth.slice(0, 4);
+      const currentMonthNum = selectedMonth.slice(5, 7);
+      const monthObj = [
+        { value: '01', label: 'មករា' }, { value: '02', label: 'កុម្ភៈ' }, { value: '03', label: 'មីនា' }, { value: '04', label: 'មេសា' },
+        { value: '05', label: 'ឧសភា' }, { value: '06', label: 'មិថុនា' }, { value: '07', label: 'កក្កដា' }, { value: '08', label: 'សីហា' },
+        { value: '09', label: 'កញ្ញា' }, { value: '10', label: 'តុលា' }, { value: '11', label: 'វិច្ឆិកា' }, { value: '12', label: 'ធ្នូ' }
+      ].find(m => m.value === currentMonthNum);
+      
+      const monthLabel = monthObj ? `ខែ${monthObj.label} ឆ្នាំ${currentYearStr}` : selectedMonth;
+      const ac = activeClass as any;
+      const teacherName = ac.homeroom_teacher?.full_name || '.....................................';
+
+      applyMoEYSHeaders(
+        worksheet, 
+        totalCols, 
+        'បញ្ជីវត្តមានសិស្សប្រចាំខែ',
+        `ថ្នាក់ ${activeClass.name} | ${monthLabel} | គ្រូបន្ទុកថ្នាក់៖ ${teacherName}`
+      );
+
+      // Headers Row 1
+      const headerRow1 = worksheet.getRow(startRow);
+      const headerRow2 = worksheet.getRow(startRow + 1);
+
+      worksheet.mergeCells(startRow, 1, startRow + 1, 1);
+      headerRow1.getCell(1).value = 'ល.រ';
+      worksheet.mergeCells(startRow, 2, startRow + 1, 2);
+      headerRow1.getCell(2).value = 'អត្តលេខ';
+      worksheet.mergeCells(startRow, 3, startRow + 1, 3);
+      headerRow1.getCell(3).value = 'គោត្តនាម និងនាម';
+      worksheet.mergeCells(startRow, 4, startRow + 1, 4);
+      headerRow1.getCell(4).value = 'ភេទ';
+
+      worksheet.mergeCells(startRow, 5, startRow, 5 + 30);
+      headerRow1.getCell(5).value = 'ថ្ងៃទីក្នុងខែ';
+      for (let day = 1; day <= 31; day++) {
+        headerRow2.getCell(4 + day).value = day;
+      }
+
+      worksheet.mergeCells(startRow, 36, startRow, 38);
+      headerRow1.getCell(36).value = 'សរុបអវត្តមាន';
+      headerRow2.getCell(36).value = 'ច្បាប់';
+      headerRow2.getCell(37).value = 'អត់ច្បាប់';
+      headerRow2.getCell(38).value = 'សរុបរួម';
+
+      applyStandardTableStyles(worksheet, startRow, startRow + 2, 0, totalCols);
+      applyStandardTableStyles(worksheet, startRow + 1, startRow + 2, 0, totalCols);
+
+      students.forEach((s, idx) => {
+        const row = worksheet.getRow(startRow + 2 + idx);
+        row.getCell(1).value = idx + 1;
+        row.getCell(2).value = s.student_id_number || '-';
+        row.getCell(3).value = s.full_name;
+        row.getCell(4).value = s.gender === 'F' || s.gender === 'ស្រី' ? 'ស' : 'ប';
+
+        let absentCount = formData[s.id]?.absent_count || 0;
+        let permCount = formData[s.id]?.permission_count || 0;
+
         for (let day = 1; day <= 31; day++) {
           const dayStr = day.toString().padStart(2, '0');
           const fullDate = `${selectedMonth}-${dayStr}`;
-          
-          // Find if this student has a record for this date
           const record = rawDailyRecords.find(r => r.student_id === s.id && r.date === fullDate);
           
-          let displayChar = '';
+          const cell = row.getCell(4 + day);
           if (record) {
-            if (record.status === 'absent') displayChar = 'អ';
-            else if (record.status === 'permission') displayChar = 'ច';
-            else if (record.status === 'late') displayChar = 'យ';
-            else if (record.status === 'present') displayChar = 'វ';
+            if (record.status === 'absent' || record.status === 'A') {
+              cell.value = 'អ';
+              cell.font = { name: 'Khmer OS Battambang', size: 10, color: { argb: 'FFDC2626' } };
+            } else if (record.status === 'permission' || record.status === 'P') {
+              cell.value = 'ច';
+              cell.font = { name: 'Khmer OS Battambang', size: 10, color: { argb: 'FFD97706' } };
+            } else if (record.status === 'late' || record.status === 'L') {
+              cell.value = 'យ';
+            } else if (record.status === 'present') {
+              cell.value = 'វ';
+              cell.font = { name: 'Khmer OS Battambang', size: 10, color: { argb: 'FF16A34A' } };
+            }
           }
-          row[`ថ្ងៃទី ${dayStr}`] = displayChar;
         }
 
-        row['សរុបអវត្តមាន'] = formData[s.id]?.absent_count || 0;
-        row['សរុបច្បាប់'] = formData[s.id]?.permission_count || 0;
-        row['សរុបយឺត'] = formData[s.id]?.late_count || 0;
-
-        return row;
+        row.getCell(36).value = permCount > 0 ? permCount : '';
+        row.getCell(37).value = absentCount > 0 ? absentCount : '';
+        row.getCell(38).value = permCount + absentCount > 0 ? permCount + absentCount : '';
       });
 
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'បញ្ជីវត្តមាន');
-      XLSX.writeFile(wb, `បញ្ជីវត្តមាន_ខែ_${selectedMonth}_ថ្នាក់_${activeClass.name || 'N_A'}.xlsx`);
+      applyStandardTableStyles(worksheet, startRow, startRow + 2, students.length, totalCols);
+      
+      const minWidths = [6, 12, 22, 6];
+      for (let i = 0; i < 31; i++) minWidths.push(4); 
+      minWidths.push(8, 8, 8);
+      autoAdjustColumnWidths(worksheet, totalCols, minWidths);
+
+      addSignatureBlock(worksheet, startRow + 2 + students.length + 3, totalCols, teacherName);
+
+      await downloadExcel(workbook, `Attendance_${activeClass.name}_${selectedMonth}.xlsx`);
     } catch (err: any) {
       console.error('Error exporting attendance:', err);
       alert(`មានបញ្ហាក្នុងការទាញយក Excel: ${err?.message || 'Error'}`);

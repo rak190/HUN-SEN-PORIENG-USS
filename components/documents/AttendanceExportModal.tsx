@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CalendarCheck, Printer } from 'lucide-react';
+import { CalendarCheck, Printer, FileText } from 'lucide-react';
 import { Student, AcademicYear } from '@/types';
 import Modal from '@/components/ui/Modal';
 import { createClient } from '@/lib/supabase/client';
@@ -234,6 +234,118 @@ export function AttendanceExportModal({
     }
   };
 
+  const handleExportExcel = async () => {
+    const { 
+      createOfficialMoEYSWorkbook, 
+      applyMoEYSHeaders, 
+      applyStandardTableStyles, 
+      autoAdjustColumnWidths, 
+      addSignatureBlock,
+      downloadExcel
+    } = await import('@/lib/excel/styledExcelGenerator');
+
+    const totalCols = 4 + 31 + 3; // base(4) + days(31) + totals(3)
+    const { workbook, worksheet, startRow } = createOfficialMoEYSWorkbook({
+      sheetName: `វត្តមាន_${selectedMonth}`,
+      orientation: 'landscape',
+      documentTitle: 'បញ្ជីវត្តមានសិស្សប្រចាំខែ',
+      schoolName: 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង'
+    });
+
+    const currentYearStr = selectedMonth.slice(0, 4);
+    const currentMonthNum = selectedMonth.slice(5, 7);
+    const monthObj = MONTHS.find(m => m.value === currentMonthNum);
+    const monthLabel = monthObj ? `ខែ${monthObj.label} ឆ្នាំ${currentYearStr}` : selectedMonth;
+
+    applyMoEYSHeaders(
+      worksheet, 
+      totalCols, 
+      'បញ្ជីវត្តមានសិស្សប្រចាំខែ',
+      `ថ្នាក់ ${className} | ${monthLabel} | គ្រូបន្ទុកថ្នាក់៖ ${teacherName}`
+    );
+
+    // Headers Row 1
+    const headerRow1 = worksheet.getRow(startRow);
+    const headerRow2 = worksheet.getRow(startRow + 1);
+
+    worksheet.mergeCells(startRow, 1, startRow + 1, 1);
+    headerRow1.getCell(1).value = 'ល.រ';
+    worksheet.mergeCells(startRow, 2, startRow + 1, 2);
+    headerRow1.getCell(2).value = 'អត្តលេខ';
+    worksheet.mergeCells(startRow, 3, startRow + 1, 3);
+    headerRow1.getCell(3).value = 'គោត្តនាម និងនាម';
+    worksheet.mergeCells(startRow, 4, startRow + 1, 4);
+    headerRow1.getCell(4).value = 'ភេទ';
+
+    worksheet.mergeCells(startRow, 5, startRow, 5 + 30);
+    headerRow1.getCell(5).value = 'ថ្ងៃទីក្នុងខែ';
+    for (let day = 1; day <= 31; day++) {
+      headerRow2.getCell(4 + day).value = day;
+    }
+
+    worksheet.mergeCells(startRow, 36, startRow, 38);
+    headerRow1.getCell(36).value = 'សរុបអវត្តមាន';
+    headerRow2.getCell(36).value = 'ច្បាប់';
+    headerRow2.getCell(37).value = 'អត់ច្បាប់';
+    headerRow2.getCell(38).value = 'សរុបរួម';
+
+    // Apply styles to headers
+    applyStandardTableStyles(worksheet, startRow, startRow + 2, 0, totalCols);
+    applyStandardTableStyles(worksheet, startRow + 1, startRow + 2, 0, totalCols);
+
+    // Data
+    students.forEach((std, idx) => {
+      const row = worksheet.getRow(startRow + 2 + idx);
+      row.getCell(1).value = idx + 1;
+      row.getCell(2).value = std.student_id_number || '-';
+      row.getCell(3).value = std.full_name;
+      row.getCell(4).value = std.gender === 'F' || std.gender === 'ស្រី' ? 'ស' : 'ប';
+
+      let absentCount = 0;
+      let permCount = 0;
+
+      for (let day = 1; day <= 31; day++) {
+        const dayStr = day.toString().padStart(2, '0');
+        const fullDate = `${selectedMonth}-${dayStr}`;
+        const record = dailyRecords.find(r => r.student_id === std.id && r.date === fullDate);
+        
+        const cell = row.getCell(4 + day);
+        if (record) {
+          if (record.status === 'absent' || record.status === 'A') {
+            cell.value = 'អ';
+            cell.font = { name: 'Khmer OS Battambang', size: 10, color: { argb: 'FFDC2626' } }; // Red
+            absentCount++;
+          } else if (record.status === 'permission' || record.status === 'P') {
+            cell.value = 'ច';
+            cell.font = { name: 'Khmer OS Battambang', size: 10, color: { argb: 'FFD97706' } }; // Orange/Yellow
+            permCount++;
+          } else if (record.status === 'late' || record.status === 'L') {
+            cell.value = 'យ';
+          } else if (record.status === 'present') {
+            cell.value = 'វ';
+            cell.font = { name: 'Khmer OS Battambang', size: 10, color: { argb: 'FF16A34A' } }; // Green
+          }
+        }
+      }
+
+      row.getCell(36).value = permCount > 0 ? permCount : '';
+      row.getCell(37).value = absentCount > 0 ? absentCount : '';
+      row.getCell(38).value = permCount + absentCount > 0 ? permCount + absentCount : '';
+    });
+
+    applyStandardTableStyles(worksheet, startRow, startRow + 2, students.length, totalCols);
+    
+    // Auto widths with minimums for specific columns
+    const minWidths = [6, 12, 22, 6];
+    for (let i = 0; i < 31; i++) minWidths.push(4); // Days
+    minWidths.push(8, 8, 8); // Totals
+    autoAdjustColumnWidths(worksheet, totalCols, minWidths);
+
+    addSignatureBlock(worksheet, startRow + 2 + students.length + 3, totalCols, teacherName);
+
+    await downloadExcel(workbook, `Attendance_${className}_${selectedMonth}.xlsx`);
+  };
+
   // Generate Year-Month options
   const monthOptions = [];
   const startMonth = 10; // Let's say November is start for Cambodia
@@ -281,17 +393,31 @@ export function AttendanceExportModal({
           </div>
         </div>
 
-        <button 
-          onClick={handlePrintPDF} 
-          disabled={loading}
-          className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-        >
-          {loading ? 'កំពុងទាញយកទិន្នន័យ...' : (
-            <>
-              <Printer className="w-4 h-4" /> មើលទម្រង់គំរូ & បោះពុម្ព A4
-            </>
-          )}
-        </button>
+        <div className="flex gap-4">
+          <button 
+            onClick={handlePrintPDF} 
+            disabled={loading}
+            className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+          >
+            {loading ? 'កំពុងទាញយកទិន្នន័យ...' : (
+              <>
+                <Printer className="w-4 h-4" /> មើលទម្រង់គំរូ & បោះពុម្ព A4
+              </>
+            )}
+          </button>
+          
+          <button 
+            onClick={handleExportExcel} 
+            disabled={loading}
+            className="flex-1 py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-xl font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+          >
+            {loading ? '...' : (
+              <>
+                <FileText className="w-4 h-4" /> ទាញយកជា Excel
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </Modal>
   );

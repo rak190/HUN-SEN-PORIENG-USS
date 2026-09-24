@@ -24,59 +24,43 @@ export async function exportGeipAssessmentToExcel({
   activeSchema,
   maxTotalScore,
 }: GeipExportParams) {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'KruAI - School Management System';
-  workbook.created = new Date();
-
-  const sheetName = `GEIP_${periodKey}`.substring(0, 31);
-  const worksheet = workbook.addWorksheet(sheetName, {
-    views: [{ showGridLines: true }],
-    pageSetup: {
-      orientation: 'landscape',
-      paperSize: 9, // A4
-      fitToPage: true,
-      fitToWidth: 1,
-      fitToHeight: 0,
-    }
-  });
+  const { 
+    createOfficialMoEYSWorkbook, 
+    applyMoEYSHeaders, 
+    applyStandardTableStyles, 
+    autoAdjustColumnWidths, 
+    addSignatureBlock,
+    downloadExcel
+  } = await import('@/lib/excel/styledExcelGenerator');
 
   const subjects: SubjectSchema[] = activeSchema.subjects;
   const totalSubjectCols = subjects.length;
   const totalCols = 5 + totalSubjectCols + 4; // Info (5) + Subjects + Total + Avg + Rank + Grade
 
-  // 1. Title & Ministry Header
-  worksheet.mergeCells(1, 1, 1, totalCols);
-  const title1 = worksheet.getCell(1, 1);
-  title1.value = 'ព្រះរាជាណាចក្រកម្ពុជា  ជាតិ សាសនា ព្រះមហាក្សត្រ';
-  title1.font = { name: 'Khmer OS Muol Light', size: 12, bold: true };
-  title1.alignment = { horizontal: 'center', vertical: 'middle' };
+  const { workbook, worksheet, startRow: defaultStartRow } = createOfficialMoEYSWorkbook({
+    sheetName: `GEIP_${periodKey}`,
+    orientation: 'landscape',
+    documentTitle: `តារាងលទ្ធផលតេស្តស្តង់ដា និងការវាយតម្លៃ GEIP ៣.១.៤ (${periodLabel})`,
+    schoolName
+  });
 
-  worksheet.mergeCells(2, 1, 2, Math.min(6, totalCols));
-  const title2 = worksheet.getCell(2, 1);
-  title2.value = `ក្រសួងអប់រំ យុវជន និងកីឡា - គម្រោង GEIP (IDA.No.7024-KH)`;
-  title2.font = { name: 'Khmer OS Siemreap', size: 10, bold: true, color: { argb: 'FF1E3A8A' } };
-
-  worksheet.mergeCells(3, 1, 3, Math.min(6, totalCols));
-  const title3 = worksheet.getCell(3, 1);
-  title3.value = `គ្រឹះស្ថានសិក្សា៖ ${schoolName} | ថ្នាក់៖ ${className}`;
-  title3.font = { name: 'Khmer OS Siemreap', size: 10, bold: true };
-
-  worksheet.mergeCells(4, 1, 4, totalCols);
-  const title4 = worksheet.getCell(4, 1);
-  title4.value = `តារាងលទ្ធផលតេស្តស្តង់ដា និងការវាយតម្លៃ GEIP ៣.១.៤ (${periodLabel})`;
-  title4.font = { name: 'Khmer OS Muol Light', size: 13, bold: true, color: { argb: 'FF155EEF' } };
-  title4.alignment = { horizontal: 'center', vertical: 'middle' };
+  applyMoEYSHeaders(
+    worksheet, 
+    totalCols, 
+    `តារាងលទ្ធផលតេស្តស្តង់ដា និងការវាយតម្លៃ GEIP ៣.១.៤ (${periodLabel})`,
+    `ក្រសួងអប់រំ យុវជន និងកីឡា - គម្រោង GEIP (IDA.No.7024-KH) | ថ្នាក់៖ ${className}`
+  );
 
   // Rule notice
-  worksheet.mergeCells(5, 1, 5, totalCols);
-  const noticeCell = worksheet.getCell(5, 1);
+  worksheet.mergeCells(7, 1, 7, totalCols);
+  const noticeCell = worksheet.getCell(7, 1);
   noticeCell.value = '* សម្គាល់៖ សិស្សអវត្តមាន បោះបង់ ឬមិនបានប្រឡងត្រូវបានជំនួសដោយលេខសូន្យ (0) តាមស្តង់ដាគម្រោង GEIP';
-  noticeCell.font = { name: 'Khmer OS Siemreap', size: 9, italic: true, color: { argb: 'FFB42318' } };
+  noticeCell.font = { name: 'Khmer OS Battambang', size: 9, italic: true, color: { argb: 'FFB42318' } };
   noticeCell.alignment = { horizontal: 'left', vertical: 'middle' };
 
-  // 2. Table Headers (Row 7 & 8)
-  const headerRow1 = 7;
-  const headerRow2 = 8;
+  // 2. Table Headers (Row 8 & 9)
+  const headerRow1 = 8;
+  const headerRow2 = 9;
 
   // Base Columns
   const baseHeaders = [
@@ -91,80 +75,30 @@ export async function exportGeipAssessmentToExcel({
     worksheet.mergeCells(headerRow1, h.col, headerRow2, h.col);
     const cell = worksheet.getCell(headerRow1, h.col);
     cell.value = h.label;
-    cell.font = { name: 'Khmer OS Siemreap', size: 9, bold: true };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cell.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFF1F5F9' }
-    };
-    worksheet.getColumn(h.col).width = h.width;
   });
 
   // Subject Columns
   subjects.forEach((sub, index) => {
     const colIndex = 6 + index;
-    const cellTop = worksheet.getCell(headerRow1, colIndex);
-    cellTop.value = sub.label;
-    cellTop.font = { name: 'Khmer OS Siemreap', size: 9, bold: true };
-    cellTop.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cellTop.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E7FF' }
-    };
-
-    const cellSub = worksheet.getCell(headerRow2, colIndex);
-    cellSub.value = `(${sub.maxScore})`;
-    cellSub.font = { name: 'Khmer OS Siemreap', size: 8, bold: true, color: { argb: 'FF475569' } };
-    cellSub.alignment = { horizontal: 'center', vertical: 'middle' };
-    cellSub.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0E7FF' }
-    };
-
-    worksheet.getColumn(colIndex).width = Math.max(10, sub.label.length * 1.5);
+    worksheet.getCell(headerRow1, colIndex).value = sub.label;
+    worksheet.getCell(headerRow2, colIndex).value = `(${sub.maxScore})`;
   });
 
   // End Columns (Total, Average, Rank, Grade)
   const endHeaders = [
-    { label: `ពិន្ទុសរុប\n(${maxTotalScore})`, width: 12, bg: 'FFDBEAFE' },
-    { label: 'មធ្យមភាគ\n(50)', width: 11, bg: 'FFDBEAFE' },
-    { label: 'ចំណាត់\nថ្នាក់', width: 9, bg: 'FFFEF3C7' },
-    { label: 'និទ្ទេស', width: 9, bg: 'FFFEF3C7' },
+    { label: `ពិន្ទុសរុប\n(${maxTotalScore})` },
+    { label: 'មធ្យមភាគ\n(50)' },
+    { label: 'ចំណាត់\nថ្នាក់' },
+    { label: 'និទ្ទេស' },
   ];
 
   endHeaders.forEach((eh, idx) => {
     const colIndex = 6 + totalSubjectCols + idx;
     worksheet.mergeCells(headerRow1, colIndex, headerRow2, colIndex);
-    const cell = worksheet.getCell(headerRow1, colIndex);
-    cell.value = eh.label;
-    cell.font = { name: 'Khmer OS Siemreap', size: 9, bold: true, color: { argb: 'FF1E3A8A' } };
-    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    cell.fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: eh.bg }
-    };
-    worksheet.getColumn(colIndex).width = eh.width;
+    worksheet.getCell(headerRow1, colIndex).value = eh.label;
   });
 
-  // Border helper
-  const applyBorder = (cell: ExcelJS.Cell) => {
-    cell.border = {
-      top: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
-    };
-  };
-
-  for (let r = headerRow1; r <= headerRow2; r++) {
-    for (let c = 1; c <= totalCols; c++) {
-      applyBorder(worksheet.getCell(r, c));
-    }
-  }
+  applyStandardTableStyles(worksheet, headerRow1, headerRow1, 2, totalCols);
 
   // 3. Populate Student Rows (with Zero-filling for GEIP rule)
   const totalCoefficient = maxTotalScore / 50;
@@ -285,23 +219,16 @@ export async function exportGeipAssessmentToExcel({
     gradeCell.alignment = { horizontal: 'center', vertical: 'middle' };
     gradeCell.font = { name: 'Khmer OS Siemreap', size: 9, bold: true };
 
-    // Alternate row colors
-    if (index % 2 === 1) {
-      for (let c = 1; c <= totalCols; c++) {
-        row.getCell(c).fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFF8FAFC' }
-        };
-      }
-    }
-
-    for (let c = 1; c <= totalCols; c++) {
-      applyBorder(row.getCell(c));
-    }
-
     row.commit();
   });
+
+  applyStandardTableStyles(worksheet, startDataRow, startDataRow, computedStudents.length, totalCols);
+
+  // Auto widths
+  const minWidths = [6, 12, 22, 8, 12];
+  subjects.forEach(sub => minWidths.push(Math.max(10, sub.label.length * 1.5)));
+  minWidths.push(12, 11, 9, 9);
+  autoAdjustColumnWidths(worksheet, totalCols, minWidths);
 
   // 4. Summary & Signatures at bottom
   const summaryStartRow = startDataRow + computedStudents.length + 2;
@@ -321,28 +248,18 @@ export async function exportGeipAssessmentToExcel({
   };
 
   const sumRow1 = worksheet.getRow(summaryStartRow);
-  sumRow1.getCell(2).value = `សរុបសិស្ស៖ ${totalCount} នាក់ (ស្រី៖ ${femaleCount} នាក់) | រៀនជាក់ស្តែង៖ ${activeCount} នាក់ | បោះបង់៖ ${dropoutCount} នាក់`;
-  sumRow1.getCell(2).font = { name: 'Khmer OS Siemreap', size: 9.5, bold: true };
+  worksheet.mergeCells(summaryStartRow, 1, summaryStartRow, totalCols);
+  sumRow1.getCell(1).value = `សរុបសិស្ស៖ ${totalCount} នាក់ (ស្រី៖ ${femaleCount} នាក់) | រៀនជាក់ស្តែង៖ ${activeCount} នាក់ | បោះបង់៖ ${dropoutCount} នាក់`;
+  sumRow1.getCell(1).font = { name: 'Khmer OS Battambang', size: 9.5, bold: true };
+  sumRow1.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
 
   const sumRow2 = worksheet.getRow(summaryStartRow + 1);
-  sumRow2.getCell(2).value = `ស្ថិតិនិទ្ទេស៖ A: ${gradeCounts.A} | B: ${gradeCounts.B} | C: ${gradeCounts.C} | D: ${gradeCounts.D} | E: ${gradeCounts.E} | F: ${gradeCounts.F}`;
-  sumRow2.getCell(2).font = { name: 'Khmer OS Siemreap', size: 9, bold: true, color: { argb: 'FF1E293B' } };
+  worksheet.mergeCells(summaryStartRow + 1, 1, summaryStartRow + 1, totalCols);
+  sumRow2.getCell(1).value = `ស្ថិតិនិទ្ទេស៖ A: ${gradeCounts.A} | B: ${gradeCounts.B} | C: ${gradeCounts.C} | D: ${gradeCounts.D} | E: ${gradeCounts.E} | F: ${gradeCounts.F}`;
+  sumRow2.getCell(1).font = { name: 'Khmer OS Battambang', size: 9, bold: true, color: { argb: 'FF1E293B' } };
+  sumRow2.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
 
-  // Signature Block
-  const sigRow = summaryStartRow + 4;
-  worksheet.getCell(sigRow, 2).value = 'បានឃើញ និងឯកភាព';
-  worksheet.getCell(sigRow, 2).font = { name: 'Khmer OS Muol Light', size: 10 };
-  worksheet.getCell(sigRow + 1, 2).value = 'នាយកសាលា';
-  worksheet.getCell(sigRow + 1, 2).font = { name: 'Khmer OS Siemreap', size: 9.5, bold: true };
+  addSignatureBlock(worksheet, summaryStartRow + 4, totalCols, '');
 
-  const sigRightCol = Math.max(totalCols - 3, 6);
-  worksheet.getCell(sigRow, sigRightCol).value = 'ថ្ងៃទី....... ខែ....... ឆ្នាំ២០២...';
-  worksheet.getCell(sigRow, sigRightCol).font = { name: 'Khmer OS Siemreap', size: 9.5 };
-  worksheet.getCell(sigRow + 1, sigRightCol).value = 'គ្រូបន្ទុកថ្នាក់';
-  worksheet.getCell(sigRow + 1, sigRightCol).font = { name: 'Khmer OS Muol Light', size: 10 };
-
-  // Write & Save
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, `GEIP_3.1.4_${className}_${periodKey}.xlsx`);
+  await downloadExcel(workbook, `GEIP_3.1.4_${className}_${periodKey}.xlsx`);
 }
