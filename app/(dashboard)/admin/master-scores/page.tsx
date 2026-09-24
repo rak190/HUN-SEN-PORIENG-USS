@@ -249,37 +249,25 @@ export default function MasterScoresPage() {
         )}
       </header>
 
-      {/* Segmented Sub-Tabs */}
-      <div className="bg-slate-100/90 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 inline-flex flex-wrap items-center gap-1.5 mb-6 backdrop-blur-sm">
+      {/* Tab Navigation */}
+      <div className="flex border-b border-slate-200 mt-8 mb-6">
         <button
           onClick={() => setActiveTab('scores')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-            activeTab === 'scores' 
-              ? 'bg-white dark:bg-slate-700 text-[#155EEF] dark:text-blue-400 shadow-sm ring-1 ring-slate-200/50 dark:ring-slate-600/50' 
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
-          }`}
+          className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${activeTab === 'scores' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'}`}
         >
           <FileSpreadsheet className="w-4 h-4" />
           តារាងពិន្ទុប្រឡង
         </button>
         <button
           onClick={() => setActiveTab('logistics')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-            activeTab === 'logistics' 
-              ? 'bg-white dark:bg-slate-700 text-[#155EEF] dark:text-blue-400 shadow-sm ring-1 ring-slate-200/50 dark:ring-slate-600/50' 
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
-          }`}
+          className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${activeTab === 'logistics' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'}`}
         >
           <CheckCircle2 className="w-4 h-4" />
           រៀបចំការប្រឡង & សន្លឹកកិច្ចការ
         </button>
         <button
           onClick={() => setActiveTab('reports')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-            activeTab === 'reports' 
-              ? 'bg-white dark:bg-slate-700 text-[#155EEF] dark:text-blue-400 shadow-sm ring-1 ring-slate-200/50 dark:ring-slate-600/50' 
-              : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-700/50'
-          }`}
+          className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${activeTab === 'reports' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'}`}
         >
           <Filter className="w-4 h-4" />
           របាយការណ៍ & សវនកម្ម
