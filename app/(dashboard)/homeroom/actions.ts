@@ -219,3 +219,35 @@ export async function massProfileUpdateAction(studentData: any[]) {
   revalidatePath('/students');
   return { success: true, count: updatedCount, errors };
 }
+
+export async function submitStudentAdditionRequest(data: {
+  studentName: string;
+  gender: string;
+  dob: string;
+  classId: string;
+}) {
+  try {
+    const { user } = await getServerAuth();
+    if (!user) throw new Error('Unauthorized');
+    
+    const supabase = await createClient();
+    
+    const { error } = await supabase
+      .from('student_requests')
+      .insert({
+        student_name: data.studentName,
+        gender: data.gender,
+        date_of_birth: data.dob,
+        class_id: data.classId,
+        requested_by: user.id,
+        status: 'pending'
+      });
+      
+    if (error) throw error;
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error submitting student request:', error);
+    return { success: false, error: error.message };
+  }
+}

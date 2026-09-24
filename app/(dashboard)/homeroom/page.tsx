@@ -232,6 +232,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     girls: girlsCount.toString(),
     boys: boysCount.toString(),
     classNameKh: teacherClassName || (effectiveClassId ? `ថ្នាក់ ${effectiveClassId}` : 'គ្រប់ថ្នាក់ទាំងអស់'),
+    classId: effectiveClassId || '',
     weeklyData,
     trendData,
     allStudents: studentsData || []

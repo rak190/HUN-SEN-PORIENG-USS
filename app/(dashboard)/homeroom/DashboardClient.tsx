@@ -6,12 +6,13 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Search, Mic, ArrowUpRight, Award, Globe, Share2,
   MessageCircle, Mail, CalendarCheck, ClipboardList,
-  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall, FileSpreadsheet
+  Plus, Trash2, ChevronDown, AlertTriangle, X, PhoneCall, FileSpreadsheet, UserPlus
 } from 'lucide-react';
 import { ActivityLog, Profile, AtRiskStudent } from '@/types';
 import { createActivityLog, deleteActivityLog } from './actions';
 import Modal from '@/components/ui/Modal';
 import MassProfileImportModal from './components/MassProfileImportModal';
+import StudentRequestModal from './components/StudentRequestModal';
 
 interface DashboardStats {
   students: string;
@@ -22,6 +23,7 @@ interface DashboardStats {
   girls: string;
   boys: string;
   classNameKh: string;
+  classId: string;
   weeklyData: { day: string; present: number; absent: number }[];
   trendData: { monthLabel: string; attendancePct: number; gradePct: number }[];
   allStudents?: any[]; // To pass down to export
@@ -47,6 +49,7 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
   const [isPending, startTransition] = useTransition();
   const [showEwsModal, setShowEwsModal] = useState(false);
   const [showMassImportModal, setShowMassImportModal] = useState(false);
+  const [showStudentRequestModal, setShowStudentRequestModal] = useState(false);
   const [footerModalData, setFooterModalData] = useState<{ title: string; content: React.ReactNode } | null>(null);
 
   // Interactive trend and weekly filters
@@ -190,6 +193,14 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
           >
              <FileSpreadsheet className="w-4 h-4" /> Mass Update
           </button>
+          
+          <button
+            onClick={() => setShowStudentRequestModal(true)}
+            className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-xs transition-colors items-center justify-center gap-2 shadow-sm shrink-0 flex"
+            title="ស្នើសុំបន្ថែមសិស្សថ្មី"
+          >
+             <UserPlus className="w-4 h-4" /> ស្នើសិស្សថ្មី
+          </button>
         </div>
       </header>
       
@@ -201,6 +212,12 @@ export default function DashboardClient({ stats, activities, profile, atRiskStud
             setShowMassImportModal(false);
             router.refresh();
          }}
+      />
+      
+      <StudentRequestModal
+         isOpen={showStudentRequestModal}
+         onClose={() => setShowStudentRequestModal(false)}
+         classId={stats.classId}
       />
 
       {/* EWS Modal (Full-Screen Frosted Glass Portal) */}

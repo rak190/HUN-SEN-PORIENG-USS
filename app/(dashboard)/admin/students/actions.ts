@@ -276,3 +276,142 @@ export async function bulkAssignClassAction(studentIds: string[], targetClassId:
     return { success: false, error: err.message || 'Unknown error occurred' };
   }
 }
+
+export async function batchRegisterBasicStudents(studentsData: any[], academicYearId: string) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    const { user } = await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    let targetYearId = academicYearId;
+    if (targetYearId === 'fetch-active') {
+      const { data: yearData } = await supabase
+        .from('academic_years')
+        .select('id')
+        .eq('is_active', true)
+        .single();
+      if (yearData) targetYearId = yearData.id;
+    }
+
+    const { data, error } = await supabase.rpc('bulk_quick_register_students', {
+      student_records: studentsData,
+      target_year_id: targetYearId,
+      admin_user_id: user?.id
+    });
+
+    if (error) {
+      console.error('Batch register error:', error);
+      return { success: false, error: error.message };
+    }
+
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/admin/students');
+    revalidatePath('/students');
+    revalidatePath('/classes/info');
+    return { success: true, count: data?.count || 0 };
+  } catch (err: any) {
+    console.error('Batch register caught error:', err);
+    return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
+
+export async function getPendingStudentRequests() {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    const { data, error } = await supabase
+      .from('student_requests')
+      .select(`
+        id, student_name, gender, date_of_birth, status, created_at,
+        class:classes(id, name),
+        requester:profiles!student_requests_requested_by_fkey(full_name)
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('Get pending requests error:', err);
+    return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
+
+export async function approveStudentRequest(
+  requestId: string,
+  studentIdNumber: string,
+  classId: string,
+  academicYearId: string,
+  adminNotes?: string
+) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    const { user } = await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    let targetYearId = academicYearId;
+    if (targetYearId === 'fetch-active') {
+      const { data: yearData } = await supabase
+        .from('academic_years')
+        .select('id')
+        .eq('is_active', true)
+        .single();
+      if (yearData) targetYearId = yearData.id;
+    }
+
+    const { data, error } = await supabase.rpc('approve_student_request', {
+      p_request_id: requestId,
+      p_student_id_number: studentIdNumber,
+      p_class_id: classId,
+      p_admin_notes: adminNotes || '',
+      p_academic_year_id: targetYearId,
+      p_admin_user_id: user?.id
+    });
+
+    if (error) throw error;
+
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/admin/students');
+    revalidatePath('/homeroom');
+    
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('Approve request error:', err);
+    return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
+
+export async function rejectStudentRequest(requestId: string, adminNotes?: string) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    const { error } = await supabase
+      .from('student_requests')
+      .update({
+        status: 'rejected',
+        admin_notes: adminNotes,
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', requestId);
+
+    if (error) throw error;
+
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/admin/students');
+    revalidatePath('/homeroom');
+    
+    return { success: true };
+  } catch (err: any) {
+    console.error('Reject request error:', err);
+    return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
