@@ -21,6 +21,15 @@ interface StudentGoogleSheetGridProps {
   isSaving: boolean;
   activeClasses: { id: string; name: string }[];
 }
+function normalizeClassName(name: string): string {
+  if (!name) return '';
+  let norm = name.replace(/ថ្នាក់ទី|ថ្នាក់|\s/g, '').toUpperCase();
+  const khmerNums: Record<string, string> = { '០':'0', '១':'1', '២':'2', '៣':'3', '៤':'4', '៥':'5', '៦':'6', '៧':'7', '៨':'8', '៩':'9' };
+  norm = norm.replace(/[០-៩]/g, m => khmerNums[m]);
+  const khmerLetters: Record<string, string> = { 'ក':'A', 'ខ':'B', 'គ':'C', 'ឃ':'D', 'ង':'E', 'ច':'F' };
+  norm = norm.replace(/[ក-ច]/g, m => khmerLetters[m]);
+  return norm;
+}
 
 export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, activeClasses }: StudentGoogleSheetGridProps) {
   const [rows, setRows] = useState<GridStudent[]>(() => {
@@ -68,7 +77,8 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
       }
       
       if (row.class_name.trim()) {
-        const matchedClass = activeClasses.find(c => c.name.toLowerCase() === row.class_name.trim().toLowerCase());
+        const normalizedInput = normalizeClassName(row.class_name);
+        const matchedClass = activeClasses.find(c => normalizeClassName(c.name) === normalizedInput);
         if (!matchedClass) errors.push('រកមិនឃើញថ្នាក់នេះទេ');
       } else {
         errors.push('ថ្នាក់មិនអាចទទេ');
@@ -222,7 +232,8 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
     
     // Map to required payload format
     const payload = dataToSave.map(r => {
-      const matchedClass = activeClasses.find(c => c.name.toLowerCase() === r.class_name.toLowerCase());
+      const normalizedInput = normalizeClassName(r.class_name);
+      const matchedClass = activeClasses.find(c => normalizeClassName(c.name) === normalizedInput);
       return {
         student_id_number: r.student_id,
         full_name: r.full_name,

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { 
   Users, Search, Filter, FileSpreadsheet, 
-  Download, Edit2, Check, X, ShieldCheck,
+  Download, Edit2, Check, X, ShieldCheck, Trash2,
   ArrowRightLeft, UserX, ChevronLeft, ChevronRight, GraduationCap, ChevronDown
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -22,7 +22,7 @@ import AdminBasicImportModal from '@/components/admin/AdminBasicImportModal';
 import GIEPImportManager from './components/GIEPImportManager';
 import StudentGoogleSheetGrid from './components/StudentGoogleSheetGrid';
 import AdminStudentRequestsQueue from './components/AdminStudentRequestsDrawer';
-import { fetchExportData, getPendingStudentRequests, batchRegisterBasicStudents } from './actions';
+import { fetchExportData, getPendingStudentRequests, batchRegisterBasicStudents, bulkArchiveStudents } from './actions';
 
 interface MasterStudentsClientProps {
   initialStudents: any[];
@@ -78,6 +78,25 @@ export default function MasterStudentsClient({
 
   const [importExportMenuOpen, setImportExportMenuOpen] = useState(false);
   const [classOpsMenuOpen, setClassOpsMenuOpen] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+
+  const handleBulkArchive = async () => {
+    if (!confirm(`តើអ្នកពិតជាចង់លុប/ផ្អាកសិស្សចំនួន ${selectedStudents.length} នាក់នេះមែនទេ? (Soft Delete)`)) {
+      return;
+    }
+    setIsArchiving(true);
+    // Since we don't have the active year directly in props for this, we pass 'fetch-active'
+    const res = await bulkArchiveStudents(selectedStudents, 'fetch-active');
+    setIsArchiving(false);
+    if (res.success) {
+      alert('បានលុបដោយជោគជ័យ!');
+      setSelectedStudents([]);
+      // Reload is handled by revalidatePath in actions, but we can also manually refresh router
+      router.refresh();
+    } else {
+      alert(`បរាជ័យ: ${res.error}`);
+    }
+  };
 
   // Fetch pending requests on mount and after actions
   const fetchRequests = async () => {
@@ -548,6 +567,13 @@ export default function MasterStudentsClient({
                       className="ml-auto px-4 py-1.5 bg-white text-[#155EEF] font-black rounded-lg hover:bg-blue-50 hover:shadow-lg hover:-translate-y-0.5 transition-all shadow-sm flex items-center gap-2 text-xs"
                     >
                       <ArrowRightLeft className="w-3.5 h-3.5" /> ផ្ទេរថ្នាក់ (Bulk Migrate)
+                    </button>
+                    <button 
+                      onClick={handleBulkArchive}
+                      disabled={isArchiving}
+                      className="px-4 py-1.5 bg-rose-500/20 text-white font-black rounded-lg hover:bg-rose-500 hover:shadow-lg transition-all shadow-sm flex items-center gap-2 text-xs"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> {isArchiving ? 'កំពុងលុប...' : 'លុប/ផ្អាក (Soft Delete)'}
                     </button>
                     <button 
                       onClick={() => setSelectedStudents([])}
