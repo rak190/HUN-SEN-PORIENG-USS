@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS announcements (
   content text NOT NULL,
   target_role text DEFAULT 'all', -- 'all', 'teacher', 'student', 'principal'
   author_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  school_id text DEFAULT 'main-school',
   status text DEFAULT 'published', -- 'draft', 'published', 'archived'
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now()

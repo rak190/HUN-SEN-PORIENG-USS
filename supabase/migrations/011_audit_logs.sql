@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   action TEXT NOT NULL,
   type TEXT NOT NULL DEFAULT 'info',
   user_id UUID REFERENCES auth.users(id),
+  school_id TEXT DEFAULT 'main-school',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

@@ -185,7 +185,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
+DROP FUNCTION IF EXISTS migrate_academic_year(UUID, UUID);
 CREATE OR REPLACE FUNCTION migrate_academic_year(
     p_source_year_id UUID,
     p_target_year_id UUID
