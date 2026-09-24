@@ -6,38 +6,32 @@ import {
   Languages, Calculator, FlaskConical, Atom, TestTube, History, Globe2, HeartHandshake, Activity
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-
 const getSubjectTheme = (name: string) => {
   if (name.includes('ភាសា')) return {
     icon: <Languages className="w-4 h-4" />,
-    badge: 'ភាសា & អក្សរសាស្ត្រ',
-    style: 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/40'
+    style: 'bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-sm'
   };
   if (name.includes('គណិត')) return {
     icon: <Calculator className="w-4 h-4" />,
-    badge: 'គណិតវិទ្យា & STEM',
-    style: 'bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/40'
+    style: 'bg-amber-50 text-amber-600 border border-amber-100 shadow-sm'
   };
   if (['រូប', 'គីមី', 'ជីវ'].some(k => name.includes(k))) {
     const Icon = name.includes('រូប') ? Atom : name.includes('គីមី') ? FlaskConical : TestTube;
     return {
       icon: <Icon className="w-4 h-4" />,
-      badge: 'វិទ្យាសាស្ត្រពិត',
-      style: 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40'
+      style: 'bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-sm'
     };
   }
   if (['ប្រវត្តិ', 'ភូមិ', 'សីលធម៌'].some(k => name.includes(k))) {
     const Icon = name.includes('ប្រវត្តិ') ? History : name.includes('ភូមិ') ? Globe2 : HeartHandshake;
     return {
       icon: <Icon className="w-4 h-4" />,
-      badge: 'វិទ្យាសាស្ត្រសង្គម',
-      style: 'bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40'
+      style: 'bg-rose-50 text-rose-600 border border-rose-100 shadow-sm'
     };
   }
   return {
     icon: <Activity className="w-4 h-4" />,
-    badge: 'មុខវិជ្ជាអនុវត្ត & ផ្សេងៗ',
-    style: 'bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/40'
+    style: 'bg-purple-50 text-purple-600 border border-purple-100 shadow-sm'
   };
 };
 
@@ -228,64 +222,55 @@ export default function AdminExamStandardsPage() {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden mb-6 flex flex-col h-[550px]">
+          <div className="bg-white rounded-[24px] shadow-sm border border-slate-100/80 flex flex-col h-[550px] overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between p-6 shrink-0 gap-3">
               <div>
-                <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-[17px] flex items-center gap-2">
+                <h3 className="font-extrabold text-slate-900 text-[17px] flex items-center gap-2">
                   <span>កម្មវិធីសិក្សាតាមមុខវិជ្ជា</span>
                 </h3>
                 <p className="text-[12px] text-slate-400 font-medium mt-1">គ្រប់គ្រងបញ្ជីមុខវិជ្ជា និងកំណត់កម្រិតថ្នាក់បង្រៀនដោយផ្ទាល់</p>
               </div>
               <button 
                 onClick={() => { setGlobalSubjects([...globalSubjects, { id: Date.now().toString(), name: 'មុខវិជ្ជាថ្មី', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1 }]); setHasUnsavedChanges(true); }}
-                className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80 rounded-full text-[13px] font-bold transition-all flex items-center gap-2 shadow-sm whitespace-nowrap cursor-pointer"
+                className="px-4 py-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:bg-slate-50 rounded-full text-[13px] font-bold transition-all flex items-center gap-2 shadow-sm whitespace-nowrap cursor-pointer"
               >
-                <Plus className="w-4 h-4 text-[#155EEF]" /> បន្ថែមមុខវិជ្ជា
+                <Plus className="w-4 h-4 text-emerald-600" /> បន្ថែមមុខវិជ្ជា
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1 h-full">
-              <table className="w-full text-left">
-                <thead className="sticky top-0 z-10 bg-slate-50/80 dark:bg-slate-800/60 backdrop-blur-sm border-b border-slate-200/80 dark:border-slate-700/60">
+            <div className="overflow-y-auto flex-1 h-full pb-4 px-4 sm:px-6">
+              <table className="w-full text-left border-collapse min-w-[700px]" style={{borderSpacing: '0 8px', borderCollapse: 'separate'}}>
+                <thead className="sticky top-0 z-10">
                   <tr>
-                    <th className="px-6 py-4 text-[11px] font-black text-slate-500 uppercase tracking-wider w-[40%]">មុខវិជ្ជា (SUBJECT & CATEGORY)</th>
-                    <th className="px-6 py-4 text-[11px] font-black text-slate-500 uppercase tracking-wider">កម្រិតថ្នាក់អនុវត្ត (APPLICABLE GRADES 7-12)</th>
-                    <th className="px-6 py-4 text-[11px] font-black text-slate-500 uppercase tracking-wider w-24 text-right">សកម្មភាព (ACTIONS)</th>
+                    <th className="px-4 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider w-[40%] rounded-l-[16px] bg-[#f8fafc]">មុខវិជ្ជា (SUBJECT)</th>
+                    <th className="px-4 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider bg-[#f8fafc]">កម្រិតថ្នាក់ (GRADES)</th>
+                    <th className="px-4 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider w-12 text-right rounded-r-[16px] bg-[#f8fafc]"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {globalSubjects.map((subject, idx) => {
-                    const theme = getSubjectTheme(subject.name);
-                    return (
-                    <tr key={subject.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2.5 rounded-xl shrink-0 transition-transform group-hover:scale-105 ${theme.style}`}>
-                            {theme.icon}
+                <tbody>
+                  {globalSubjects.map((subject, idx) => (
+                    <tr key={subject.id} className="bg-white hover:bg-emerald-50/30 hover:shadow-xs transition-all duration-200 group rounded-xl relative">
+                      <td className="px-4 py-1.5 transition-all duration-300 rounded-l-[16px] border-y border-l border-slate-200 group-hover:border-slate-300 relative">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded-lg shrink-0 group-hover:scale-105 transition-all ${getSubjectTheme(subject.name).style}`}>
+                            {getSubjectTheme(subject.name).icon}
                           </div>
-                          <div className="flex flex-col gap-1 w-full">
-                            <input 
-                              type="text" 
-                              value={subject.name}
-                              placeholder="បញ្ចូលឈ្មោះមុខវិជ្ជា..."
-                              onChange={(e) => {
-                                const newSubjects = [...globalSubjects];
-                                newSubjects[idx].name = e.target.value;
-                                setGlobalSubjects(newSubjects);
-                                setHasUnsavedChanges(true);
-                              }}
-                              className="bg-transparent border border-transparent outline-none font-bold text-slate-800 dark:text-slate-100 text-sm hover:bg-white dark:hover:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:border-[#155EEF]/30 focus:ring-2 focus:ring-[#155EEF]/20 rounded-md px-2 py-1 w-full max-w-xs transition-all" 
-                            />
-                            <div className="pl-2">
-                              <span className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold ${theme.style} border-transparent bg-opacity-50`}>
-                                {theme.badge}
-                              </span>
-                            </div>
-                          </div>
+                          <input 
+                            type="text" 
+                            value={subject.name}
+                            placeholder="បញ្ចូលឈ្មោះមុខវិជ្ជា..."
+                            onChange={(e) => {
+                              const newSubjects = [...globalSubjects];
+                              newSubjects[idx].name = e.target.value;
+                              setGlobalSubjects(newSubjects);
+                              setHasUnsavedChanges(true);
+                            }}
+                            className="bg-transparent border border-transparent outline-none font-black text-slate-900 text-[13px] hover:bg-slate-50 focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 rounded-md px-2 py-1.5 w-full transition-all" 
+                          />
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex gap-1.5 flex-wrap items-center">
+                      <td className="px-4 py-1.5 border-y border-slate-200 group-hover:border-emerald-200 transition-colors">
+                        <div className="flex gap-1 flex-wrap items-center">
                           {['7','8','9','10','11','12'].map(g => {
                             const isActive = subject.grades.includes(g);
                             return (
@@ -301,11 +286,11 @@ export default function AdminExamStandardsPage() {
                                   setGlobalSubjects(newSubjects);
                                   setHasUnsavedChanges(true);
                                 }}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
-                                  isActive 
-                                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow' 
-                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-300 border border-transparent'
-                                }`}
+                                  className={`w-7 h-6 rounded-md text-[11px] font-black border transition-all cursor-pointer flex items-center justify-center ${
+                                    isActive 
+                                      ? 'bg-blue-50 text-[#155EEF] border-blue-200' 
+                                      : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-100 hover:text-slate-600'
+                                  }`}
                                 title={`ថ្នាក់ទី ${g}`}
                               >
                                 {g}
@@ -314,16 +299,15 @@ export default function AdminExamStandardsPage() {
                           })}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200 gap-2">
-                          <button onClick={() => { setGlobalSubjects(globalSubjects.filter(s => s.id !== subject.id)); setHasUnsavedChanges(true); }} className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer">
-                            <Trash2 className="w-4 h-4" />
+                      <td className="px-4 py-1.5 rounded-r-[16px] border-y border-r border-slate-200 group-hover:border-emerald-200 text-right transition-colors relative">
+                        <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                          <button onClick={() => { setGlobalSubjects(globalSubjects.filter(s => s.id !== subject.id)); setHasUnsavedChanges(true); }} className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer">
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
                     </tr>
-                    );
-                  })}
+                  ))}
                 </tbody>
               </table>
             </div>
