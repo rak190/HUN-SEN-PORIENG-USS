@@ -131,8 +131,9 @@ export default function MonthlyAttendanceForm() {
     
     // Attempt to parse academic year from string (e.g. "2024-2025") or fallback
     let academicYear = '2024-2025';
-    if (activeClass.academic_year?.name) {
-      academicYear = activeClass.academic_year.name;
+    const ac = activeClass as any;
+    if (ac.academic_year?.name) {
+      academicYear = ac.academic_year.name;
     } else {
       academicYear = `${year}-${year + 1}`;
     }
