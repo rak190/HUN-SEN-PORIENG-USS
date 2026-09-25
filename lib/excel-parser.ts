@@ -154,29 +154,40 @@ export function calculateStudentTotalScore(
   dynamicSchema?: CurriculumSchema
 ): { totalScore: number; maxTotal: number; averageScore: number; subjectCount: number } {
   const schema = dynamicSchema || getCurriculumSchemaForClass(grade, track);
-  let totalScore = 0;
+  let totalWeightedScore = 0;
+  let totalCoefficients = 0;
   let subjectCount = 0;
   
   // Calculate total score combining subject totals
   schema.subjects.forEach(sub => {
-    if (scores[sub.id] !== undefined && scores[sub.id] !== null) {
-      totalScore += scores[sub.id] as number;
+    let score = scores[sub.id];
+    
+    // Handle Khmer submetrics if master khmer score is missing
+    if (sub.id === 'khmer' && (score === undefined || score === null)) {
+       const dict = scores['khmer_dictation'] || 0;
+       const comp = scores['khmer_composition'] || 0;
+       if (dict > 0 || comp > 0) {
+         score = dict + comp;
+       }
+    }
+
+    if (score !== undefined && score !== null) {
+      const coeff = sub.coefficient ?? (sub.maxScore / 50.0);
+      
+      // In MoEYS, the "Score" recorded in Excel is ALREADY the weighted score (e.g. 80/100 instead of 40/50).
+      // Therefore, we just add the score to the total.
+      totalWeightedScore += (score as number); 
+      totalCoefficients += coeff;
       subjectCount++;
-    } else if (sub.id === 'khmer') {
-      const dict = scores['khmer_dictation'] || 0;
-      const comp = scores['khmer_composition'] || 0;
-      if (dict > 0 || comp > 0) {
-        totalScore += (dict + comp);
-        subjectCount++;
-      }
     }
   });
 
   const maxTotal = schema.subjects.reduce((sum, s) => sum + s.maxScore, 0);
-  const averageScore = maxTotal > 0 ? parseFloat(((totalScore / maxTotal) * 10).toFixed(2)) : 0;
+  // MoEYS GPA Formula: Total Score / Total Coefficients
+  const averageScore = totalCoefficients > 0 ? parseFloat((totalWeightedScore / totalCoefficients).toFixed(2)) : 0;
 
   return {
-    totalScore: parseFloat(totalScore.toFixed(2)),
+    totalScore: parseFloat(totalWeightedScore.toFixed(2)),
     maxTotal,
     averageScore,
     subjectCount

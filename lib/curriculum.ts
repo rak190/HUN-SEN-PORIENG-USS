@@ -2,6 +2,7 @@ export interface SubjectSchema {
   id: string;
   label: string;
   maxScore: number;
+  coefficient?: number;
   subMetrics?: { id: string; label: string; maxScore?: number }[];
 }
 
@@ -218,6 +219,7 @@ export function buildDynamicSchemaSync(
       id: subjectId,
       label: row.subject_name,
       maxScore: parseFloat(row.max_score),
+      coefficient: row.coefficient !== undefined && row.coefficient !== null ? parseFloat(row.coefficient) : (parseFloat(row.max_score) / 50.0),
       subMetrics
     };
   });

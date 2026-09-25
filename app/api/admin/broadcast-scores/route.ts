@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
       const absences = attData.length;
 
       const message = `
-🏫 <b>សាលា:</b> វិទ្យាល័យ ហ៊ុន សែន ពាមរក៍
+🏫 <b>សាលា:</b> វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង
 👤 <b>សិស្ស:</b> ${(student as any).full_name} | ថ្នាក់: ${classData.name}
 📊 <b>លទ្ធផលសិក្សាប្រចាំខែ:</b> ${month}
 ------------------------------
