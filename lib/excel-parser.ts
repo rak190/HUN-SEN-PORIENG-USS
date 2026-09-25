@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { getCurriculumSchemaForClass } from '@/lib/curriculum';
+import { getCurriculumSchemaForClass, CurriculumSchema } from '@/lib/curriculum';
 
 export const SUBJECT_MAP: Record<string, string> = {
   'សរសេរតាមអាន': 'khmer_dictation',
@@ -99,7 +99,7 @@ export function validateScoreCeilings(
   scores: Record<string, number | null>,
   grade?: string | number | null,
   track?: string | null,
-  dynamicSchema?: any
+  dynamicSchema?: CurriculumSchema
 ): { isValid: boolean; warnings: string[]; errors: string[] } {
   const schema = dynamicSchema || getCurriculumSchemaForClass(grade, track);
   const warnings: string[] = [];
@@ -151,7 +151,7 @@ export function calculateStudentTotalScore(
   scores: Record<string, number | null>,
   grade?: string | number | null,
   track?: string | null,
-  dynamicSchema?: any
+  dynamicSchema?: CurriculumSchema
 ): { totalScore: number; maxTotal: number; averageScore: number; subjectCount: number } {
   const schema = dynamicSchema || getCurriculumSchemaForClass(grade, track);
   let totalScore = 0;
