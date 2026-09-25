@@ -11,7 +11,7 @@ import {
 import { buildDynamicSchemaSync } from '@/lib/curriculum';
 import { createClient } from '@/lib/supabase/client';
 import Modal from '@/components/ui/Modal';
-import { createGradeSnapshot } from '@/app/(dashboard)/admin/master-scores/actions';
+import { createGradeSnapshot, uploadMasterScoresAction } from '@/app/(dashboard)/admin/master-scores/actions';
 
 interface MasterScoreUploadModalProps {
   isOpen: boolean;
@@ -276,12 +276,8 @@ export function MasterScoreUploadModal({ isOpen, onClose, selectedPeriod, academ
           status: 'draft',
           updated_at: new Date().toISOString()
         }));
-        
-        const { error: upsertErr } = await supabase
-          .from('grades')
-          .upsert(cleanPayload, { onConflict: 'student_id,class_id,period' });
-          
-        if (upsertErr) throw upsertErr;
+        const result = await uploadMasterScoresAction(cleanPayload, selectedPeriod);
+        if (!result.success) throw new Error(result.error);
       }
 
       setStatus('success');

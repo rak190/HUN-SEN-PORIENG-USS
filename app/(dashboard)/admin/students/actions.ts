@@ -294,22 +294,34 @@ export async function batchRegisterBasicStudents(studentsData: any[], academicYe
       if (yearData) targetYearId = yearData.id;
     }
 
-    const { data, error } = await supabase.rpc('bulk_quick_register_students', {
-      student_records: studentsData,
-      target_year_id: targetYearId,
-      admin_user_id: user?.id
+    const cleanData = studentsData.map(s => ({
+      student_id_number: s.student_id_number || s.student_id,
+      full_name: s.full_name || s.name_khmer,
+      gender: s.gender,
+      date_of_birth: s.date_of_birth,
+      class_id: s.class_id || null,
+      room_number: s.room_number || null,
+      desk_number: s.desk_number || null
+    }));
+
+    const { data, error } = await supabase.rpc('batch_register_students_atomic', {
+      p_students: cleanData,
+      p_academic_year_id: targetYearId
     });
 
     if (error) {
-      console.error('Batch register error:', error);
+      console.error('Batch register atomic error:', error);
       return { success: false, error: error.message };
     }
 
     const { revalidatePath } = await import('next/cache');
     revalidatePath('/admin/students');
-    revalidatePath('/students');
-    revalidatePath('/classes/info');
-    return { success: true, count: data?.count || 0 };
+    revalidatePath('/admin/students', 'page');
+    revalidatePath('/homeroom');
+    revalidatePath('/homeroom/profiling');
+    revalidatePath('/classes');
+
+    return { success: true, count: data?.count || cleanData.length };
   } catch (err: any) {
     console.error('Batch register caught error:', err);
     return { success: false, error: err?.message || 'Unknown error occurred' };

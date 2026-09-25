@@ -14,7 +14,7 @@ import { GEIPExportModal } from '@/components/admin/GEIPExportModal';
 import { PrePublishAuditModal } from '@/components/admin/PrePublishAuditModal';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
-import { calculateSummaryScores } from './actions';
+import { calculateSummaryScores, publishScoresAction } from './actions';
 import { RotateCcw, History, Printer } from 'lucide-react';
 
 export default function MasterScoresPage() {
@@ -141,14 +141,8 @@ export default function MasterScoresPage() {
     }
     
     try {
-      const { error } = await supabase
-        .from('grades')
-        .update({ status: 'published', updated_at: new Date().toISOString() })
-        .eq('period', selectedPeriod)
-        .eq('academic_year_id', activeYearId)
-        .eq('status', 'draft');
-
-      if (error) throw error;
+      const result = await publishScoresAction(selectedPeriod, activeYearId);
+      if (!result.success) throw new Error(result.error);
       
       alert('បានបោះពុម្ពផ្សាយពិន្ទុជោគជ័យ!');
       

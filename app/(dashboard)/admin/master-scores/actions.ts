@@ -434,3 +434,63 @@ export async function generateLiveExamGoogleSheetAction(examMonth: string, acade
     return { success: false, error: err.message };
   }
 }
+
+export async function uploadMasterScoresAction(payload: any[], period: string) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    const { data, error } = await supabase.rpc('batch_upload_scores_atomic', {
+      p_scores: payload,
+      p_period: period
+    });
+
+    if (error) throw error;
+
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/admin/master-scores');
+    revalidatePath('/admin/master-scores', 'page');
+    revalidatePath('/homeroom');
+    revalidatePath('/homeroom', 'page');
+    revalidatePath('/grades');
+    revalidatePath('/classes');
+
+    return { success: true, count: data?.count || payload.length };
+  } catch (err: any) {
+    console.error('uploadMasterScoresAction error:', err);
+    return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
+
+export async function publishScoresAction(period: string, academicYearId: string) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    const { error } = await supabase
+      .from('grades')
+      .update({ status: 'published', updated_at: new Date().toISOString() })
+      .eq('period', period)
+      .eq('academic_year_id', academicYearId)
+      .eq('status', 'draft');
+
+    if (error) throw error;
+
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/admin/master-scores');
+    revalidatePath('/admin/master-scores', 'page');
+    revalidatePath('/homeroom');
+    revalidatePath('/homeroom', 'page');
+    revalidatePath('/grades');
+    revalidatePath('/classes');
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('publishScoresAction error:', err);
+    return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
