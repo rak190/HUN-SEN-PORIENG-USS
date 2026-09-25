@@ -183,6 +183,25 @@ export default function MasterScoresPage() {
     }
   };
 
+  const handleBroadcastClass = async (classId: string, className: string) => {
+    if (!confirm(`តើអ្នកពិតជាចង់ផ្ញើលទ្ធផលពិន្ទុខែ ${selectedPeriod} ទៅកាន់អាណាព្យាបាលសិស្សថ្នាក់ ${className} តាមរយៈ Telegram មែនទេ?`)) return;
+    
+    try {
+      const res = await fetch('/api/admin/broadcast-scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class_id: classId, month: selectedPeriod })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to broadcast');
+      
+      alert(`ជោគជ័យ! បានផ្ញើសារចំនួន ${data.count} ទៅកាន់អាណាព្យាបាលសិស្សថ្នាក់ ${className}។`);
+    } catch (error: any) {
+      alert('កំហុស៖ ' + error.message);
+    }
+  };
+
   const filteredClasses = classesStatus.filter(c => {
     const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           c.teacher.toLowerCase().includes(searchQuery.toLowerCase());
@@ -358,6 +377,7 @@ export default function MasterScoresPage() {
                     <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">ថ្នាក់រៀន</th>
                     <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">គ្រូបន្ទុកថ្នាក់</th>
                     <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 text-center">ស្ថានភាពពិន្ទុប្រចាំខែ</th>
+                    <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 text-right">សកម្មភាព</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -386,11 +406,21 @@ export default function MasterScoresPage() {
                           </span>
                         )}
                       </td>
+                      <td className="px-6 py-4 text-right">
+                        {c.status === 'published' && (
+                          <button 
+                            onClick={() => handleBroadcastClass(c.id, c.name)}
+                            className="px-3 py-1.5 bg-[#155EEF]/10 hover:bg-[#155EEF]/20 text-[#155EEF] font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm inline-flex cursor-pointer"
+                          >
+                            <Send className="w-3.5 h-3.5" /> ផ្ញើទៅ Telegram
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {filteredClasses.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="p-12 text-center text-slate-500 font-bold">គ្មានទិន្នន័យ</td>
+                      <td colSpan={4} className="p-12 text-center text-slate-500 font-bold">គ្មានទិន្នន័យ</td>
                     </tr>
                   )}
                 </tbody>
