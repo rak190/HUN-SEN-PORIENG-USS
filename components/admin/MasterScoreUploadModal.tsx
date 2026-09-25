@@ -8,6 +8,7 @@ import {
   validateScoreCeilings, 
   calculateStudentTotalScore 
 } from '@/lib/excel-parser';
+import { buildDynamicSchemaSync } from '@/lib/curriculum';
 import { createClient } from '@/lib/supabase/client';
 import Modal from '@/components/ui/Modal';
 import { createGradeSnapshot } from '@/app/(dashboard)/admin/master-scores/actions';
@@ -147,6 +148,10 @@ export function MasterScoreUploadModal({ isOpen, onClose, selectedPeriod, academ
         .select('id, student_id_number, desk_number, class_id, full_name');
       if (stdErr) throw stdErr;
 
+      const { data: standardsData } = await supabase
+        .from('exam_subject_standards')
+        .select('*');
+
       const verifiedList: VerifiedRow[] = [];
       const unmatchedList: ParsedStudentScore[] = [];
       const nameWarningList: VerifiedRow[] = [];
@@ -189,8 +194,14 @@ export function MasterScoreUploadModal({ isOpen, onClose, selectedPeriod, academ
         if (dbStudent) {
           const classInfo = dbClasses.find(c => c.id === dbStudent?.class_id);
           const nameCheck = checkNameMatch(row.studentNameRaw, dbStudent.full_name);
-          const ceilingCheck = validateScoreCeilings(row.scores, classInfo?.grade, classInfo?.track);
-          const calcResult = calculateStudentTotalScore(row.scores, classInfo?.grade, classInfo?.track);
+          
+          let dynamicSchema;
+          if (standardsData && standardsData.length > 0) {
+            dynamicSchema = buildDynamicSchemaSync(classInfo?.grade || '', classInfo?.track || '', standardsData);
+          }
+          
+          const ceilingCheck = validateScoreCeilings(row.scores, classInfo?.grade, classInfo?.track, dynamicSchema);
+          const calcResult = calculateStudentTotalScore(row.scores, classInfo?.grade, classInfo?.track, dynamicSchema);
 
           const verifiedItem: VerifiedRow = {
             student_id: dbStudent.id,

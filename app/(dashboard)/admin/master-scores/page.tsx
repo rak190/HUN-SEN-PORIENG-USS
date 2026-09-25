@@ -11,6 +11,7 @@ import { MasterScoreRollbackModal } from '@/components/admin/MasterScoreRollback
 import { MonthlyExamSheetModal } from '@/components/admin/MonthlyExamSheetModal';
 import { ExamRoomPrintModal } from '@/components/admin/ExamRoomPrintModal';
 import { GEIPExportModal } from '@/components/admin/GEIPExportModal';
+import { PrePublishAuditModal } from '@/components/admin/PrePublishAuditModal';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
 import { calculateSummaryScores } from './actions';
@@ -31,6 +32,7 @@ export default function MasterScoresPage() {
   const [isMonthlyExamSheetModalOpen, setIsMonthlyExamSheetModalOpen] = useState(false);
   const [isExamRoomPrintModalOpen, setIsExamRoomPrintModalOpen] = useState(false);
   const [isGEIPExportModalOpen, setIsGEIPExportModalOpen] = useState(false);
+  const [isPublishAuditModalOpen, setIsPublishAuditModalOpen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
 
@@ -132,13 +134,12 @@ export default function MasterScoresPage() {
     fetchStats();
   }, [selectedPeriod]);
 
-  const handlePublishScores = async () => {
+  const handlePublishConfirm = async (shouldBroadcast: boolean) => {
     if (!activeYearId) {
        alert('រកមិនឃើញឆ្នាំសិក្សាសកម្មទេ');
        return;
     }
-    if (!confirm(`តើអ្នកពិតជាចង់បោះពុម្ពផ្សាយពិន្ទុសម្រាប់ខែ "${selectedPeriod}" មែនទេ?`)) return;
-    setIsPublishing(true);
+    
     try {
       const { error } = await supabase
         .from('grades')
@@ -148,14 +149,35 @@ export default function MasterScoresPage() {
         .eq('status', 'draft');
 
       if (error) throw error;
+      
       alert('បានបោះពុម្ពផ្សាយពិន្ទុជោគជ័យ!');
+      
+      // trigger broadcast
+      if (shouldBroadcast) {
+        // Find all classIds that had drafts published
+        const classesWithDrafts = classesStatus.filter(c => c.status === 'draft');
+        for (const c of classesWithDrafts) {
+           await handleBroadcastClassSilently(c.id);
+        }
+      }
+
       // Trigger refetch
       setSelectedPeriod(selectedPeriod + ' ');
       setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
     } catch (err: any) {
       alert('កំហុសក្នុងការបោះពុម្ពផ្សាយ៖ ' + err.message);
-    } finally {
-      setIsPublishing(false);
+    }
+  };
+
+  const handleBroadcastClassSilently = async (classId: string) => {
+    try {
+      await fetch('/api/admin/broadcast-scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class_id: classId, month: selectedPeriod })
+      });
+    } catch (error) {
+      console.error('Silent broadcast failed for class', classId, error);
     }
   };
 
@@ -255,7 +277,7 @@ export default function MasterScoresPage() {
             </button>
             
             <button 
-              onClick={handlePublishScores}
+              onClick={() => setIsPublishAuditModalOpen(true)}
               disabled={isPublishing || draftCount === 0}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-sm transition-all shadow-sm shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 disabled:shadow-none cursor-pointer"
             >
@@ -626,6 +648,14 @@ export default function MasterScoresPage() {
         isOpen={isGEIPExportModalOpen}
         onClose={() => setIsGEIPExportModalOpen(false)}
         selectedPeriod={selectedPeriod}
+      />
+      
+      <PrePublishAuditModal
+        isOpen={isPublishAuditModalOpen}
+        onClose={() => setIsPublishAuditModalOpen(false)}
+        period={selectedPeriod}
+        academicYearId={activeYearId}
+        onConfirm={handlePublishConfirm}
       />
     </div>
   );

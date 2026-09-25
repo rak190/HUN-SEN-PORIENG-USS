@@ -69,6 +69,17 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
   if (filterClass && filterClass !== 'all') {
     if (filterClass === 'គ្មានថ្នាក់') {
        query = query.is('enrollment_class_id', null);
+    } else {
+       query = query.eq('class_name', filterClass);
+    }
+  }
+
+  if (filterTeacher && filterTeacher !== 'all') {
+    const matchingTeacherIds = teacherProfiles.filter(t => t.full_name === filterTeacher).map(t => t.id);
+    if (matchingTeacherIds.length > 0) {
+      query = query.in('teacher_id', matchingTeacherIds);
+    } else {
+      query = query.is('teacher_id', null); // Force empty result if no teacher matches
     }
   }
 
@@ -95,14 +106,6 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
         is_active: s.is_active
       };
     });
-  }
-
-  // Filter in memory for class/teacher if needed (Supabase limitation)
-  if (filterClass && filterClass !== 'all' && filterClass !== 'គ្មានថ្នាក់') {
-    mappedStudents = mappedStudents.filter(s => s.class_name === filterClass);
-  }
-  if (filterTeacher && filterTeacher !== 'all') {
-    mappedStudents = mappedStudents.filter(s => s.homeroom_teacher === filterTeacher);
   }
 
   // Fetch Global Stats

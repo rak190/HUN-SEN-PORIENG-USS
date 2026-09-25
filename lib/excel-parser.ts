@@ -98,9 +98,10 @@ export function checkNameMatch(excelName?: string, dbName?: string): { match: bo
 export function validateScoreCeilings(
   scores: Record<string, number | null>,
   grade?: string | number | null,
-  track?: string | null
+  track?: string | null,
+  dynamicSchema?: any
 ): { isValid: boolean; warnings: string[]; errors: string[] } {
-  const schema = getCurriculumSchemaForClass(grade, track);
+  const schema = dynamicSchema || getCurriculumSchemaForClass(grade, track);
   const warnings: string[] = [];
   const errors: string[] = [];
 
@@ -149,9 +150,10 @@ export function validateScoreCeilings(
 export function calculateStudentTotalScore(
   scores: Record<string, number | null>,
   grade?: string | number | null,
-  track?: string | null
+  track?: string | null,
+  dynamicSchema?: any
 ): { totalScore: number; maxTotal: number; averageScore: number; subjectCount: number } {
-  const schema = getCurriculumSchemaForClass(grade, track);
+  const schema = dynamicSchema || getCurriculumSchemaForClass(grade, track);
   let totalScore = 0;
   let subjectCount = 0;
   

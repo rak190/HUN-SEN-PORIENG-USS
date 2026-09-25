@@ -53,6 +53,66 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Sync to relational exam_subject_standards table
+  if (standards.globalSubjects && Array.isArray(standards.globalSubjects)) {
+    try {
+      const recordsToUpsert: any[] = [];
+      
+      standards.globalSubjects.forEach((subject: any) => {
+        const isCore = subject.type === 'កំហិត';
+        const grades = subject.grades || [];
+        
+        grades.forEach((gradeStr: string) => {
+          const gradeLevel = parseInt(gradeStr);
+          if (isNaN(gradeLevel)) return;
+          
+          if (gradeLevel >= 11) {
+            // Science stream
+            recordsToUpsert.push({
+              subject_name: subject.name,
+              grade_level: gradeLevel,
+              stream_type: 'science',
+              coefficient: subject.sci || 1.0,
+              max_score: subject.maxSci || 50.0,
+              is_core: isCore
+            });
+            // Social stream
+            recordsToUpsert.push({
+              subject_name: subject.name,
+              grade_level: gradeLevel,
+              stream_type: 'social',
+              coefficient: subject.soc || 1.0,
+              max_score: subject.maxSoc || 50.0,
+              is_core: isCore
+            });
+          } else {
+            // General stream
+            recordsToUpsert.push({
+              subject_name: subject.name,
+              grade_level: gradeLevel,
+              stream_type: 'general',
+              coefficient: subject.gen || 1.0,
+              max_score: subject.maxGen || 50.0,
+              is_core: isCore
+            });
+          }
+        });
+      });
+
+      if (recordsToUpsert.length > 0) {
+        const { error: syncError } = await adminClient
+          .from('exam_subject_standards')
+          .upsert(recordsToUpsert, { onConflict: 'subject_name,grade_level,stream_type' });
+          
+        if (syncError) {
+          console.error("Failed to sync exam_subject_standards:", syncError);
+        }
+      }
+    } catch (e) {
+      console.error("Error building records to upsert:", e);
+    }
+  }
+
   // Log to audit logs
   await adminClient.from('audit_logs').insert([{
     action: `បានកែសម្រួលស្តង់ដារការប្រលង និងការកំណត់ពិន្ទុ`,

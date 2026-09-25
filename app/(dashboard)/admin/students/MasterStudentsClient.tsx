@@ -107,8 +107,74 @@ export default function MasterStudentsClient({
     }
   };
 
+  const { bulkUpdateStudentStatus } = require('./actions');
+
+  const handleBulkStatusUpdate = async (status: string) => {
+    if (!confirm(`តើអ្នកពិតជាចង់ប្តូរស្ថានភាពសិស្សចំនួន ${selectedStudents.length} នាក់នេះមែនទេ?`)) return;
+    
+    setIsArchiving(true); // reusing loading state
+    const res = await bulkUpdateStudentStatus(selectedStudents, status, 'fetch-active');
+    setIsArchiving(false);
+    
+    if (res.success) {
+      alert('បានប្តូរស្ថានភាពដោយជោគជ័យ!');
+      setSelectedStudents([]);
+      setClassOpsMenuOpen(false);
+      router.refresh();
+    } else {
+      alert(`បរាជ័យ: ${res.error}`);
+    }
+  };
+
+  const handleExportSelected = async () => {
+    setIsExporting(true);
+    try {
+      // Just filter the loaded students or fetch if we had all data.
+      // We can reuse the pdf/excel logic. We'll simply filter `students` state.
+      const exportData = students.filter(s => selectedStudents.includes(s.id));
+      if (exportData.length === 0) return;
+      
+      const doc = new jsPDF();
+      doc.addFileToVFS("Suwannaphum.ttf", suwannaphumBase64);
+      doc.addFont("Suwannaphum.ttf", "Suwannaphum", "normal");
+      doc.setFont("Suwannaphum");
+
+      doc.setFontSize(16);
+      doc.text("បញ្ជីរាយនាមសិស្ស (Selected)", 14, 15);
+      
+      doc.setFontSize(10);
+      doc.text(`សរុប: ${exportData.length} នាក់`, 14, 22);
+
+      const tableData = exportData.map((s: any, index: number) => [
+        index + 1,
+        s.student_id_number || '',
+        s.full_name,
+        s.gender,
+        s.class_name,
+        s.desk_number || '',
+        s.room_number || ''
+      ]);
+
+      autoTable(doc, {
+        head: [['ល.រ', 'អត្តលេខ', 'គោត្តនាម និងនាម', 'ភេទ', 'ថ្នាក់', 'លេខតុ', 'លេខបន្ទប់']],
+        body: tableData,
+        startY: 28,
+        styles: { font: "Suwannaphum", fontSize: 10 },
+        headStyles: { fillColor: [21, 94, 239], textColor: 255, fontStyle: 'bold' }
+      });
+
+      doc.save(`Selected_Students_Export.pdf`);
+    } catch (error) {
+      console.error(error);
+      alert("បរាជ័យក្នុងការទាញយក។");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // Fetch pending requests on mount and after actions
   const fetchRequests = async () => {
+    const { getPendingStudentRequests } = require('./actions');
     const res = await getPendingStudentRequests();
     if (res.success) {
       setPendingRequests(res.data || []);
@@ -861,6 +927,54 @@ export default function MasterStudentsClient({
         </div>
       )}
       </div>
+
+      {/* Floating Bulk Action Toolbar */}
+      {selectedStudents.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white rounded-2xl px-5 py-3 shadow-2xl flex flex-wrap items-center justify-between gap-6 z-50 animate-in fade-in slide-in-from-bottom-4 border border-slate-700 w-[90%] md:w-auto max-w-4xl">
+          <div className="flex items-center gap-3">
+            <span className="font-bold text-sm">បានជ្រើសរើសសិស្ស៖ {selectedStudents.length} នាក់</span>
+            <button 
+              onClick={() => setSelectedStudents([])}
+              className="text-xs text-slate-400 hover:text-white underline transition-colors"
+            >
+              ដោះការជ្រើសរើស
+            </button>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setIsMigrationModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-xs font-bold transition-colors"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" /> ផ្ទេរប្តូរថ្នាក់
+            </button>
+            <div className="relative action-dropdown">
+              <button 
+                onClick={() => setClassOpsMenuOpen(!classOpsMenuOpen)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors"
+              >
+                <Edit2 className="w-3.5 h-3.5" /> កែប្រែស្ថានភាព <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              {classOpsMenuOpen && (
+                <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden py-1 z-50 text-slate-800">
+                  <button onClick={() => handleBulkStatusUpdate('active')} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-emerald-600 font-bold">សកម្ម (Active)</button>
+                  <button onClick={() => handleBulkStatusUpdate('transferred')} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-orange-600 font-bold">ផ្ទេរចេញ (Transferred)</button>
+                  <button onClick={() => handleBulkStatusUpdate('dropped')} className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 text-rose-600 font-bold">បោះបង់ (Dropped)</button>
+                </div>
+              )}
+            </div>
+            <button 
+              onClick={() => {
+                 // For now, reuse the existing export but filter to selected
+                 handleExportSelected();
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-bold transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" /> ទាញយក
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modals & Drawers */}
       <AdminBasicRegistrationModal

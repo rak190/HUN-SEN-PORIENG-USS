@@ -60,16 +60,16 @@ export default function AdminExamStandardsPage() {
   ]);
   
   const [globalSubjects, setGlobalSubjects] = useState([
-    { id: '1', name: 'ភាសាខ្មែរ', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1 },
-    { id: '2', name: 'គណិតវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1 },
-    { id: '3', name: 'រូបវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1 },
-    { id: '4', name: 'គីមីវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1 },
-    { id: '5', name: 'ជីវវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1 },
-    { id: '6', name: 'ប្រវត្តិវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1 },
-    { id: '7', name: 'ភូមិវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1 },
-    { id: '8', name: 'សីលធម៌ ពលរដ្ឋ', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1 },
-    { id: '9', name: 'ផែនដី និងបរិស្ថាន', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1 },
-    { id: '10', name: 'ភាសាបរទេស', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1 },
+    { id: '1', name: 'ភាសាខ្មែរ', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1, maxSci: 100, maxSoc: 150, maxGen: 100 },
+    { id: '2', name: 'គណិតវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1, maxSci: 150, maxSoc: 100, maxGen: 100 },
+    { id: '3', name: 'រូបវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1, maxSci: 100, maxSoc: 50, maxGen: 50 },
+    { id: '4', name: 'គីមីវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1, maxSci: 100, maxSoc: 50, maxGen: 50 },
+    { id: '5', name: 'ជីវវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1, maxSci: 100, maxSoc: 50, maxGen: 50 },
+    { id: '6', name: 'ប្រវត្តិវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1, maxSci: 50, maxSoc: 150, maxGen: 50 },
+    { id: '7', name: 'ភូមិវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1, maxSci: 50, maxSoc: 100, maxGen: 50 },
+    { id: '8', name: 'សីលធម៌ ពលរដ្ឋ', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1, maxSci: 50, maxSoc: 100, maxGen: 50 },
+    { id: '9', name: 'ផែនដី និងបរិស្ថាន', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1, maxSci: 50, maxSoc: 50, maxGen: 50 },
+    { id: '10', name: 'ភាសាបរទេស', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1, maxSci: 100, maxSoc: 100, maxGen: 100 },
   ]);
 
   useEffect(() => {
@@ -476,11 +476,20 @@ export default function AdminExamStandardsPage() {
                     <tr>
                       <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">មុខវិជ្ជា (Subject)</th>
                       {coefficientView === '11-12-sci' ? (
-                        <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">មេគុណ (វិទ្យាសាស្ត្រ)</th>
+                        <>
+                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">មេគុណ (វិទ្យាសាស្ត្រ)</th>
+                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">ពិន្ទុអតិបរមា</th>
+                        </>
                       ) : coefficientView === '11-12-soc' ? (
-                        <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">មេគុណ (សង្គម)</th>
+                        <>
+                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">មេគុណ (សង្គម)</th>
+                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">ពិន្ទុអតិបរមា</th>
+                        </>
                       ) : (
-                        <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">មេគុណ (ទូទៅ)</th>
+                        <>
+                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">មេគុណ (ទូទៅ)</th>
+                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">ពិន្ទុអតិបរមា</th>
+                        </>
                       )}
                     </tr>
                   </thead>
@@ -509,17 +518,32 @@ export default function AdminExamStandardsPage() {
                           </div>
                         </td>
                         {coefficientView === '11-12-sci' ? (
-                          <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
-                            <input type="number" value={subject.sci} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].sci = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
-                          </td>
+                          <>
+                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
+                              <input type="number" value={subject.sci} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].sci = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
+                            </td>
+                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
+                              <input type="number" value={subject.maxSci || 0} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].maxSci = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
+                            </td>
+                          </>
                         ) : coefficientView === '11-12-soc' ? (
-                          <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
-                            <input type="number" value={subject.soc} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].soc = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
-                          </td>
+                          <>
+                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
+                              <input type="number" value={subject.soc} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].soc = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
+                            </td>
+                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
+                              <input type="number" value={subject.maxSoc || 0} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].maxSoc = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
+                            </td>
+                          </>
                         ) : (
-                          <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
-                            <input type="number" value={subject.gen} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].gen = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
-                          </td>
+                          <>
+                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
+                              <input type="number" value={subject.gen} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].gen = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
+                            </td>
+                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
+                              <input type="number" value={subject.maxGen || 0} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].maxGen = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
+                            </td>
+                          </>
                         )}
                       </tr>
                     ))}

@@ -495,3 +495,84 @@ export async function bulkArchiveStudents(studentIds: string[], academicYearId: 
     return { success: false, error: err?.message || 'Unknown error occurred' };
   }
 }
+
+export async function bulkTransferClass(studentIds: string[], newClassId: string, academicYearId: string) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    let targetYearId = academicYearId;
+    if (!targetYearId || targetYearId === 'fetch-active') {
+      const { data: yearData } = await supabase
+        .from('academic_years')
+        .select('id')
+        .eq('is_active', true)
+        .single();
+      if (yearData) targetYearId = yearData.id;
+    }
+
+    if (!targetYearId) return { success: false, error: 'No active academic year found.' };
+
+    const { error } = await supabase
+      .from('student_enrollments')
+      .update({
+        class_id: newClassId,
+        updated_at: new Date().toISOString()
+      })
+      .in('student_id', studentIds)
+      .eq('academic_year_id', targetYearId);
+
+    if (error) throw error;
+
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/admin/students');
+    revalidatePath('/homeroom');
+    
+    return { success: true };
+  } catch (err: any) {
+    console.error('Bulk transfer class error:', err);
+    return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
+
+export async function bulkUpdateStudentStatus(studentIds: string[], status: string, academicYearId: string) {
+  try {
+    const { requireAdmin } = await import('@/lib/auth-server');
+    await requireAdmin();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    let targetYearId = academicYearId;
+    if (!targetYearId || targetYearId === 'fetch-active') {
+      const { data: yearData } = await supabase
+        .from('academic_years')
+        .select('id')
+        .eq('is_active', true)
+        .single();
+      if (yearData) targetYearId = yearData.id;
+    }
+
+    if (!targetYearId) return { success: false, error: 'No active academic year found.' };
+
+    const { error } = await supabase
+      .from('student_enrollments')
+      .update({
+        enrollment_status: status,
+        updated_at: new Date().toISOString()
+      })
+      .in('student_id', studentIds)
+      .eq('academic_year_id', targetYearId);
+
+    if (error) throw error;
+
+    const { revalidatePath } = await import('next/cache');
+    revalidatePath('/admin/students');
+    
+    return { success: true };
+  } catch (err: any) {
+    console.error('Bulk update status error:', err);
+    return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
