@@ -12,8 +12,8 @@ const supabase = createClient(
 function getPersistentMenu() {
   return {
     keyboard: [
-      [{ text: "📊 មើលពិន្ទុខែចុងក្រោយ" }, { text: "⚠️ មើលវត្តមានខែនេះ" }],
-      [{ text: "👨‍👩‍👧‍👦 កូនៗរបស់ខ្ញុំ" }, { text: "➕ បន្ថែមកូនម្នាក់ទៀត" }]
+      [{ text: "📊 ពិន្ទុចុងក្រោយ" }, { text: "👨‍👩‍👧 កូនៗរបស់ខ្ញុំ" }],
+      [{ text: "➕ បន្ថែមកូនម្នាក់ទៀត" }, { text: "⚠️ រាយការណ៍បញ្ហា" }]
     ],
     resize_keyboard: true,
     is_persistent: true
@@ -120,6 +120,9 @@ export async function POST(req: NextRequest) {
           await sendMessage(chatId, `🔒 ដើម្បីសុវត្ថិភាពទិន្នន័យ សូមបញ្ចូល <b>ថ្ងៃខែឆ្នាំកំណើត</b> របស់កូនឈ្មោះ <b>${student.full_name}</b>\n\n👉 <i>ទម្រង់៖ ថ្ងៃ/ខែ/ឆ្នាំ (ឧទាហរណ៍៖ 11/06/2013)</i>`);
         }
       }
+      else if (data === 'check_scores') {
+        await handleScoreCheck(chatId);
+      }
 
       await answerCallbackQuery(callbackQuery.id);
       return NextResponse.json({ ok: true });
@@ -167,6 +170,12 @@ export async function POST(req: NextRequest) {
 
         const studentNames = matchedStudents.map((s: any) => s.full_name).join(', ');
         await sendMessage(chatId, `✅ ជោគជ័យ! អ្នកបានភ្ជាប់ជាមួយសិស្ស៖ <b>${studentNames}</b>។\n\nចាប់ពីពេលនេះតទៅ លោកអ្នកនឹងទទួលបានលទ្ធផលសិក្សាប្រចាំខែដោយស្វ័យប្រវត្តិ។`, getPersistentMenu());
+        await sendMessage(chatId, 'តើលោកអ្នកចង់ធ្វើអ្វីបន្តទៀត?', {
+          inline_keyboard: [
+            [{ text: "📊 មើលពិន្ទុឥឡូវនេះ", callback_data: "check_scores" }],
+            [{ text: "➕ បន្ថែមកូនម្នាក់ទៀត", callback_data: "manual_select_start" }]
+          ]
+        });
         return NextResponse.json({ ok: true });
       }
 
@@ -193,7 +202,12 @@ export async function POST(req: NextRequest) {
         const dobInput = text.trim();
         let parsedDate: Date | null = null;
         
-        const parts = dobInput.split(/[-\/]/);
+        const khmerNums: Record<string, string> = { '០':'0', '១':'1', '២':'2', '៣':'3', '៤':'4', '៥':'5', '៦':'6', '៧':'7', '៨':'8', '៩':'9' };
+        const normalizedDob = dobInput
+          .replace(/[០-៩]/g, (m: string) => khmerNums[m])
+          .replace(/[\s\.\-\\]/g, '/');
+        
+        const parts = normalizedDob.split('/').filter(Boolean);
         if (parts.length === 3) {
           if (parts[2].length === 4) { // DD/MM/YYYY
             parsedDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
@@ -222,6 +236,12 @@ export async function POST(req: NextRequest) {
 
           await supabase.from('telegram_bot_sessions').delete().eq('telegram_chat_id', chatId);
           await sendMessage(chatId, `🎉 អបអរសាទរ! លោកអ្នកបានភ្ជាប់ជាមួយសិស្ស <b>${studentName}</b> ដោយជោគជ័យ។`, getPersistentMenu());
+          await sendMessage(chatId, 'តើលោកអ្នកចង់ធ្វើអ្វីបន្តទៀត?', {
+            inline_keyboard: [
+              [{ text: "📊 មើលពិន្ទុឥឡូវនេះ", callback_data: "check_scores" }],
+              [{ text: "➕ បន្ថែមកូនម្នាក់ទៀត", callback_data: "manual_select_start" }]
+            ]
+          });
         } else {
           await sendMessage(chatId, '⚠️ ថ្ងៃខែឆ្នាំកំណើតមិនត្រឹមត្រូវឡើយ។ សូមសាកល្បងម្ដងទៀត ឬទាក់ទងគ្រូបន្ទុកថ្នាក់។', {
             inline_keyboard: [[{ text: "⬅️ ត្រឡប់ក្រោយ", callback_data: "manual_select_start" }]]
@@ -230,7 +250,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      if (text === '👨‍👩‍👧‍👦 កូនៗរបស់ខ្ញុំ') {
+      if (text === '👨‍👩‍👧 កូនៗរបស់ខ្ញុំ' || text === '👨‍👩‍👧‍👦 កូនៗរបស់ខ្ញុំ') {
         const { data: subs } = await supabase
           .from('telegram_parent_subscriptions')
           .select('students(full_name)')
@@ -246,31 +266,11 @@ export async function POST(req: NextRequest) {
           });
         }
       }
-      else if (text === '📊 មើលពិន្ទុខែចុងក្រោយ') {
-        const { data: subs } = await supabase.from('telegram_parent_subscriptions').select('student_id, students(full_name)').eq('telegram_chat_id', chatId).eq('is_active', true);
-        if (!subs || subs.length === 0) {
-          await sendMessage(chatId, 'សូមភ្ជាប់ឈ្មោះសិស្សជាមុនសិន។');
-          return NextResponse.json({ ok: true });
-        }
-
-        const studentIds = subs.map(s => s.student_id);
-        const { data: recentGrades } = await supabase.from('grades').select('*').in('student_id', studentIds).order('created_at', { ascending: false }).limit(studentIds.length);
-        
-        if (recentGrades && recentGrades.length > 0) {
-          let msg = `📊 <b>ពិន្ទុខែចុងក្រោយ៖</b>\n\n`;
-          for (const sub of subs) {
-            const g = recentGrades.find(r => r.student_id === sub.student_id);
-            if (g) {
-              msg += `👤 <b>${(sub.students as any).full_name}</b> (ខែ ${g.period})\nពិន្ទុសរុប៖ ${g.total_score}\n\n`;
-            }
-          }
-          await sendMessage(chatId, msg);
-        } else {
-          await sendMessage(chatId, 'មិនទាន់មានទិន្នន័យពិន្ទុនៅឡើយទេ។');
-        }
+      else if (text === '📊 ពិន្ទុចុងក្រោយ' || text === '📊 មើលពិន្ទុខែចុងក្រោយ') {
+        await handleScoreCheck(chatId);
       }
-      else if (text === '⚠️ មើលវត្តមានខែនេះ') {
-        await sendMessage(chatId, 'មុខងារនេះកំពុងស្ថិតក្នុងការរៀបចំ។');
+      else if (text === '⚠️ រាយការណ៍បញ្ហា' || text === '⚠️ មើលវត្តមានខែនេះ') {
+        await sendMessage(chatId, '⚠️ បើមានបញ្ហាទាក់ទងនឹងប្រព័ន្ធ សូមទាក់ទងទៅកាន់ទីចាត់ការសាលា ឬលោកគ្រូ/អ្នកគ្រូបន្ទុកថ្នាក់ផ្ទាល់។ សូមអរគុណ!');
       }
     }
     
@@ -278,5 +278,59 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Webhook Error:', error);
     return NextResponse.json({ ok: false });
+  }
+}
+
+async function handleScoreCheck(chatId: number) {
+  const { data: subs } = await supabase.from('telegram_parent_subscriptions').select('student_id, students(full_name)').eq('telegram_chat_id', chatId).eq('is_active', true);
+  if (!subs || subs.length === 0) {
+    await sendMessage(chatId, 'សូមភ្ជាប់ឈ្មោះសិស្សជាមុនសិន។');
+    return;
+  }
+
+  const studentIds = subs.map(s => s.student_id);
+  const { data: recentGrades } = await supabase.from('grades').select('*').in('student_id', studentIds).order('created_at', { ascending: false }).limit(studentIds.length);
+  
+  if (recentGrades && recentGrades.length > 0) {
+    let msg = `📊 <b>ពិន្ទុចុងក្រោយ៖</b>\n\n`;
+    for (const sub of subs) {
+      const g = recentGrades.find(r => r.student_id === sub.student_id);
+      if (g) {
+        // Calculate dynamic rank
+        const { data: classGrades } = await supabase.from('grades').select('student_id, total_score').eq('class_id', g.class_id).eq('period', g.period);
+        let rank = 'N/A';
+        if (classGrades) {
+          const sorted = classGrades.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
+          const idx = sorted.findIndex(s => s.student_id === sub.student_id);
+          if (idx !== -1) rank = (idx + 1).toString();
+        }
+
+        // Calculate average
+        const subjectCount = g.scores ? Object.keys(g.scores).length : 0;
+        let averageStr = 'N/A';
+        if (subjectCount > 0 && g.total_score) {
+          averageStr = (g.total_score / subjectCount).toFixed(2);
+        }
+
+        // Fetch attendance
+        const { data: attendance } = await supabase.from('attendance_records').select('status').eq('student_id', sub.student_id).like('date', `${g.period}%`);
+        let present = 0, excused = 0, unexcused = 0;
+        if (attendance) {
+          present = attendance.filter(a => a.status === 'present').length;
+          excused = attendance.filter(a => a.status === 'excused').length;
+          unexcused = attendance.filter(a => a.status === 'unexcused').length;
+        }
+
+        msg += `👤 <b>${(sub.students as any).full_name}</b> (ខែ ${g.period})\n`;
+        msg += `🥇 <b>ចំណាត់ថ្នាក់៖</b> ${rank}\n`;
+        msg += `📈 <b>ពិន្ទុសរុប៖</b> ${g.total_score || 0}\n`;
+        msg += `⭐️ <b>មធ្យមភាគ៖</b> ${averageStr}\n`;
+        msg += `📅 <b>អវត្តមាន៖</b> ច្បាប់ ${excused} ដង | ឥតច្បាប់ ${unexcused} ដង\n`;
+        msg += `------------------------------\n`;
+      }
+    }
+    await sendMessage(chatId, msg);
+  } else {
+    await sendMessage(chatId, 'មិនទាន់មានទិន្នន័យពិន្ទុនៅឡើយទេ។');
   }
 }
