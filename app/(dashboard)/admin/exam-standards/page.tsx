@@ -231,7 +231,7 @@ export default function AdminExamStandardsPage() {
                 <p className="text-[12px] text-slate-400 font-medium mt-1">គ្រប់គ្រងបញ្ជីមុខវិជ្ជា និងកំណត់កម្រិតថ្នាក់បង្រៀនដោយផ្ទាល់</p>
               </div>
               <button 
-                onClick={() => { setGlobalSubjects([...globalSubjects, { id: Date.now().toString(), name: 'មុខវិជ្ជាថ្មី', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1 }]); setHasUnsavedChanges(true); }}
+                onClick={() => { setGlobalSubjects([...globalSubjects, { id: Date.now().toString(), name: 'មុខវិជ្ជាថ្មី', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1, maxSci: 50, maxSoc: 50, maxGen: 50 }]); setHasUnsavedChanges(true); }}
                 className="px-4 py-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:bg-slate-50 rounded-full text-[13px] font-bold transition-all flex items-center gap-2 shadow-sm whitespace-nowrap cursor-pointer"
               >
                 <Plus className="w-4 h-4 text-emerald-600" /> បន្ថែមមុខវិជ្ជា
@@ -440,7 +440,7 @@ export default function AdminExamStandardsPage() {
                       </p>
                     </div>
                     <button 
-                      onClick={() => { setGlobalSubjects([...globalSubjects, { id: Date.now().toString(), name: '', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1 }]); setHasUnsavedChanges(true); }}
+                      onClick={() => { setGlobalSubjects([...globalSubjects, { id: Date.now().toString(), name: '', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1, maxSci: 50, maxSoc: 50, maxGen: 50 }]); setHasUnsavedChanges(true); }}
                       className="px-3 py-1.5 bg-blue-50 text-[#155EEF] hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 border border-blue-100 shrink-0 shadow-sm cursor-pointer"
                     >
                       <Plus className="w-3 h-3" /> បន្ថែមមុខវិជ្ជា
