@@ -1,5 +1,5 @@
 import { useState, useEffect, useDeferredValue } from 'react';
-
+import { toggleStaffStatusAction, resetStaffPasswordAction, deleteStaffPermanentlyAction, updateStaffProfileAction } from './actions';
 export interface Account {
   id: string;
   username: string;
@@ -73,18 +73,10 @@ export function useTeachers() {
     setAccounts(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a));
     
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action: 'toggle_status', updates: { status: newStatus } })
-      });
-      if (!res.ok) {
-        // Revert on failure
-        setAccounts(prev => prev.map(a => a.id === id ? { ...a, status: currentStatus } : a));
-        alert('បរាជ័យក្នុងការផ្លាស់ប្តូរស្ថានភាព');
-      }
-    } catch (e) {
+      await toggleStaffStatusAction(id, newStatus === 'សកម្ម');
+    } catch (e: any) {
       console.error(e);
+      alert(e.message || 'បរាជ័យក្នុងការផ្លាស់ប្តូរស្ថានភាព');
       setAccounts(prev => prev.map(a => a.id === id ? { ...a, status: currentStatus } : a));
     }
   };
@@ -93,35 +85,26 @@ export function useTeachers() {
     if (!window.confirm('តើអ្នកពិតជាចង់កំណត់ពាក្យសម្ងាត់ឡើងវិញមែនទេ?')) return;
     
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action: 'reset_password' })
-      });
-      const data = await res.json();
-      if (res.ok && data.newPassword) {
-        alert(`ពាក្យសម្ងាត់ថ្មី (New PIN) គឺ: ${data.newPassword}\nសូមថតទុកឬផ្ញើឱ្យម្ចាស់គណនី។`);
+      const { newPassword } = await resetStaffPasswordAction(id);
+      if (newPassword) {
+        alert(`ពាក្យសម្ងាត់ថ្មី (New PIN) គឺ: ${newPassword}\nសូមថតទុកឬផ្ញើឱ្យម្ចាស់គណនី។`);
       } else {
         alert('បរាជ័យក្នុងការកំណត់ពាក្យសម្ងាត់');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert('មានបញ្ហាក្នុងការកំណត់ពាក្យសម្ងាត់');
+      alert(e.message || 'មានបញ្ហាក្នុងការកំណត់ពាក្យសម្ងាត់');
     }
   };
 
   const handleDeleteTeacher = async (id: string, name: string) => {
     if (!window.confirm(`តើអ្នកពិតជាចង់លុបគណនី "${name}" មែនទេ?`)) return;
     try {
-      const res = await fetch(`/api/admin/users?id=${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setAccounts(prev => prev.filter(a => a.id !== id));
-      } else {
-        const data = await res.json();
-        alert(data.error || 'មិនអាចលុបគណនីនេះបានទេ');
-      }
-    } catch (e) {
+      await deleteStaffPermanentlyAction(id);
+      setAccounts(prev => prev.filter(a => a.id !== id));
+    } catch (e: any) {
       console.error('Failed to delete teacher:', e);
+      alert(e.message || 'មិនអាចលុបគណនីនេះបានទេ');
     }
   };
 
@@ -146,19 +129,16 @@ export function useTeachers() {
     setAccounts(prev => prev.map(a => a.id === id ? { ...a, ...updates, roleKh: computedRoleKh } : a));
 
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action: 'update_profile', updates })
+      await updateStaffProfileAction(id, {
+        role: updates.role,
+        subject: updates.subject,
+        phone: updates.phone,
+        full_name: updates.name
       });
-      if (!res.ok) {
-        // Revert
-        setAccounts(prev => prev.map(a => a.id === id ? originalAccount : a));
-        alert('បរាជ័យក្នុងការកែប្រែព័ត៌មាន');
-      }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       setAccounts(prev => prev.map(a => a.id === id ? originalAccount : a));
+      alert(e.message || 'បរាជ័យក្នុងការកែប្រែព័ត៌មាន');
     } finally {
       setSavingTeacherId(null);
     }

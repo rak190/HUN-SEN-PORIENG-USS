@@ -58,7 +58,7 @@ export async function GET() {
         role: p.role || 'teacher',
         roleKh: getRoleKh(p.role || 'teacher'),
         school: p.school_code || 'Porieng-2026',
-        status: authUser?.banned_until ? 'បានផ្អាក' : 'សកម្ម',
+        status: p.is_active === false ? 'បានផ្អាក' : 'សកម្ម',
         lastLogin: authUser?.last_sign_in_at ? new Date(authUser.last_sign_in_at).toLocaleTimeString() : 'មិនធ្លាប់',
         phone: p.phone || 'គ្មានលេខទូរស័ព្ទ',
         subject: p.subject || 'មិនបញ្ជាក់',

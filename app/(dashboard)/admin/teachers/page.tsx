@@ -83,7 +83,7 @@ export default function TeacherAccountsPage() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2.5">
             <Users className="w-8 h-8 text-[#155EEF]" />
-            <span>គ្រប់គ្រងគណនីគ្រូបង្រៀន</span>
+            <span>បុគ្គលិក និងគ្រូបង្រៀន (Faculty & Staff)</span>
           </h1>
           <p className="text-xs font-semibold text-[#64748B] mt-1">
             បញ្ជីគណនីសរុប (Master Account Directory) សម្រាប់គ្រប់គ្រងសិទ្ធិបុគ្គលិក
