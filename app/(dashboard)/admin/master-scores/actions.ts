@@ -74,55 +74,21 @@ export async function rollbackGradeSnapshot(snapshotId: string, academicYearId: 
   }
 
   try {
-    // 1. Fetch snapshot
-    const { data: snapshot, error: snapErr } = await supabase
-      .from('grade_snapshots')
-      .select('*')
-      .eq('id', snapshotId)
-      .single();
+    const { data, error } = await supabase.rpc('rollback_grade_snapshot_atomic', {
+      p_snapshot_id: snapshotId,
+      p_academic_year_id: academicYearId,
+    });
 
-    if (snapErr || !snapshot) throw new Error('រកមិនឃើញ Snapshot នេះទេ');
-
-    const period = snapshot.period;
-    const backupGrades: any[] = snapshot.grades_payload || [];
-
-    // 2. Identify classes involved
-    const classIdsInvolved = [...new Set(backupGrades.map(g => g.class_id))];
-
-    // 3. Delete current grades for this period in these classes (and this year, for absolute safety)
-    if (classIdsInvolved.length > 0) {
-      for (const cid of classIdsInvolved) {
-        await supabase.from('grades').delete()
-          .eq('class_id', cid)
-          .eq('period', period)
-          .eq('academic_year_id', academicYearId);
-      }
-    } else {
-      await supabase.from('grades').delete()
-        .eq('period', period)
-        .eq('academic_year_id', academicYearId);
+    if (error) {
+      throw new Error(`បរាជ័យក្នុងការស្ដារពិន្ទុ: ${error.message} (ទិន្នន័យដើមត្រូវបានរក្សាទុកដដែល)`);
     }
 
-    // 4. Restore original records
-    if (backupGrades.length > 0) {
-      // Remove id if present to avoid UUID conflict or keep original id
-      const cleanRecords = backupGrades.map(({ id, created_at, updated_at, ...rest }) => rest);
-      const { error: restoreErr } = await supabase.from('grades').insert(cleanRecords);
-      if (restoreErr) throw restoreErr;
-    }
-
-    // 5. Create audit log of the rollback action
-    const { createAdminClient } = await import('@/lib/supabase/admin');
-    const adminClient = createAdminClient();
-    if (adminClient) {
-      await adminClient.from('audit_logs').insert({
-        user_id: user?.id || null,
-        action: 'rollback_grades',
-        details: { snapshotId, period, restoredCount: backupGrades.length }
-      });
-    }
-
-    return { success: true, count: backupGrades.length, period };
+    return { 
+      success: true, 
+      count: data.restored_count, 
+      period: data.period,
+      message: `បានស្ដារពិន្ទុត្រឡប់ក្រោយដោយជោគជ័យ (សរុប ${data.restored_count} កំណត់ត្រា)` 
+    };
   } catch (err: any) {
     console.error('Rollback failed:', err);
     return { success: false, error: err.message };

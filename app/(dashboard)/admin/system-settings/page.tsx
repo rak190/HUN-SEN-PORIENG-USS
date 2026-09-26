@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   Server, Shield, Lock, TerminalSquare, RefreshCcw, KeyRound,
   Database, ShieldAlert, CheckCircle2, AlertTriangle, 
-  History, Download, RefreshCw, FileText, Search, Activity, Trash2
+  History, Download, RefreshCw, FileText, Search, Activity, Trash2, XCircle
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 // Real logs are fetched from /api/admin/audit-logs
 export default function MergedSystemPage() {
@@ -22,6 +23,10 @@ export default function MergedSystemPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
+  
+  // Real-time Status State
+  const [dbStatus, setDbStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [dbLatency, setDbLatency] = useState<number | null>(null);
 
   const fetchLogs = async () => {
     setLoadingLogs(true);
@@ -38,9 +43,26 @@ export default function MergedSystemPage() {
     }
   };
 
+  const checkDbStatus = async () => {
+    setDbStatus('checking');
+    try {
+      const supabase = createClient();
+      const start = performance.now();
+      const { error } = await supabase.from('school_information').select('id').limit(1);
+      const latency = Math.round(performance.now() - start);
+      if (error) throw error;
+      setDbStatus('online');
+      setDbLatency(latency);
+    } catch (err) {
+      setDbStatus('offline');
+      setDbLatency(null);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'logs') {
       fetchLogs();
+      checkDbStatus();
     }
   }, [activeTab]);
 
@@ -294,59 +316,59 @@ export default function MergedSystemPage() {
               <div className="lg:col-span-4 space-y-6">
                 <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-4 mb-5">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                      <Server className="w-6 h-6" />
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${dbStatus === 'online' ? 'bg-emerald-50 text-emerald-600' : dbStatus === 'checking' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}`}>
+                      {dbStatus === 'online' ? <Server className="w-6 h-6" /> : dbStatus === 'checking' ? <RefreshCw className="w-6 h-6 animate-spin" /> : <XCircle className="w-6 h-6" />}
                     </div>
                     <div>
                       <h3 className="font-extrabold text-slate-800 text-lg">ស្ថានភាពម៉ាស៊ីនមេ</h3>
-                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100 mt-1 inline-block uppercase tracking-wider">All Operational</span>
+                      <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border mt-1 inline-block uppercase tracking-wider ${dbStatus === 'online' ? 'text-emerald-700 bg-emerald-50 border-emerald-100' : dbStatus === 'checking' ? 'text-amber-700 bg-amber-50 border-amber-100' : 'text-rose-700 bg-rose-50 border-rose-100'}`}>
+                        {dbStatus === 'online' ? 'ប្រព័ន្ធដំណើរការធម្មតា (Online)' : dbStatus === 'checking' ? 'កំពុងពិនិត្យ...' : 'មិនអាចភ្ជាប់ទៅកាន់ Database បាន'}
+                      </span>
                     </div>
                   </div>
                   <div className="space-y-4 pt-5 border-t border-slate-100">
                     <div className="flex justify-between items-center text-sm font-bold text-slate-700">
-                      <span className="text-slate-500">Database Uptime</span>
-                      <span className="text-[#155EEF]">99.99%</span>
+                      <span className="text-slate-500">Database Provider</span>
+                      <span className="text-[#155EEF]">Supabase Cloud (PostgreSQL)</span>
                     </div>
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-700">
-                      <span className="text-slate-500">Storage Used</span>
-                      <span className="text-[#155EEF]">450 MB / 5 GB</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-700">
-                      <span className="text-slate-500">API Latency</span>
-                      <span className="text-emerald-600">42ms</span>
-                    </div>
+                    {dbLatency !== null && (
+                      <div className="flex justify-between items-center text-sm font-bold text-slate-700">
+                        <span className="text-slate-500">API Latency</span>
+                        <span className="text-emerald-600">{dbLatency} ms</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="bg-[#FFCF59] p-6 rounded-[24px] border border-yellow-400/30 shadow-sm">
-                  <h3 className="font-extrabold text-yellow-950 text-lg mb-5 flex items-center gap-2">
-                    <Database className="w-5 h-5" /> ប្រវត្តិបម្រុងទុក (Backups)
+                  <h3 className="font-extrabold text-yellow-950 text-lg mb-2 flex items-center gap-2">
+                    <Database className="w-5 h-5" /> ការទាញយកទិន្នន័យបម្រុងទុក
                   </h3>
+                  <p className="text-sm text-yellow-900 mb-5 font-medium leading-relaxed">
+                    ទាញយកឯកសារបម្រុងទុកទិន្នន័យសាលាទាំងមូលជាទម្រង់ JSON រក្សាទុកក្នុងកុំព្យូទ័ររបស់អ្នក
+                  </p>
+                  
                   <div className="space-y-3">
-                    <div className="bg-white/80 p-4 rounded-2xl flex items-center justify-between hover:bg-white transition-colors cursor-pointer border border-yellow-100 shadow-sm group">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-yellow-100 rounded-lg text-yellow-700">
-                          <FileText className="w-4 h-4" />
+                    {logs.filter(l => l.action === 'DATABASE_BACKUP').length > 0 ? (
+                      logs.filter(l => l.action === 'DATABASE_BACKUP').slice(0, 3).map((log, i) => (
+                        <div key={i} className="bg-white/80 p-4 rounded-2xl flex items-center justify-between hover:bg-white transition-colors cursor-default border border-yellow-100 shadow-sm group">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-yellow-100 rounded-lg text-yellow-700">
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-slate-800">Backup by {log.user}</div>
+                              <div className="text-xs text-slate-500 font-semibold mt-0.5">{log.time}</div>
+                            </div>
+                          </div>
+                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                         </div>
-                        <div>
-                          <div className="text-sm font-bold text-slate-800">backup_2026_07_20.sql</div>
-                          <div className="text-xs text-slate-500 font-semibold mt-0.5">45 MB • Auto-Backup</div>
-                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-6 bg-white/50 rounded-2xl border border-yellow-200 border-dashed">
+                        <div className="text-sm font-bold text-yellow-800">មិនទាន់មានកំណត់ត្រាពីមុន</div>
                       </div>
-                      <Download className="w-5 h-5 text-slate-300 group-hover:text-[#155EEF] transition-colors" />
-                    </div>
-                    <div className="bg-white/80 p-4 rounded-2xl flex items-center justify-between hover:bg-white transition-colors cursor-pointer border border-yellow-100 shadow-sm group">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-yellow-100 rounded-lg text-yellow-700">
-                          <FileText className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-bold text-slate-800">backup_2026_07_13.sql</div>
-                          <div className="text-xs text-slate-500 font-semibold mt-0.5">42 MB • Manual</div>
-                        </div>
-                      </div>
-                      <Download className="w-5 h-5 text-slate-300 group-hover:text-[#155EEF] transition-colors" />
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
