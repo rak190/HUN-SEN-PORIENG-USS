@@ -97,9 +97,8 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'principal-reports', label: 'School Reports', khmerLabel: 'របាយការណ៍សាលា', href: '/principal/reports', icon: BarChart3, roles: ['principal'] },
   { id: 'principal-announcements', label: 'Announcements', khmerLabel: 'សេចក្តីជូនដំណឹង', href: '/principal/announcements', icon: Megaphone, roles: ['principal'], badge: 'ថ្មី' },
   { id: 'principal-settings', label: 'School Settings', khmerLabel: 'ការកំណត់សាលា', href: '/principal/settings', icon: Building2, roles: ['principal'] },
-
   // --- ADMIN TABS (ICT Focal Teacher / GIEP Assistant) ---
-  { id: 'admin-dashboard', label: 'Dashboard', khmerLabel: 'ផ្ទាំងគ្រប់គ្រង', href: '/admin', icon: LayoutDashboard, roles: ['admin'] },
+  { id: 'admin-dashboard', label: 'Dashboard', khmerLabel: 'ផ្ទាំងគ្រប់គ្រង', href: '/admin', icon: LayoutDashboard, roles: ['admin', 'principal'] },
   {
     id: 'admin-structure-group', label: 'Structure', khmerLabel: 'រចនាសម្ព័ន្ធ', icon: Building2, roles: ['admin'],
     children: [
@@ -116,13 +115,13 @@ const MENU_ITEMS: MenuItem[] = [
     ]
   },
   {
-    id: 'admin-data-group', label: 'Data', khmerLabel: 'ទិន្នន័យ', icon: Database, roles: ['admin'],
+    id: 'admin-data-group', label: 'Data', khmerLabel: 'ទិន្នន័យ', icon: Database, roles: ['admin', 'principal'],
     children: [
-      { id: 'admin-students', label: 'Student List', khmerLabel: 'បញ្ជីរាយនាមសិស្ស', href: '/admin/students', icon: GraduationCap, roles: ['admin'] },
-      { id: 'admin-scores', label: 'Exam Scores', khmerLabel: 'ពិន្ទុប្រលង', href: '/admin/master-scores', icon: FileSpreadsheet, roles: ['admin'] },
-      { id: 'admin-attendance', label: 'Total Attendance', khmerLabel: 'វត្តមានសរុប', href: '/admin/attendance', icon: Calendar, roles: ['admin'] },
-      { id: 'admin-certificates', label: 'Certificates', khmerLabel: 'បណ្ណសរសើរ', href: '/admin/certificates', icon: Award, roles: ['admin'] },
-      { id: 'admin-moeys-reports', label: 'Reports', khmerLabel: 'របាយការណ៍', href: '/admin/moeys-reports', icon: FileText, roles: ['admin'] },
+      { id: 'admin-students', label: 'Student List', khmerLabel: 'បញ្ជីរាយនាមសិស្ស', href: '/admin/students', icon: GraduationCap, roles: ['admin', 'principal'] },
+      { id: 'admin-scores', label: 'Exam Scores', khmerLabel: 'ពិន្ទុប្រលង', href: '/admin/master-scores', icon: FileSpreadsheet, roles: ['admin', 'principal'] },
+      { id: 'admin-attendance', label: 'Total Attendance', khmerLabel: 'វត្តមានសរុប', href: '/admin/attendance', icon: Calendar, roles: ['admin', 'principal'] },
+      { id: 'admin-certificates', label: 'Certificates', khmerLabel: 'បណ្ណសរសើរ', href: '/admin/certificates', icon: Award, roles: ['admin', 'principal'] },
+      { id: 'admin-moeys-reports', label: 'Reports', khmerLabel: 'របាយការណ៍', href: '/admin/moeys-reports', icon: FileText, roles: ['admin', 'principal'] },
     ]
   },
 

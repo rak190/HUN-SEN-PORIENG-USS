@@ -35,7 +35,7 @@ export async function executeStudentLifecycleTransition(
     // 1. Verify student exists
     const { data: student, error: stdErr } = await adminClient
       .from('students')
-      .select('id, full_name, class_id')
+      .select('id, full_name')
       .eq('id', candidate.studentId)
       .single();
 
@@ -86,11 +86,10 @@ export async function executeStudentLifecycleTransition(
 
       if (enrollErr) throw enrollErr;
 
-      // Update current class pointer on students table
+      // Update current status pointer on students table
       await adminClient
         .from('students')
         .update({
-          class_id: candidate.targetClassId,
           status: 'active',
           updated_at: new Date().toISOString()
         })
@@ -100,7 +99,6 @@ export async function executeStudentLifecycleTransition(
       await adminClient
         .from('students')
         .update({
-          class_id: null,
           status: 'graduated',
           updated_at: new Date().toISOString()
         })
@@ -110,7 +108,6 @@ export async function executeStudentLifecycleTransition(
       await adminClient
         .from('students')
         .update({
-          class_id: null,
           status: candidate.action === 'drop_out' ? 'dropped_out' : 'transferred',
           updated_at: new Date().toISOString()
         })

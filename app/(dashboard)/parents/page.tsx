@@ -36,13 +36,23 @@ export default function ParentsPage() {
     
     async function loadData() {
       try {
-        const [studentResult, contactResult] = await Promise.all([
-          supabase.from('students').select('id, full_name').eq('class_id', activeClass!.id).eq('is_active', true).order('full_name'),
-          supabase.from('parent_contacts').select('*, students!inner(full_name, parent_phone, class_id)').eq('students.class_id', activeClass!.id).order('created_at', { ascending: false }),
-        ]);
-        if (studentResult.data) setStudents(studentResult.data);
-        if (contactResult.data) setContacts(contactResult.data as unknown as ContactRow[]);
-        else setContacts([]);
+        const { data: stdData } = await supabase.from('active_class_rosters').select('id, full_name').eq('enrollment_class_id', activeClass!.id).order('full_name');
+        
+        let contactsData = [];
+        if (stdData && stdData.length > 0) {
+          setStudents(stdData);
+          const studentIds = stdData.map(s => s.id);
+          const { data: cData } = await supabase
+            .from('parent_contacts')
+            .select('*, students(full_name, parent_phone)')
+            .in('student_id', studentIds)
+            .order('created_at', { ascending: false });
+          if (cData) contactsData = cData;
+        } else {
+          setStudents([]);
+        }
+        
+        setContacts(contactsData as unknown as ContactRow[]);
       } catch (err) {
         console.error('Error loading parent contacts:', err);
         setContacts([]);

@@ -11,9 +11,9 @@ export const StudentAPI = {
    */
   async getActiveStudentsByClass(supabase: SupabaseClient, classId: string, selectFields = '*'): Promise<Student[]> {
     const { data, error } = await supabase
-      .from('students')
+      .from('active_class_rosters')
       .select(selectFields)
-      .eq('class_id', classId)
+      .eq('enrollment_class_id', classId)
       .eq('is_active', true)
       .order('full_name', { ascending: true });
 
@@ -48,9 +48,9 @@ export const StudentAPI = {
    */
   async getClassSize(supabase: SupabaseClient, classId: string): Promise<number> {
     const { count, error } = await supabase
-      .from('students')
+      .from('active_class_rosters')
       .select('id', { count: 'exact', head: true })
-      .eq('class_id', classId)
+      .eq('enrollment_class_id', classId)
       .eq('is_active', true);
 
     if (error) {
@@ -62,17 +62,32 @@ export const StudentAPI = {
   },
 
   /**
-   * Disables (soft-deletes) a student.
+   * Gets a specific student by ID with their active enrollment.
    */
-  async softDeleteStudent(supabase: SupabaseClient, studentId: string): Promise<void> {
-    const { error } = await supabase
-      .from('students')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq('id', studentId);
+  async getStudentById(supabase: SupabaseClient, studentId: string): Promise<Student | null> {
+    const { data, error } = await supabase
+      .from('active_class_rosters')
+      .select('*')
+      .eq('id', studentId)
+      .single();
 
-    if (error) {
-      console.error('Error soft deleting student:', error);
+    if (error && error.code !== 'PGRST116') { // PGRST116 is not found
+      console.error('Error fetching student:', error);
       throw error;
     }
+    
+    // If not found in active rosters, fallback to base students table
+    if (!data) {
+       const { data: baseData, error: baseError } = await supabase
+         .from('students')
+         .select('*')
+         .eq('id', studentId)
+         .single();
+         
+       if (baseError && baseError.code !== 'PGRST116') throw baseError;
+       return (baseData as unknown as Student) || null;
+    }
+
+    return (data as unknown as Student) || null;
   }
 };

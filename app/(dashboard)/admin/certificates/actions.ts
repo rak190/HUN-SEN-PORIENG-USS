@@ -1,10 +1,10 @@
 'use server';
 
 import { createAdminClient } from '@/lib/supabase/admin';
-import { requireAdmin } from '@/lib/auth-server';
+import { requirePrincipal } from '@/lib/auth-server';
 
 export async function resetCertificateTemplates() {
-  await requireAdmin();
+  await requirePrincipal();
   const adminClient = createAdminClient();
   if (!adminClient) {
     return { success: false, error: 'Admin client not configured' };

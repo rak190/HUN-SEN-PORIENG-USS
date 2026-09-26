@@ -197,7 +197,7 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
       try {
         await supabase.from('student_health_records').upsert({
           student_id: studentId,
-          class_id: validatedPayload.class_id || dbRecord.class_id,
+          class_id: validatedPayload.class_id || undefined,
           academic_year_id: validatedPayload.academic_year_id,
           recorded_date: today,
           weight_kg: validatedPayload.weight_kg ? Number(validatedPayload.weight_kg) : null,

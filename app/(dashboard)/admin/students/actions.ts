@@ -97,11 +97,11 @@ export async function adminBasicRegisterAction(payload: {
   academic_year_id: string;
 }) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    const { user } = await requireAdmin(); // strict admin requirement
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    const { user } = await requirePrincipal(); // strict admin requirement
     const supabase = await createClient(); // this uses the service role for admin routes? 
     // Wait, createAdminClient is usually used for bypass RLS. Let's import it.
-    // Actually, createClient is fine because requireAdmin ensures we are admin, but let's see what was imported.
+    // Actually, createClient is fine because requirePrincipal ensures we are admin, but let's see what was imported.
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const adminSupabase = createAdminClient();
 
@@ -129,8 +129,8 @@ export async function adminBasicRegisterAction(payload: {
 
 export async function processGiepMatchingAction(records: any[], academic_year_id: string) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -186,8 +186,8 @@ export async function processGiepCommitAction(
   academic_year_id: string
 ) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
     
@@ -247,8 +247,8 @@ export async function processGiepCommitAction(
 
 export async function bulkAssignClassAction(studentIds: string[], targetClassId: string, academicYearId: string) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -279,8 +279,8 @@ export async function bulkAssignClassAction(studentIds: string[], targetClassId:
 
 export async function batchRegisterBasicStudents(studentsData: any[], academicYearId: string) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    const { user } = await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    const { user } = await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -330,8 +330,8 @@ export async function batchRegisterBasicStudents(studentsData: any[], academicYe
 
 export async function getPendingStudentRequests() {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -362,8 +362,8 @@ export async function approveStudentRequest(
   adminNotes?: string
 ) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    const { user } = await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    const { user } = await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -401,8 +401,8 @@ export async function approveStudentRequest(
 
 export async function rejectStudentRequest(requestId: string, adminNotes?: string) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -430,8 +430,8 @@ export async function rejectStudentRequest(requestId: string, adminNotes?: strin
 
 export async function archiveStudent(studentId: string, academicYearId: string) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -470,8 +470,8 @@ export async function archiveStudent(studentId: string, academicYearId: string) 
 
 export async function bulkArchiveStudents(studentIds: string[], academicYearId: string) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -510,8 +510,8 @@ export async function bulkArchiveStudents(studentIds: string[], academicYearId: 
 
 export async function bulkTransferClass(studentIds: string[], newClassId: string, academicYearId: string) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -551,8 +551,8 @@ export async function bulkTransferClass(studentIds: string[], newClassId: string
 
 export async function bulkUpdateStudentStatus(studentIds: string[], status: string, academicYearId: string) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 

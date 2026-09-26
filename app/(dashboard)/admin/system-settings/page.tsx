@@ -15,6 +15,7 @@ export default function MergedSystemPage() {
   const [isSystemUnlocked, setIsSystemUnlocked] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Logs State
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -55,6 +56,40 @@ export default function MergedSystemPage() {
       setIsUnlocking(false);
       setPasswordInput('');
     }, 500);
+  };
+
+  const handleDatabaseBackup = async () => {
+    setIsExporting(true);
+    try {
+      const res = await fetch('/api/admin/backup');
+      if (!res.ok) throw new Error('Backup failed');
+      
+      const blob = await res.blob();
+      const fileSize = (blob.size / 1024 / 1024).toFixed(2); // MB
+      
+      // Get filename from header if possible, else use default
+      let filename = `backup-hunsen-porieng-${new Date().toISOString().slice(0, 10)}.json`;
+      const contentDisposition = res.headers.get('Content-Disposition');
+      if (contentDisposition && contentDisposition.includes('filename="')) {
+        filename = contentDisposition.split('filename="')[1].split('"')[0];
+      }
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      alert(`បម្រុងទុកទិន្នន័យបានជោគជ័យ។ ទំហំឯកសារ: ${fileSize} MB`);
+    } catch (error) {
+      console.error(error);
+      alert('មានបញ្ហាក្នុងការបម្រុងទុកទិន្នន័យ។');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleBackup = () => {
@@ -200,18 +235,23 @@ export default function MergedSystemPage() {
                       <h4 className="font-extrabold text-rose-900">លុបឃ្លាំងទិន្នន័យបណ្តោះអាសន្ន (Clear Cache)</h4>
                       <p className="text-xs text-rose-600 font-bold mt-1">សម្អាតទិន្នន័យចាស់ៗ ដើម្បីអោយប្រព័ន្ធដើរលឿនជាងមុន</p>
                     </div>
-                    <button onClick={() => alert('Cache cleared!')} className="px-5 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-xs transition-colors border border-rose-200 whitespace-nowrap cursor-pointer">
-                      សម្អាត Cache
+                    <button disabled className="px-5 py-2.5 bg-rose-100/50 text-rose-400 font-bold rounded-xl text-xs border border-rose-100 whitespace-nowrap cursor-not-allowed">
+                      មុខងារកំពុងអភិវឌ្ឍ (Coming Soon)
                     </button>
                   </div>
                   
                   <div className="bg-white p-5 rounded-2xl border border-rose-100 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                       <h4 className="font-extrabold text-rose-900">ទាញយកទិន្នន័យទាំងអស់ (Database Dump)</h4>
-                      <p className="text-xs text-rose-600 font-bold mt-1">Backup ទិន្នន័យទាំងអស់ជាទម្រង់ SQL Format</p>
+                      <p className="text-xs text-rose-600 font-bold mt-1">Backup ទិន្នន័យទាំងអស់ជាទម្រង់ JSON Format</p>
                     </div>
-                    <button onClick={() => alert('Database dump initiated!')} className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition-colors whitespace-nowrap cursor-pointer">
-                      ទាញយក SQL
+                    <button 
+                      onClick={handleDatabaseBackup}
+                      disabled={isExporting}
+                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      {isExporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      {isExporting ? 'កំពុងទាញយក...' : 'ទាញយក JSON Backup'}
                     </button>
                   </div>
                 </div>

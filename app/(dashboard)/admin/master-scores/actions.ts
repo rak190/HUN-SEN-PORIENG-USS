@@ -437,8 +437,8 @@ export async function generateLiveExamGoogleSheetAction(examMonth: string, acade
 
 export async function uploadMasterScoresAction(payload: any[], period: string) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -466,8 +466,8 @@ export async function uploadMasterScoresAction(payload: any[], period: string) {
 
 export async function publishScoresAction(period: string, academicYearId: string) {
   try {
-    const { requireAdmin } = await import('@/lib/auth-server');
-    await requireAdmin();
+    const { requirePrincipal } = await import('@/lib/auth-server');
+    await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 

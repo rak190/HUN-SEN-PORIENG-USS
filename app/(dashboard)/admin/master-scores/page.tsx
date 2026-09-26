@@ -16,6 +16,7 @@ import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
 import { calculateSummaryScores, publishScoresAction } from './actions';
 import { RotateCcw, History, Printer } from 'lucide-react';
+import { BroadcastStatusModal } from '@/components/admin/BroadcastStatusModal';
 
 export default function MasterScoresPage() {
   const [loading, setLoading] = useState(true);
@@ -134,6 +135,10 @@ export default function MasterScoresPage() {
     fetchStats();
   }, [selectedPeriod]);
 
+  const [broadcastSummary, setBroadcastSummary] = useState<any>(null);
+  const [isBroadcastingModalOpen, setIsBroadcastingModalOpen] = useState(false);
+  const [isRetryingBroadcast, setIsRetryingBroadcast] = useState(false);
+
   const handlePublishConfirm = async (shouldBroadcast: boolean) => {
     if (!activeYearId) {
        alert('រកមិនឃើញឆ្នាំសិក្សាសកម្មទេ');
@@ -144,15 +149,31 @@ export default function MasterScoresPage() {
       const result = await publishScoresAction(selectedPeriod, activeYearId);
       if (!result.success) throw new Error(result.error);
       
-      alert('បានបោះពុម្ពផ្សាយពិន្ទុជោគជ័យ!');
-      
       // trigger broadcast
       if (shouldBroadcast) {
-        // Find all classIds that had drafts published
         const classesWithDrafts = classesStatus.filter(c => c.status === 'draft');
-        for (const c of classesWithDrafts) {
-           await handleBroadcastClassSilently(c.id);
+        const classIds = classesWithDrafts.map(c => c.id);
+        
+        if (classIds.length > 0) {
+          const res = await fetch('/api/admin/broadcast-scores/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ class_ids: classIds, month: selectedPeriod })
+          });
+          
+          const summary = await res.json();
+          setBroadcastSummary(summary);
+          
+          if (summary.isFullSuccess) {
+            alert('បានបោះពុម្ព និងផ្សាយពិន្ទុជោគជ័យគ្រប់ចំនួន!');
+          } else {
+            setIsBroadcastingModalOpen(true);
+          }
+        } else {
+          alert('បានបោះពុម្ពផ្សាយពិន្ទុជោគជ័យ (គ្មានថ្នាក់ត្រូវផ្សាយបន្ត)!');
         }
+      } else {
+        alert('បានបោះពុម្ពផ្សាយពិន្ទុជោគជ័យ!');
       }
 
       // Trigger refetch
@@ -163,15 +184,38 @@ export default function MasterScoresPage() {
     }
   };
 
-  const handleBroadcastClassSilently = async (classId: string) => {
+  const handleRetryBroadcast = async (failedClassIds: string[]) => {
+    setIsRetryingBroadcast(true);
     try {
-      await fetch('/api/admin/broadcast-scores', {
+      const res = await fetch('/api/admin/broadcast-scores/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ class_id: classId, month: selectedPeriod })
+        body: JSON.stringify({ class_ids: failedClassIds, month: selectedPeriod })
       });
-    } catch (error) {
-      console.error('Silent broadcast failed for class', classId, error);
+      
+      const newSummary = await res.json();
+      
+      // Merge new summary with old summary
+      setBroadcastSummary((prev: any) => {
+        if (!prev) return newSummary;
+        
+        // Remove succeeded from failed list, add to succeeded list
+        const stillFailed = newSummary.failed;
+        const newlySucceeded = newSummary.succeeded;
+        
+        return {
+          total: prev.total,
+          succeeded: [...prev.succeeded, ...newlySucceeded],
+          failed: stillFailed,
+          isFullSuccess: stillFailed.length === 0 && prev.total > 0,
+          isPartialSuccess: stillFailed.length > 0
+        };
+      });
+      
+    } catch (err: any) {
+      alert('កំហុស៖ ' + err.message);
+    } finally {
+      setIsRetryingBroadcast(false);
     }
   };
 
@@ -650,6 +694,14 @@ export default function MasterScoresPage() {
         period={selectedPeriod}
         academicYearId={activeYearId}
         onConfirm={handlePublishConfirm}
+      />
+      
+      <BroadcastStatusModal
+        isOpen={isBroadcastingModalOpen}
+        onClose={() => setIsBroadcastingModalOpen(false)}
+        summary={broadcastSummary}
+        onRetry={handleRetryBroadcast}
+        isRetrying={isRetryingBroadcast}
       />
     </div>
   );

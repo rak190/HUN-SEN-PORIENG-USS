@@ -25,6 +25,9 @@ interface AdminDashboardClientProps {
     activeClasses: number;
     teachers: number;
     absentRate: string;
+    todayTotal?: number;
+    todayAbsent?: number;
+    todayRecorded?: number;
   };
   pieData: {
     present: number;
@@ -114,8 +117,8 @@ export default function AdminDashboardClient({ stats, pieData, activities, atRis
             </button>
           )}
 
-          <button className="px-5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-sm transition-colors shadow-sm flex items-center gap-2">
-            <FileSpreadsheet className="w-4 h-4" /> ទាញយករបាយការណ៍សង្ខេប
+          <button disabled className="px-5 py-2.5 bg-slate-800/50 text-slate-300 font-bold rounded-xl text-sm transition-colors shadow-sm flex items-center gap-2 cursor-not-allowed border border-slate-700">
+            <FileSpreadsheet className="w-4 h-4" /> មុខងារកំពុងអភិវឌ្ឍ (Coming Soon)
           </button>
         </div>
       </header>
@@ -144,12 +147,21 @@ export default function AdminDashboardClient({ stats, pieData, activities, atRis
 
         <Link href="/admin/attendance" className="bg-rose-50 rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-rose-200">
           <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-black text-rose-700 tracking-tight leading-none">{stats.absentRate}%</h2>
-            <div className="w-9 h-9 rounded-full border border-rose-200 flex items-center justify-center group-hover:bg-rose-100 transition-all shadow-2xs">
+            {stats.todayRecorded === 0 ? (
+               <h2 className="text-xl font-black text-rose-700 tracking-tight leading-tight pt-2">មិនទាន់កត់ត្រាថ្ងៃនេះ</h2>
+            ) : (
+               <h2 className="text-4xl font-black text-rose-700 tracking-tight leading-none">{stats.todayAbsent} នាក់</h2>
+            )}
+            <div className="w-9 h-9 rounded-full border border-rose-200 flex items-center justify-center group-hover:bg-rose-100 transition-all shadow-2xs shrink-0">
               <ArrowUpRight className="w-4 h-4 text-rose-500 transition-colors" />
             </div>
           </div>
-          <p className="text-sm font-bold text-rose-600 mt-4">អត្រាអវត្តមានថ្ងៃនេះ</p>
+          <p className="text-sm font-bold text-rose-600 mt-4">
+             {stats.todayRecorded === 0 
+               ? `អវត្តមានថ្ងៃនេះ (សិស្សសរុប ${stats.todayTotal})` 
+               : `អវត្តមាន ${stats.todayAbsent} នាក់ / វត្តមាន ${(stats.todayTotal || 0) - (stats.todayAbsent || 0)} នាក់`
+             }
+          </p>
         </Link>
 
         <Link href="/admin/teachers" className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">
@@ -338,8 +350,8 @@ export default function AdminDashboardClient({ stats, pieData, activities, atRis
                      <span className="text-sm font-bold text-slate-400">សំណើ</span>
                   </div>
                   {dataQuality && dataQuality.pendingCorrections > 0 && (
-                     <button onClick={() => alert('មុខងារពិនិត្យសំណើកែប្រែ កំពុងអភិវឌ្ឍ...')} className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-colors">
-                        ពិនិត្យមើល
+                     <button disabled className="px-4 py-2 bg-indigo-100/50 text-indigo-400 text-xs font-bold rounded-xl border border-indigo-100 cursor-not-allowed">
+                        មុខងារកំពុងអភិវឌ្ឍ (Coming Soon)
                      </button>
                   )}
                </div>

@@ -52,7 +52,7 @@ export default function SupportPage() {
     }
     const [caseResult, studentResult] = await Promise.all([
       supabase.from('support_cases').select('*, students(full_name, parent_phone), support_interventions(id, action_type, action_date, notes, outcome, follow_up_at)').eq('class_id', activeClass.id).order('updated_at', { ascending: false }),
-      supabase.from('students').select('id, full_name').eq('class_id', activeClass.id).eq('is_active', true).order('full_name'),
+      supabase.from('active_class_rosters').select('id, full_name').eq('enrollment_class_id', activeClass.id).order('full_name'),
     ]);
     if (caseResult.data) setCases(caseResult.data as unknown as CaseRow[]);
     else setCases([]);

@@ -48,12 +48,20 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
       if (!authData.user) throw new Error("Not authenticated");
       const { data: profile } = await supabase.from('profiles').select('school_id').eq('id', authData.user.id).single();
       
-      // Fetch all students to match, strictly scoped by school_id via inner join
+      // Fetch all classes for this school
+      const { data: classesData } = await supabase
+        .from('classes')
+        .select('id, name')
+        .eq('school_id', profile?.school_id)
+        .eq('is_archived', false);
+
+      const classIds = classesData?.map(c => c.id) || [];
+
+      // Fetch all active students in those classes
       const { data: studentsData, error } = await supabase
-        .from('students')
-        .select('id, full_name, student_id_number, class_id, classes!inner(name, school_id)')
-        .eq('is_active', true)
-        .eq('classes.school_id', profile?.school_id);
+        .from('active_class_rosters')
+        .select('id, full_name, student_id_number, enrollment_class_id, class_name')
+        .in('enrollment_class_id', classIds);
 
       if (error) throw error;
 
@@ -109,7 +117,7 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
           // Match logic: Prefer student_id_number, fallback to exact name + class match
           const match = studentsData.find(s => {
             if (studentIdNumber && s.student_id_number === studentIdNumber) return true;
-            return s.full_name.replace(/\s+/g, '') === studentName.replace(/\s+/g, '') && (s.classes as any)?.name === className;
+            return s.full_name.replace(/\s+/g, '') === studentName.replace(/\s+/g, '') && s.class_name === className;
           });
 
           const scores: Record<string, number> = {};
@@ -145,7 +153,7 @@ export function MasterGradeImportModal({ isOpen, onClose, onImportComplete }: Ma
             studentName,
             className,
             matchedStudentId: match?.id,
-            matchedClassId: match?.class_id,
+            matchedClassId: match?.enrollment_class_id,
             scores,
             totalScore,
             status: match ? 'valid' : 'invalid',

@@ -60,11 +60,29 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
     .gte('date', startMonthStr)
     .lte('date', endMonthStr);
 
+  // Determine local date string (Asia/Phnom_Penh)
+  const phnomPenhDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Phnom_Penh' }));
+  const todayStrPH = phnomPenhDate.getFullYear() + '-' + String(phnomPenhDate.getMonth() + 1).padStart(2, '0') + '-' + String(phnomPenhDate.getDate()).padStart(2, '0');
+
+  // Fetch Live Attendance for Today
+  const { count: todayAbsentCount } = await supabase
+    .from('attendance_records')
+    .select('student_id', { count: 'exact', head: true })
+    .eq('date', todayStrPH)
+    .in('status', ['absent', 'unexcused', 'excused', 'A']);
+
+  const { count: todayRecordedCount } = await supabase
+    .from('attendance_records')
+    .select('student_id', { count: 'exact', head: true })
+    .eq('date', todayStrPH);
+
+  const todayAbsent = todayAbsentCount || 0;
+  const todayRecorded = todayRecordedCount || 0;
+  const todayTotal = totalStudents || 0;
+
   let present = 0;
   let absent = 0;
   let permission = 0;
-  const todayAbsent = 0;
-  const todayTotal = 0;
 
   if (monthAttendance) {
     monthAttendance.forEach(record => {
@@ -137,6 +155,9 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         activeClasses: activeClasses ?? clsRows?.length ?? 0,
         teachers: teachers ?? tchRows?.length ?? 0,
         absentRate,
+        todayTotal,
+        todayAbsent,
+        todayRecorded
       }}
       pieData={{ present, absent, permission }}
       activities={(activities as any) || []}

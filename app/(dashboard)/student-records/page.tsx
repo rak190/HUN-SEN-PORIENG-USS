@@ -24,7 +24,7 @@ export default function StudentRecordsPage() {
       try {
         // Fetch all required class data concurrently
         const [studentsRes, gradesRes] = await Promise.all([
-          supabase.from('students').select('*').eq('class_id', activeClass.id).order('full_name', { ascending: true }),
+          supabase.from('active_class_rosters').select('*').eq('enrollment_class_id', activeClass.id).order('full_name', { ascending: true }),
           supabase.from('grades').select('*').eq('class_id', activeClass.id)
         ]);
         

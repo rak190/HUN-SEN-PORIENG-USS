@@ -105,8 +105,19 @@ export interface HomeVisit {
   created_at?: string;
 }
 
+export interface ClassEnrollment {
+  id: string;
+  student_id: string;
+  class_id: string;
+  academic_year_id: string;
+  status: 'active' | 'transferred' | 'dropped' | 'promoted';
+  student?: Student;
+  class?: Classroom;
+}
+
 export interface Student {
   id: string;
+  /** @deprecated Use ClassEnrollment to resolve class mapping */
   class_id: string | null;
   student_id_number: string | null;
   full_name: string;

@@ -1,12 +1,12 @@
 import React from 'react';
-import { requireAdmin } from '@/lib/auth-server';
+import { requirePrincipal } from '@/lib/auth-server';
 import { redirect } from 'next/navigation';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   try {
-    await requireAdmin();
+    await requirePrincipal();
   } catch (error) {
-    // If not an admin, redirect to homeroom
+    // If not an admin or principal, redirect to homeroom
     redirect('/homeroom');
   }
 
