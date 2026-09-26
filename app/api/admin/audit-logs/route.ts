@@ -77,31 +77,3 @@ export async function POST(req: Request) {
   return NextResponse.json({ log: data });
 }
 
-export async function DELETE(req: Request) {
-  const { user, role } = await getServerAuth();
-
-  if (!user || role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
-  }
-
-  const adminClient = createAdminClient();
-  if (!adminClient) return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
-
-  try {
-    const url = new URL(req.url);
-    const mode = url.searchParams.get('mode');
-
-    if (mode === 'old') {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      await adminClient.from('audit_logs').delete().lt('created_at', thirtyDaysAgo.toISOString());
-    } else {
-      // Clear all
-      await adminClient.from('audit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    }
-
-    return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}

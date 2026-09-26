@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Server, Shield, Lock, TerminalSquare, RefreshCcw, KeyRound,
   Database, ShieldAlert, CheckCircle2, AlertTriangle, 
-  History, Download, RefreshCw, FileText, Search, Activity, Trash2, XCircle
+  History, Download, RefreshCw, FileText, Search, Activity, Trash2, XCircle, FileArchive
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -146,23 +146,61 @@ export default function MergedSystemPage() {
     }
   };
 
-  const handleClearLogs = async (mode: 'old' | 'all') => {
-    const userInput = prompt('តើអ្នកពិតជាចង់លុបកំណត់ត្រាមែនទេ? សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ។ សូមវាយពាក្យ "CONFIRM" ដើម្បីបន្ត។');
-    if (userInput !== 'CONFIRM') {
-      alert('សកម្មភាពត្រូវបានបោះបង់។ (Cancelled)');
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archivePassword, setArchivePassword] = useState('');
+  const [isArchiving, setIsArchiving] = useState(false);
+
+  const handleArchiveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!archivePassword) {
+      alert('សូមបញ្ចូលពាក្យសម្ងាត់');
       return;
     }
     
+    setIsArchiving(true);
     try {
-      const res = await fetch(`/api/admin/audit-logs?mode=${mode}`, { method: 'DELETE' });
-      if (res.ok) {
+      // Must dynamically import or import at top. We will import at top later, let's assume it's imported at top
+      const { archiveOldAuditLogsAction } = await import('./actions');
+      const { count, logs: archivedLogs } = await archiveOldAuditLogsAction(archivePassword);
+      
+      if (count > 0) {
+        // Download the logs as CSV
+        const csvContent = [
+          ['ID', 'Action', 'Type', 'User ID', 'Created At'].join(','),
+          ...archivedLogs.map((log: any) => 
+            [
+              log.id, 
+              `"${(log.action || '').replace(/"/g, '""')}"`, 
+              log.type, 
+              log.user_id,
+              log.created_at
+            ].join(',')
+          )
+        ].join('\n');
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - 180);
+        link.setAttribute('download', `audit-archive-cutoff-${cutoffDate.toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        alert(`បានរក្សាទុក និងលុបកំណត់ត្រាចំនួន ${count} ដោយជោគជ័យ!`);
         fetchLogs();
-        alert('កំណត់ត្រាត្រូវបានលុបដោយជោគជ័យ!');
       } else {
-        alert('មានបញ្ហាក្នុងការលុបកំណត់ត្រា។');
+        alert('មិនមានកំណត់ត្រាចាស់ជាង ៦ ខែទេ!');
       }
-    } catch (e) {
+      setShowArchiveModal(false);
+      setArchivePassword('');
+    } catch (e: any) {
       console.error(e);
+      alert(e.message || 'បរាជ័យក្នុងការរក្សាទុកកំណត់ត្រា');
+    } finally {
+      setIsArchiving(false);
     }
   };
 
@@ -286,20 +324,12 @@ export default function MergedSystemPage() {
           <div className="space-y-6 mt-4">
             <div className="flex justify-end mb-4 gap-3">
               <button
-                onClick={() => handleClearLogs('old')}
-                className="px-5 py-3 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-                title="លុបកំណត់ត្រាចាស់ៗជាង ៣០ ថ្ងៃ"
+                onClick={() => setShowArchiveModal(true)}
+                className="px-5 py-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                title="លុប និងរក្សាទុកកំណត់ត្រាចាស់ៗជាង ៦ ខែ"
               >
-                <Trash2 className="w-5 h-5" />
-                <span>សម្អាតចាស់ៗ</span>
-              </button>
-              <button
-                onClick={() => handleClearLogs('all')}
-                className="px-5 py-3 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 text-slate-700 hover:text-rose-700 font-bold rounded-xl text-sm transition-colors flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-                title="លុបកំណត់ត្រាទាំងអស់"
-              >
-                <ShieldAlert className="w-5 h-5" />
-                <span>លុបទាំងអស់</span>
+                <FileArchive className="w-5 h-5 text-amber-500" />
+                <span>🗄️ បណ្ណសារកំណត់ត្រាចាស់ជាង ៦ ខែ (Archive Logs &gt; 6 Months)</span>
               </button>
               <button
                 onClick={handleBackup}
@@ -445,6 +475,60 @@ export default function MergedSystemPage() {
           </div>
         )}
       </div>
+      
+      {showArchiveModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[24px] shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-500">
+                <FileArchive className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-extrabold text-slate-800">រក្សាទុកជាបណ្ណសារ (Archive)</h3>
+                <p className="text-sm text-slate-500 font-bold">លុបកំណត់ត្រាចាស់ៗរំលង ១៨០ ថ្ងៃ</p>
+              </div>
+            </div>
+            
+            <p className="text-sm text-slate-600 mb-6 font-medium leading-relaxed">
+              សកម្មភាពនេះនឹងទាញយកកំណត់ត្រាទាំងអស់ដែលចាស់ជាង ៦ ខែទៅជាឯកសារ Excel (CSV) 
+              រួចលុបវាចេញពីប្រព័ន្ធ ដើម្បីសន្សំសំចៃទំហំផ្ទុក។ <br/><br/>
+              ដើម្បីសុវត្ថិភាព សូមបញ្ចូលពាក្យសម្ងាត់របស់អ្នក៖
+            </p>
+            
+            <form onSubmit={handleArchiveSubmit}>
+              <div className="relative mb-6">
+                <Lock className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="password"
+                  placeholder="ពាក្យសម្ងាត់ (Password)"
+                  value={archivePassword}
+                  onChange={(e) => setArchivePassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-12 pr-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#155EEF]/20 transition-all"
+                  autoFocus
+                />
+              </div>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setShowArchiveModal(false); setArchivePassword(''); }}
+                  className="px-5 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  បោះបង់
+                </button>
+                <button
+                  type="submit"
+                  disabled={isArchiving || !archivePassword}
+                  className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50"
+                >
+                  {isArchiving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <FileArchive className="w-4 h-4" />}
+                  អនុម័ត និងទាញយក
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

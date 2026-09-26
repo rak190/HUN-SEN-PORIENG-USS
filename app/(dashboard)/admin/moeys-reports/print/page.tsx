@@ -4,12 +4,17 @@ import React, { useEffect, useState } from 'react';
 import { Printer, ChevronLeft, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { formatFormalKhmerDate } from '@/lib/utils/khmer-date';
+import { useAuth } from '@/lib/auth-context';
 
 export default function MoeysPrintLayout() {
   const [stats, setStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [schoolName, setSchoolName] = useState('វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង');
   const [academicYearName, setAcademicYearName] = useState('២០២៥-២០២៦');
+  const [principalName, setPrincipalName] = useState('');
+  
+  const { profile } = useAuth();
   const supabase = createClient();
 
   useEffect(() => {
@@ -28,6 +33,9 @@ export default function MoeysPrintLayout() {
 
       if (schoolData?.value?.schoolName) {
         setSchoolName(schoolData.value.schoolName);
+      }
+      if (schoolData?.value?.principalName) {
+        setPrincipalName(schoolData.value.principalName);
       }
       if (yearData?.name) {
         setAcademicYearName(yearData.name);
@@ -150,12 +158,12 @@ export default function MoeysPrintLayout() {
         <div className="flex justify-between mt-12 px-8">
           <div className="text-center">
             <p className="font-bold text-sm mb-16">បានឃើញ និងឯកភាព<br/>នាយកសាលា</p>
-            <p className="font-moul text-sm">................................</p>
+            <p className="font-moul text-sm">{principalName || '................................'}</p>
           </div>
           <div className="text-center">
-            <p className="text-sm mb-1">ថ្ងៃ.................ខែ............ឆ្នាំ.............</p>
-            <p className="font-bold text-sm mb-16">គ្រូបន្ទុកថ្នាក់ / អ្នករៀបចំ</p>
-            <p className="font-moul text-sm">................................</p>
+            <p className="text-sm mb-1">ពោធិ៍រៀង, {formatFormalKhmerDate()}</p>
+            <p className="font-bold text-sm mb-16">អ្នករៀបចំរបាយការណ៍</p>
+            <p className="font-moul text-sm">{profile?.full_name || '................................'}</p>
           </div>
         </div>
 

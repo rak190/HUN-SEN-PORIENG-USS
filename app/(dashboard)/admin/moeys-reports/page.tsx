@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import { toPng } from 'html-to-image';
+import { formatFormalKhmerDate } from '@/lib/utils/khmer-date';
 
 const AVAILABLE_REPORTS = [
   {
@@ -18,7 +19,7 @@ const AVAILABLE_REPORTS = [
     title: 'សរុបស្ថិតិសិស្សដើមឆ្នាំ',
     category: 'របាយការណ៍ដើមឆ្នាំ',
     description: 'ស្ថិតិសិស្សសរុប ស្រី កម្រិតថ្នាក់ និងប្រភេទសិស្ស (ថ្មី, ត្រួតថ្នាក់) សម្រាប់ផ្ញើទៅមន្ទីរអប់រំ។',
-    lastUpdated: '10 តុលា 2025',
+    lastUpdated: formatFormalKhmerDate(new Date()),
     type: 'Excel'
   },
   {
@@ -26,7 +27,7 @@ const AVAILABLE_REPORTS = [
     title: 'របាយការណ៍អវត្តមានប្រចាំខែ',
     category: 'របាយការណ៍ប្រចាំខែ',
     description: 'សរុបអវត្តមានសិស្ស និងគ្រូបង្រៀនប្រចាំខែនីមួយៗ តាមទម្រង់ក្រសួង។',
-    lastUpdated: '01 វិច្ឆិកា 2025',
+    lastUpdated: formatFormalKhmerDate(new Date()),
     type: 'Excel'
   },
   {
@@ -34,7 +35,7 @@ const AVAILABLE_REPORTS = [
     title: 'បញ្ជីរាយនាមសិស្សប្រលងឆមាសទី១',
     category: 'របាយការណ៍ឆមាស',
     description: 'តារាងឈ្មោះសិស្ស និងពិន្ទុសម្រាប់ការប្រលងឆមាសទី១ (ទម្រង់ PDF ផ្លូវការ)។',
-    lastUpdated: '15 មករា 2026',
+    lastUpdated: formatFormalKhmerDate(new Date()),
     type: 'PDF'
   },
   {
@@ -42,7 +43,7 @@ const AVAILABLE_REPORTS = [
     title: 'ស្ថិតិគ្រូបង្រៀន និងបុគ្គលិក',
     category: 'របាយការណ៍រដ្ឋបាល',
     description: 'ចំនួនគ្រូបង្រៀន បុគ្គលិកអប់រំ តាមកម្រិតវប្បធម៌ និងមុខវិជ្ជាឯកទេស។',
-    lastUpdated: '20 តុលា 2025',
+    lastUpdated: formatFormalKhmerDate(new Date()),
     type: 'Excel'
   },
   {
@@ -50,7 +51,7 @@ const AVAILABLE_REPORTS = [
     title: 'ទិន្នន័យសិស្សសរុប GEIP (GIEP Master Dataset)',
     category: 'របាយការណ៍រដ្ឋបាល',
     description: 'ទាញយកទិន្នន័យសិស្ស និងពត៌មានលម្អិតទាំងអស់សម្រាប់បញ្ចូលទៅក្នុងទម្រង់ GIEP របស់ក្រសួង។',
-    lastUpdated: 'ថ្មីៗ',
+    lastUpdated: formatFormalKhmerDate(new Date()),
     type: 'Excel'
   }
 ];
