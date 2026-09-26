@@ -130,17 +130,19 @@ export async function requireStudentAccess(studentId: string): Promise<{ user: {
   if (auth.role === 'admin') return auth;
 
   const supabase = await createClient();
-  const { data: student } = await supabase
-    .from('students')
-    .select('id, class_id, classes(teacher_id, school_id)')
-    .eq('id', studentId)
+  const { data: enrollment } = await supabase
+    .from('student_enrollments')
+    .select('id, class_id, classes(id, teacher_id, school_id)')
+    .eq('student_id', studentId)
+    .eq('enrollment_status', 'active')
     .maybeSingle();
 
-  if (!student) {
-    throw new Error('Forbidden: Student record not found.');
+  if (!enrollment) {
+    // If no active enrollment is found, teachers/principals shouldn't be modifying it anyway.
+    throw new Error('Forbidden: Student record or active enrollment not found.');
   }
 
-  const classData = student.classes as any;
+  const classData = enrollment.classes as any;
 
   if (auth.role === 'principal') {
     if (classData?.school_id !== auth.profile.school_id) {

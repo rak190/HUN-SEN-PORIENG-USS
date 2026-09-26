@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         const studentIds = enrollments.map(e => e.student_id);
 
         if (studentIds.length === 0) {
-          summary.succeeded.push({ classId: class_id, className });
+          summary.failed.push({ classId: class_id, className, error: 'មិនទាន់កំណត់ Telegram Chat ID ឬគ្មានអ្នកទទួល' });
           continue; // No students to broadcast to
         }
 
@@ -94,8 +94,8 @@ export async function POST(req: NextRequest) {
         }
         
         if (!subscriptions || subscriptions.length === 0) {
-          summary.succeeded.push({ classId: class_id, className });
-          continue; // No subscriptions, still counts as success for the class execution
+          summary.failed.push({ classId: class_id, className, error: 'មិនទាន់កំណត់ Telegram Chat ID ឬគ្មានអ្នកទទួល' });
+          continue; // No subscriptions
         }
 
         // 4. Fetch scores & attendance
@@ -121,6 +121,9 @@ export async function POST(req: NextRequest) {
 
         if (attError) throw new Error('Failed to fetch attendance');
 
+        let classHasErrors = false;
+        let lastErrorMsg = '';
+        
         // 5. Broadcast to each subscribed parent
         for (const sub of subscriptions) {
           const student = enrollments.find(e => e.student_id === sub.student_id)?.students;
@@ -144,13 +147,21 @@ export async function POST(req: NextRequest) {
 
           const tgRes = await sendMessage(sub.telegram_chat_id, message);
           if (!tgRes.ok) {
-             console.error(`Failed to send to ${sub.telegram_chat_id}: ${tgRes.statusText}`);
+             const errBody = await tgRes.json().catch(() => ({}));
+             const errorMsg = errBody.description || `HTTP ${tgRes.status}`;
+             console.error(`Telegram failed for class ${className}:`, errorMsg);
+             classHasErrors = true;
+             lastErrorMsg = errorMsg;
           }
-          // Rate limiting: 20 msgs/sec safely
-          await delay(50);
+          // Rate limiting: delay between 50-75ms as requested to respect limits
+          await delay(75);
         }
 
-        summary.succeeded.push({ classId: class_id, className });
+        if (classHasErrors) {
+           summary.failed.push({ classId: class_id, className, error: lastErrorMsg });
+        } else {
+           summary.succeeded.push({ classId: class_id, className });
+        }
         
         // Wait between classes to reduce overall load
         await delay(100);

@@ -219,9 +219,10 @@ export async function DELETE(req: Request) {
   try {
     // Safety check: ensure no students belong to this class before deleting
     const { count, error: countErr } = await adminClient
-      .from('students')
-      .select('*', { count: 'exact', head: true })
-      .eq('class_id', id);
+      .from('student_enrollments')
+      .select('id', { count: 'exact', head: true })
+      .eq('class_id', id)
+      .eq('enrollment_status', 'active');
 
     if (countErr) throw countErr;
     if (count && count > 0) {
