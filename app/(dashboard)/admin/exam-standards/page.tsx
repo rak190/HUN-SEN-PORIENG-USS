@@ -6,6 +6,8 @@ import {
   Languages, Calculator, FlaskConical, Atom, TestTube, History, Globe2, HeartHandshake, Activity
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
+import { useAuth } from '@/lib/auth-context';
+
 const getSubjectTheme = (name: string) => {
   if (name.includes('ភាសា')) return {
     icon: <Languages className="w-4 h-4" />,
@@ -36,6 +38,7 @@ const getSubjectTheme = (name: string) => {
 };
 
 export default function AdminExamStandardsPage() {
+  const { activeAcademicYear } = useAuth();
   const searchParams = useSearchParams();
   const validTabs = ['subjects', 'grading'];
   const initialTab = searchParams.get('tab');
@@ -43,6 +46,34 @@ export default function AdminExamStandardsPage() {
     (initialTab && validTabs.includes(initialTab)) ? initialTab as any : 'subjects'
   );
   
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
+  const [selectedYearId, setSelectedYearId] = useState<string>('');
+  
+  // Set default selected year when loaded
+  useEffect(() => {
+    if (activeAcademicYear?.id && !selectedYearId) {
+      setSelectedYearId(activeAcademicYear.id);
+    }
+  }, [activeAcademicYear, selectedYearId]);
+
+  useEffect(() => {
+    async function loadYears() {
+      try {
+        const res = await fetch('/api/admin/academic-years');
+        if (res.ok) {
+          const { data } = await res.json();
+          setAcademicYears(data || []);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    loadYears();
+  }, []);
+
+  const selectedYear = academicYears.find(y => y.id === selectedYearId) || activeAcademicYear;
+  const isReadOnly = selectedYear?.status === 'closed' || selectedYear?.status === 'archived';
+
   const [coefficientView, setCoefficientView] = useState('11-12-sci');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isEditingGrades, setIsEditingGrades] = useState(false);
@@ -59,28 +90,21 @@ export default function AdminExamStandardsPage() {
     { id: 'F', label: 'ធ្លាក់ (Fail)', min: 0, max: 49, color: 'rose' },
   ]);
   
-  const [globalSubjects, setGlobalSubjects] = useState([
-    { id: '1', name: 'ភាសាខ្មែរ', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1, maxSci: 100, maxSoc: 150, maxGen: 100 },
-    { id: '2', name: 'គណិតវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1, maxSci: 150, maxSoc: 100, maxGen: 100 },
-    { id: '3', name: 'រូបវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1, maxSci: 100, maxSoc: 50, maxGen: 50 },
-    { id: '4', name: 'គីមីវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1, maxSci: 100, maxSoc: 50, maxGen: 50 },
-    { id: '5', name: 'ជីវវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 2, soc: 1, gen: 1, maxSci: 100, maxSoc: 50, maxGen: 50 },
-    { id: '6', name: 'ប្រវត្តិវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1, maxSci: 50, maxSoc: 150, maxGen: 50 },
-    { id: '7', name: 'ភូមិវិទ្យា', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1, maxSci: 50, maxSoc: 100, maxGen: 50 },
-    { id: '8', name: 'សីលធម៌ ពលរដ្ឋ', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 2, gen: 1, maxSci: 50, maxSoc: 100, maxGen: 50 },
-    { id: '9', name: 'ផែនដី និងបរិស្ថាន', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1, maxSci: 50, maxSoc: 50, maxGen: 50 },
-    { id: '10', name: 'ភាសាបរទេស', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1, maxSci: 100, maxSoc: 100, maxGen: 100 },
-  ]);
+  const [globalSubjects, setGlobalSubjects] = useState<any[]>([]);
 
   useEffect(() => {
     async function loadStandards() {
+      if (!selectedYearId) return;
+      setLoading(true);
       try {
-        const res = await fetch('/api/admin/exam-standards');
+        const res = await fetch(`/api/admin/exam-standards?academicYearId=${selectedYearId}`);
         if (res.ok) {
           const { standards } = await res.json();
           if (standards) {
-            if (standards.gradingRanges) setGradingRanges(standards.gradingRanges);
+            if (standards.gradingRanges && standards.gradingRanges.length > 0) setGradingRanges(standards.gradingRanges);
             if (standards.globalSubjects) setGlobalSubjects(standards.globalSubjects);
+          } else {
+            setGlobalSubjects([]);
           }
         }
       } catch (e) {
@@ -90,7 +114,7 @@ export default function AdminExamStandardsPage() {
       }
     }
     loadStandards();
-  }, []);
+  }, [selectedYearId]);
 
   const handleSaveStandards = async () => {
     setIsSaving(true);
@@ -99,6 +123,7 @@ export default function AdminExamStandardsPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          academicYearId: selectedYearId,
           standards: {
             gradingRanges,
             globalSubjects
@@ -127,19 +152,30 @@ export default function AdminExamStandardsPage() {
       {/* Top Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-3">
             ស្តង់ដារការប្រលង និងមុខវិជ្ជា
+            <select
+              value={selectedYearId}
+              onChange={(e) => setSelectedYearId(e.target.value)}
+              className="text-sm border border-slate-300 rounded-lg px-2 py-1 font-semibold text-slate-700 focus:ring-2 focus:ring-[#155EEF] cursor-pointer"
+            >
+              {academicYears.map(y => (
+                <option key={y.id} value={y.id}>
+                  ឆ្នាំសិក្សា {y.name} {y.is_active ? '(កំពុងដំណើរការ)' : ''} {y.status === 'closed' || y.status === 'archived' ? '🔒' : ''}
+                </option>
+              ))}
+            </select>
           </h1>
           <p className="text-xs font-semibold text-[#64748B] mt-0.5">
-            រៀបចំកម្មវិធីសិក្សា និងប្រព័ន្ធដាក់ពិន្ទុ (MoEYS Standard)
+            រៀបចំកម្មវិធីសិក្សា និងប្រព័ន្ធដាក់ពិន្ទុ (MoEYS Standard) តាមឆ្នាំសិក្សា
           </p>
         </div>
         
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           <button 
             onClick={handleSaveStandards} 
-            disabled={isSaving}
-            className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-full text-sm transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap group cursor-pointer"
+            disabled={isSaving || isReadOnly}
+            className={`px-6 py-3 font-bold rounded-full text-sm transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap group cursor-pointer ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-[#155EEF] hover:bg-blue-700 text-white'}`}
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 group-hover:scale-110 transition-transform" />}
             <span>{isSaving ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកទិន្នន័យ'}</span>
@@ -147,8 +183,16 @@ export default function AdminExamStandardsPage() {
         </div>
       </header>
 
+      {/* Lock Banner */}
+      {isReadOnly && (
+        <div className="bg-slate-100 border border-slate-300 text-slate-700 px-4 py-3 rounded-xl flex items-center gap-3 text-sm font-bold animate-fadeIn shadow-sm">
+          <span className="text-lg">🔒</span>
+          <span>ឆ្នាំសិក្សានេះត្រូវបានបិទបញ្ចប់រួចរាល់ហើយ — ទិន្នន័យស្ថិតក្នុងទម្រង់មើលតែប៉ុណ្ណោះ (Read-Only)។ មិនអាចកែប្រែស្តង់ដារពិន្ទុបានទេ។</span>
+        </div>
+      )}
+
       {/* Success Alert */}
-      {savedSuccess && (
+      {savedSuccess && !isReadOnly && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center gap-2 text-sm font-bold animate-fadeIn">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
           <span>ការកំណត់ស្តង់ដារប្រលង និងពិន្ទុត្រូវបានរក្សាទុកជោគជ័យ!</span>
@@ -179,7 +223,54 @@ export default function AdminExamStandardsPage() {
       {activeTab === 'subjects' && (
         <div className="space-y-6 animate-fadeIn max-w-6xl">
           
+          {/* Empty State / Cloning */}
+          {globalSubjects.length === 0 && !loading && (
+            <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center flex flex-col items-center justify-center max-w-2xl mx-auto my-12">
+              <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6">
+                <BookText className="w-10 h-10 text-blue-500" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">មិនទាន់មានស្តង់ដារមុខវិជ្ជាទេ</h3>
+              <p className="text-slate-500 text-sm mb-8 max-w-md leading-relaxed">
+                ឆ្នាំសិក្សានេះមិនទាន់បានរៀបចំកម្មវិធីសិក្សា និងស្តង់ដារពិន្ទុនៅឡើយទេ។ អ្នកអាចបង្កើតថ្មី ឬចម្លងពីឆ្នាំសិក្សាចាស់។
+              </p>
+              
+              <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+                <button
+                  disabled={isReadOnly || isSaving}
+                  onClick={async () => {
+                    const sourceYearId = prompt("សូមបញ្ចូល ID ឆ្នាំសិក្សាចាស់ដែលចង់ចម្លង (e.g. latest year UUID):");
+                    if (!sourceYearId) return;
+                    setIsSaving(true);
+                    try {
+                      const res = await fetch('/api/admin/exam-standards/clone', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          sourceYearId,
+                          targetYearId: selectedYearId
+                        })
+                      });
+                      if (!res.ok) throw new Error('បរាជ័យក្នុងការចម្លង');
+                      alert('ចម្លងបានជោគជ័យ! សូម Refresh ទំព័រនេះ។');
+                      window.location.reload();
+                    } catch (err: any) {
+                      alert(err.message);
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <History className="w-4 h-4" />
+                  ចម្លងពីឆ្នាំសិក្សាមុន
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Stats Cards */}
+          {globalSubjects.length > 0 && (
+          <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">
               <div className="flex justify-between items-start">
@@ -193,7 +284,7 @@ export default function AdminExamStandardsPage() {
             
             <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
               <div className="flex justify-between items-start">
-                <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{globalSubjects.filter(s => s.grades.some(g => parseInt(g) < 10)).length}</h2>
+                <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{globalSubjects.filter(s => s.grades.some((g: any) => parseInt(g) < 10)).length}</h2>
                 <div className="w-9 h-9 bg-yellow-100 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
                   <BookText className="w-4 h-4 text-yellow-900" />
                 </div>
@@ -203,7 +294,7 @@ export default function AdminExamStandardsPage() {
             
             <div className="bg-white rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-slate-100 hover:border-slate-200">
               <div className="flex justify-between items-start">
-                <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{globalSubjects.filter(s => s.grades.some(g => parseInt(g) >= 10)).length}</h2>
+                <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{globalSubjects.filter(s => s.grades.some((g: any) => parseInt(g) >= 10)).length}</h2>
                 <div className="w-9 h-9 bg-indigo-50 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
                   <BookText className="w-4 h-4 text-indigo-600" />
                 </div>
@@ -279,7 +370,7 @@ export default function AdminExamStandardsPage() {
                                 onClick={() => {
                                   const newSubjects = [...globalSubjects];
                                   if (isActive) {
-                                    newSubjects[idx].grades = subject.grades.filter(grade => grade !== g);
+                                    newSubjects[idx].grades = subject.grades.filter((grade: any) => grade !== g);
                                   } else {
                                     newSubjects[idx].grades = [...subject.grades, g].sort((a,b) => parseInt(a) - parseInt(b));
                                   }
@@ -311,7 +402,9 @@ export default function AdminExamStandardsPage() {
                 </tbody>
               </table>
             </div>
-          </div>
+            </div>
+            </>
+          )}
         </div>
       )}
 

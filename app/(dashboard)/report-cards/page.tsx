@@ -90,7 +90,7 @@ export default function ReportCardsPage() {
 
         const scoreMap: Record<string, Record<string, number>> = {};
         stdData.forEach(std => {
-          scoreMap[std.id] = computeSummaryGrades(gradeData, std.id, selectedPeriod, subjectIds);
+          scoreMap[std.id] = computeSummaryGrades(gradeData, std.id, selectedPeriod, subjectIds, schema);
         });
         setDbScores(scoreMap);
       }

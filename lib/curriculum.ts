@@ -118,6 +118,7 @@ export function getCurriculumSchemaForClass(grade?: string | number | null, trac
 export async function getDynamicCurriculumSchemaForClass(
   grade: string | number, 
   track: string, 
+  academicYearId: string,
   supabaseClient: any
 ): Promise<CurriculumSchema> {
   const g = parseInt(String(grade).trim()) || 12;
@@ -126,11 +127,17 @@ export async function getDynamicCurriculumSchemaForClass(
   const streamType = isLower ? 'general' : 
     (String(track).toLowerCase().includes('សង្គម') || String(track).toLowerCase().includes('soc') ? 'social' : 'science');
 
-  const { data, error } = await supabaseClient
+  let query = supabaseClient
     .from('exam_subject_standards')
     .select('*')
     .eq('grade_level', g > 9 ? 11 : g) // using 11 for all upper sec for now based on UI (11-12)
     .eq('stream_type', streamType);
+    
+  if (academicYearId) {
+    query = query.eq('academic_year_id', academicYearId);
+  }
+
+  const { data, error } = await query;
 
   // Fallback to static if no dynamic data found
   if (error || !data || data.length === 0) {

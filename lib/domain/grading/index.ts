@@ -37,10 +37,8 @@ export function calculateGradeLetter(averageScore: number): { letter: 'A' | 'B' 
  */
 export function calculateStudentMonthlyGrade(
   scores: Record<string, number>,
-  grade?: string | number | null,
-  track?: string | null
+  schema: CurriculumSchema
 ): StudentGradeCalculationResult {
-  const schema = getCurriculumSchemaForClass(grade, track);
   let totalScore = 0;
   let subjectCount = 0;
   const breakdowns: SubjectScoreBreakdown[] = [];
@@ -94,10 +92,8 @@ export function calculateStudentMonthlyGrade(
 export function calculateStudentSemesterGrade(
   monthlyScoresList: Record<string, number>[], // Scores for month 1, 2, 3
   examScores: Record<string, number>,
-  grade?: string | number | null,
-  track?: string | null
+  schema: CurriculumSchema
 ): { calculatedScores: Record<string, number>; summary: StudentGradeCalculationResult } {
-  const schema = getCurriculumSchemaForClass(grade, track);
   const calculatedScores: Record<string, number> = {};
 
   const allSubjectIds = new Set<string>();
@@ -133,7 +129,7 @@ export function calculateStudentSemesterGrade(
     }
   });
 
-  const summary = calculateStudentMonthlyGrade(calculatedScores, grade, track);
+  const summary = calculateStudentMonthlyGrade(calculatedScores, schema);
   return { calculatedScores, summary };
 }
 
@@ -144,10 +140,8 @@ export function calculateStudentSemesterGrade(
 export function calculateStudentAnnualGrade(
   sem1Scores: Record<string, number>,
   sem2Scores: Record<string, number>,
-  grade?: string | number | null,
-  track?: string | null
+  schema: CurriculumSchema
 ): { calculatedScores: Record<string, number>; summary: StudentGradeCalculationResult } {
-  const schema = getCurriculumSchemaForClass(grade, track);
   const calculatedScores: Record<string, number> = {};
 
   const allSubjectIds = new Set<string>();
@@ -173,7 +167,7 @@ export function calculateStudentAnnualGrade(
     }
   });
 
-  const summary = calculateStudentMonthlyGrade(calculatedScores, grade, track);
+  const summary = calculateStudentMonthlyGrade(calculatedScores, schema);
   return { calculatedScores, summary };
 }
 
@@ -202,7 +196,8 @@ export function computeSummaryGrades(
   gradesData: any[],
   studentId: string,
   period: string,
-  subjectIds: string[]
+  subjectIds: string[],
+  schema: CurriculumSchema
 ): Record<string, number> {
   const scores: Record<string, number> = {};
 
@@ -212,7 +207,7 @@ export function computeSummaryGrades(
     const feb = gradesData.find(g => g.student_id === studentId && g.period === 'feb')?.scores || {};
     const exam = gradesData.find(g => g.student_id === studentId && g.period === 'sem1-exam')?.scores || {};
 
-    const { calculatedScores } = calculateStudentSemesterGrade([dec, jan, feb], exam);
+    const { calculatedScores } = calculateStudentSemesterGrade([dec, jan, feb], exam, schema);
     // Filter to requested subjectIds
     subjectIds.forEach(subId => {
       if (typeof calculatedScores[subId] === 'number') {
@@ -225,17 +220,17 @@ export function computeSummaryGrades(
     const jul = gradesData.find(g => g.student_id === studentId && g.period === 'jul')?.scores || {};
     const exam = gradesData.find(g => g.student_id === studentId && g.period === 'sem2-exam')?.scores || {};
 
-    const { calculatedScores } = calculateStudentSemesterGrade([may, jun, jul], exam);
+    const { calculatedScores } = calculateStudentSemesterGrade([may, jun, jul], exam, schema);
     subjectIds.forEach(subId => {
       if (typeof calculatedScores[subId] === 'number') {
         scores[subId] = calculatedScores[subId];
       }
     });
   } else if (period === 'annual') {
-    const sem1 = computeSummaryGrades(gradesData, studentId, 'sem1-summary', subjectIds);
-    const sem2 = computeSummaryGrades(gradesData, studentId, 'sem2-summary', subjectIds);
+    const sem1 = computeSummaryGrades(gradesData, studentId, 'sem1-summary', subjectIds, schema);
+    const sem2 = computeSummaryGrades(gradesData, studentId, 'sem2-summary', subjectIds, schema);
 
-    const { calculatedScores } = calculateStudentAnnualGrade(sem1, sem2);
+    const { calculatedScores } = calculateStudentAnnualGrade(sem1, sem2, schema);
     subjectIds.forEach(subId => {
       if (typeof calculatedScores[subId] === 'number') {
         scores[subId] = calculatedScores[subId];

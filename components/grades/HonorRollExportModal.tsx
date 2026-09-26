@@ -101,7 +101,7 @@ export function HonorRollExportModal({
       const newMap: Record<string, Record<string, number>> = {};
       if (gradesData) {
         students.forEach(s => {
-          newMap[s.id] = computeSummaryGrades(gradesData, s.id, periodKey, flatColumns);
+          newMap[s.id] = computeSummaryGrades(gradesData, s.id, periodKey, flatColumns, activeSchema);
         });
       }
       setMatrixData(newMap);

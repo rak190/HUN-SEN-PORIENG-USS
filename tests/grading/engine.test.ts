@@ -1,6 +1,9 @@
 import { calculateStudentSemesterGrade } from '@/lib/domain/grading/index';
+import { getCurriculumSchemaForClass } from '@/lib/curriculum';
 import test from 'node:test';
 import assert from 'node:assert';
+
+const schema = getCurriculumSchemaForClass('10', 'science');
 
 test('Grading Engine Semantics - calculateStudentSemesterGrade', async (t) => {
   await t.test('treats a missing month as zero by dividing by the total expected months (3)', () => {
@@ -16,8 +19,7 @@ test('Grading Engine Semantics - calculateStudentSemesterGrade', async (t) => {
     const { calculatedScores } = calculateStudentSemesterGrade(
       [dec, jan, feb],
       exam,
-      '10',
-      'science'
+      schema
     );
 
     // Monthly Average = (8 + 0 + 10) / 3 = 6
@@ -34,8 +36,7 @@ test('Grading Engine Semantics - calculateStudentSemesterGrade', async (t) => {
     const { calculatedScores } = calculateStudentSemesterGrade(
       [dec, jan, feb],
       exam,
-      '10',
-      'science'
+      schema
     );
 
     // Monthly Average = 0 / 3 = 0
@@ -52,8 +53,7 @@ test('Grading Engine Semantics - calculateStudentSemesterGrade', async (t) => {
      const { calculatedScores } = calculateStudentSemesterGrade(
       [dec, jan, feb],
       exam,
-      '10',
-      'science'
+      schema
      );
 
      // Monthly Average = 0 / 3 = 0

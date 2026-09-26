@@ -107,7 +107,7 @@ export default function DocumentsPage() {
     const newMap: Record<string, Record<string, number>> = {};
     if (gradesData) {
       formattedStudents.forEach(s => {
-        newMap[s.id] = computeSummaryGrades(gradesData, s.id, monthKey, flatColumns);
+        newMap[s.id] = computeSummaryGrades(gradesData, s.id, monthKey, flatColumns, activeSchema);
       });
     }
     setMatrixData(newMap);

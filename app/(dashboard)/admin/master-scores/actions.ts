@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { getCurriculumSchemaForClass } from '@/lib/curriculum';
+import { getCurriculumSchemaForClass, getDynamicCurriculumSchemaForClass } from '@/lib/curriculum';
 import { getServerAuth } from '@/lib/auth-server';
 import { computeSummaryGrades } from '@/lib/domain/grading';
 
@@ -168,12 +168,12 @@ export async function calculateSummaryScores(period: string, academicYearId: str
   // 4. Calculate averages per student dynamically according to curriculum schema
   const updates: any[] = [];
   
-  students.forEach((std: any) => {
+  for (const std of students) {
     const pMap = studentGradesMap.get(std.id);
-    if (!pMap || pMap.size === 0) return;
+    if (!pMap || pMap.size === 0) continue;
 
     const classInfo = std.classes;
-    const schema = getCurriculumSchemaForClass(classInfo?.grade, classInfo?.track);
+    const schema = await getDynamicCurriculumSchemaForClass(classInfo?.grade, classInfo?.track, academicYearId, supabase);
     
     const subjectIds: string[] = [];
     schema.subjects.forEach(sub => {
@@ -183,7 +183,7 @@ export async function calculateSummaryScores(period: string, academicYearId: str
       }
     });
 
-    const calculatedScores = computeSummaryGrades(gradesData, std.id, period, subjectIds);
+    const calculatedScores = computeSummaryGrades(gradesData, std.id, period, subjectIds, schema);
     let totalScore = 0;
 
     if (Object.keys(calculatedScores).length > 0) {
@@ -209,7 +209,7 @@ export async function calculateSummaryScores(period: string, academicYearId: str
         updated_at: new Date().toISOString()
       });
     }
-  });
+  }
 
   if (updates.length > 0) {
     const { error: upsertErr } = await supabase

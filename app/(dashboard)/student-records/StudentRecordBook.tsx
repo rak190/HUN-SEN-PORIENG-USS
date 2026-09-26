@@ -24,9 +24,9 @@ export default function StudentRecordBook({ classInfo, student, allStudents, gra
     const allStudentAnnualScores: Record<string, Record<string, number>> = {};
 
     allStudents.forEach(s => {
-      allStudentSem1Scores[s.id] = computeSummaryGrades(gradesData, s.id, 'sem1-summary', subjectIds);
-      allStudentSem2Scores[s.id] = computeSummaryGrades(gradesData, s.id, 'sem2-summary', subjectIds);
-      allStudentAnnualScores[s.id] = computeSummaryGrades(gradesData, s.id, 'annual', subjectIds);
+      allStudentSem1Scores[s.id] = computeSummaryGrades(gradesData, s.id, 'sem1-summary', subjectIds, schema);
+      allStudentSem2Scores[s.id] = computeSummaryGrades(gradesData, s.id, 'sem2-summary', subjectIds, schema);
+      allStudentAnnualScores[s.id] = computeSummaryGrades(gradesData, s.id, 'annual', subjectIds, schema);
     });
 
     const getRank = (subjectId: string, scoresMap: Record<string, Record<string, number>>, targetScore: number) => {

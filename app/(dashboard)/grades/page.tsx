@@ -186,7 +186,7 @@ export default function GradesPage() {
           setRawGradesData(gradesData);
           const subjectIds = flatColumns.map(c => c.id);
           stdData.forEach(s => {
-            newMap[s.id] = computeSummaryGrades(gradesData, s.id, selectedPeriod, subjectIds);
+            newMap[s.id] = computeSummaryGrades(gradesData, s.id, selectedPeriod, subjectIds, activeSchema);
           });
         }
         setMatrixData(newMap);
