@@ -401,7 +401,7 @@ export async function generateLiveExamGoogleSheetAction(examMonth: string, acade
   }
 }
 
-export async function uploadMasterScoresAction(payload: any[], period: string) {
+export async function uploadMasterScoresAction(payload: any[], period: string, academicYearId: string) {
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
     await requirePrincipal();
@@ -410,7 +410,8 @@ export async function uploadMasterScoresAction(payload: any[], period: string) {
 
     const { data, error } = await supabase.rpc('batch_upload_scores_atomic', {
       p_scores: payload,
-      p_period: period
+      p_period: period,
+      p_academic_year_id: academicYearId
     });
 
     if (error) throw error;

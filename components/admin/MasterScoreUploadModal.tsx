@@ -276,7 +276,7 @@ export function MasterScoreUploadModal({ isOpen, onClose, selectedPeriod, academ
           status: 'draft',
           updated_at: new Date().toISOString()
         }));
-        const result = await uploadMasterScoresAction(cleanPayload, selectedPeriod);
+        const result = await uploadMasterScoresAction(cleanPayload, selectedPeriod, academicYearId);
         if (!result.success) throw new Error(result.error);
       }
 
