@@ -4,15 +4,23 @@ import React, { useState, useEffect } from 'react';
 import { 
   School, Calendar, Plus, Save, Trash2, Edit3, Check, X, FileSpreadsheet, 
   Download, Upload, AlertTriangle, Search, Users, Building, 
-  CalendarDays, Server, ChevronDown, CalendarCheck, ClipboardList
+  CalendarDays, Server, ChevronDown, CalendarCheck, ClipboardList,
+  Lock, Unlock, Archive, MoreVertical
 } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
+
+import { activateAcademicYear, closeAcademicYear, reopenAcademicYear } from './actions';
 
 export default function PremiumMoEYSAcademicSetupPage() {
   const [loading, setLoading] = useState(true);
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<string | null>(null);
   const [showYearModal, setShowYearModal] = useState(false);
+  
+  // Transition Modals State
+  const [showCloseConfirm, setShowCloseConfirm] = useState<string | null>(null);
+  const [showReopenConfirm, setShowReopenConfirm] = useState<string | null>(null);
+  const [reopenReason, setReopenReason] = useState('');
 
   useEffect(() => {
     fetchAcademicYears();
@@ -24,7 +32,7 @@ export default function PremiumMoEYSAcademicSetupPage() {
       const data = await res.json();
       if (data.academicYears && data.academicYears.length > 0) {
         setAcademicYears(data.academicYears);
-        const activeYear = data.academicYears.find((y: any) => y.is_active || y.is_current);
+        const activeYear = data.academicYears.find((y: any) => y.status === 'active' || y.is_active || y.is_current);
         if (activeYear) setSelectedYearId(activeYear.id);
         else setSelectedYearId(data.academicYears[0].id);
       }
@@ -60,19 +68,54 @@ export default function PremiumMoEYSAcademicSetupPage() {
     }
   };
 
-  const handleToggleActive = async (id: string) => {
+  const handleActivate = async (id: string) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/academic-years', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, is_active: true }),
-      });
-      if (res.ok) {
-        fetchAcademicYears();
+      const res = await activateAcademicYear(id);
+      if (res.success) {
+        await fetchAcademicYears();
+      } else {
+        alert(res.error);
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCloseYear = async (id: string) => {
+    setLoading(true);
+    try {
+      const res = await closeAcademicYear(id);
+      if (res.success) {
+        setShowCloseConfirm(null);
+        await fetchAcademicYears();
+      } else {
+        alert(res.error);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReopenYear = async (id: string) => {
+    if (!reopenReason) return alert('បញ្ជាក់ហេតុផល (Reason required)');
+    setLoading(true);
+    try {
+      const res = await reopenAcademicYear(id, reopenReason);
+      if (res.success) {
+        setShowReopenConfirm(null);
+        setReopenReason('');
+        await fetchAcademicYears();
+      } else {
+        alert(res.error);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
       setLoading(false);
     }
   };
@@ -162,23 +205,33 @@ export default function PremiumMoEYSAcademicSetupPage() {
           </div>
 
           <div className="space-y-3 pr-1">
-            {academicYears.map(y => (
+            {academicYears.map(y => {
+              const status = y.status || (y.is_active ? 'active' : 'closed');
+              return (
               <div key={y.id} className="flex gap-3.5 items-start p-3.5 rounded-2xl bg-white hover:bg-slate-50 transition-all border border-slate-100/80 hover:border-slate-200 group relative shadow-2xs">
-                <div className={`p-3 rounded-2xl shadow-sm shrink-0 ${y.is_active || y.isActive ? 'bg-[#FFCF59] text-yellow-950' : 'bg-slate-100 text-slate-500'}`}>
-                  <Calendar className="w-5 h-5" />
+                <div className={`p-3 rounded-2xl shadow-sm shrink-0 ${status === 'active' ? 'bg-[#FFCF59] text-yellow-950' : status === 'closed' ? 'bg-amber-50 text-amber-600' : status === 'archived' ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-500'}`}>
+                  {status === 'closed' ? <Lock className="w-5 h-5" /> : status === 'archived' ? <Archive className="w-5 h-5" /> : <Calendar className="w-5 h-5" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <h4 className="text-sm font-extrabold text-slate-900 truncate group-hover:text-[#155EEF] transition-colors">
                       {y.name}
                     </h4>
-                    {y.is_active || y.isActive ? (
+                    {status === 'active' ? (
                       <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 shrink-0 flex items-center gap-1">
-                        <Check className="w-3 h-3" /> សកម្ម
+                        <Check className="w-3 h-3" /> កំពុងដំណើរការ
+                      </span>
+                    ) : status === 'closed' ? (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0 flex items-center gap-1">
+                        <Lock className="w-3 h-3" /> បានបិទបញ្ចប់ / ចាក់សោ
+                      </span>
+                    ) : status === 'archived' ? (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                        បណ្ណសារ
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
-                        បញ្ចប់
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
+                        កំពុងរៀបចំ
                       </span>
                     )}
                   </div>
@@ -186,21 +239,32 @@ export default function PremiumMoEYSAcademicSetupPage() {
                     ចាប់ផ្តើម: <span className="font-bold text-slate-600">{y.start_date || y.startDate || '-'}</span> • បញ្ចប់: <span className="font-bold text-slate-600">{y.end_date || y.endDate || '-'}</span>
                   </p>
                 </div>
-                <div className="flex flex-col items-end justify-between shrink-0 h-full">
-                  {!(y.is_active || y.isActive) && (
-                    <button 
-                      onClick={() => handleToggleActive(y.id)}
-                      className="text-[11px] font-extrabold text-[#155EEF] hover:underline cursor-pointer"
-                    >
-                      ដាក់ជាសកម្ម
+                <div className="flex items-center gap-2 shrink-0 h-full">
+                  <div className="relative group/dropdown">
+                    <button className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm cursor-pointer">
+                      <MoreVertical className="w-4 h-4 text-slate-600" />
                     </button>
-                  )}
-                  <button className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 transition-all mt-1 cursor-pointer" title="លុបកំណត់ត្រា">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-10 flex flex-col p-1">
+                      {status !== 'active' && (
+                        <button onClick={() => handleActivate(y.id)} className="text-left px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-lg flex items-center gap-2 cursor-pointer">
+                          <Check className="w-4 h-4" /> កំណត់ជាឆ្នាំកំពុងដំណើរការ
+                        </button>
+                      )}
+                      {status === 'active' && (
+                        <button onClick={() => setShowCloseConfirm(y.id)} className="text-left px-3 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 rounded-lg flex items-center gap-2 cursor-pointer">
+                          <Lock className="w-4 h-4" /> បិទបញ្ចប់ឆ្នាំសិក្សា
+                        </button>
+                      )}
+                      {(status === 'closed' || status === 'archived') && (
+                        <button onClick={() => setShowReopenConfirm(y.id)} className="text-left px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-2 cursor-pointer mt-1 border-t border-slate-100 pt-2">
+                          <Unlock className="w-4 h-4" /> បើកដំណើរការឡើងវិញ
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       </div>
@@ -274,6 +338,67 @@ export default function PremiumMoEYSAcademicSetupPage() {
         </form>
       </Modal>
 
+      {/* Close Confirm Modal */}
+      <Modal
+        isOpen={!!showCloseConfirm}
+        onClose={() => setShowCloseConfirm(null)}
+        size="sm"
+        icon={
+          <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center shadow-xs mx-auto mb-4">
+            <Lock className="w-6 h-6" />
+          </div>
+        }
+        title={<span className="text-center block text-xl">បិទបញ្ចប់ឆ្នាំសិក្សា</span>}
+      >
+        <div className="p-6 pt-0 text-center space-y-6">
+          <p className="text-sm font-semibold text-slate-600 leading-relaxed">
+            តើលោកគ្រូពិតជាចង់បិទបញ្ចប់ឆ្នាំសិក្សានេះមែនទេ? រាល់កំណត់ត្រាពិន្ទុ វត្តមាន និងសិស្សទាំងអស់នឹងត្រូវបានចាក់សោ <strong className="text-amber-700">(Read-Only)</strong> មិនអាចកែប្រែបានទៀតឡើយ។
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button onClick={() => setShowCloseConfirm(null)} className="px-6 py-2.5 font-extrabold text-sm text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-all cursor-pointer">បោះបង់</button>
+            <button onClick={() => handleCloseYear(showCloseConfirm!)} disabled={loading} className="px-6 py-2.5 font-extrabold text-sm text-white bg-amber-500 hover:bg-amber-600 rounded-xl transition-all shadow-md shadow-amber-500/20 cursor-pointer flex items-center gap-2">
+              {loading ? <Server className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+              បិទនិងចាក់សោ
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Reopen Confirm Modal */}
+      <Modal
+        isOpen={!!showReopenConfirm}
+        onClose={() => {
+          setShowReopenConfirm(null);
+          setReopenReason('');
+        }}
+        size="sm"
+        icon={
+          <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center shadow-xs mx-auto mb-4">
+            <Unlock className="w-6 h-6" />
+          </div>
+        }
+        title={<span className="text-center block text-xl">បើកដំណើរការឡើងវិញ</span>}
+      >
+        <div className="p-6 pt-0 space-y-5 text-center">
+          <p className="text-sm font-semibold text-slate-600 leading-relaxed">
+            ប្រតិបត្តិការនេះគឺសម្រាប់តែ <strong className="text-blue-700">Admin</strong> ប៉ុណ្ណោះ។ សូមបញ្ជាក់ហេតុផលដែលត្រូវបើកឆ្នាំសិក្សានេះឡើងវិញ៖
+          </p>
+          <input 
+            type="text" 
+            placeholder="ហេតុផលបើកឡើងវិញ..." 
+            value={reopenReason}
+            onChange={(e) => setReopenReason(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          />
+          <div className="flex gap-3 justify-center mt-2">
+            <button onClick={() => setShowReopenConfirm(null)} className="px-6 py-2.5 font-extrabold text-sm text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-all cursor-pointer">បោះបង់</button>
+            <button onClick={() => handleReopenYear(showReopenConfirm!)} disabled={loading || !reopenReason} className="px-6 py-2.5 font-extrabold text-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer flex items-center gap-2">
+              {loading ? <Server className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />}
+              បើកដំណើរការ
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

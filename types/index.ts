@@ -86,6 +86,7 @@ export interface AcademicYear {
   start_date: string;
   end_date: string;
   is_active: boolean;
+  status?: 'planned' | 'active' | 'closed' | 'archived';
   is_archived: boolean;
   created_at: string;
 }

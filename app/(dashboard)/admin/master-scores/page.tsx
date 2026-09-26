@@ -38,7 +38,11 @@ export default function MasterScoresPage() {
   const [isCalculating, setIsCalculating] = useState(false);
 
   const supabase = createClient();
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [activeYearId, setActiveYearId] = useState<string | null>(null);
+
+  const selectedYearObj = academicYears.find(y => y.id === activeYearId);
+  const isReadOnly = selectedYearObj && (selectedYearObj.status === 'closed' || selectedYearObj.status === 'archived');
 
   useEffect(() => {
     const curMonth = new Date().getMonth();
@@ -54,16 +58,21 @@ export default function MasterScoresPage() {
     async function fetchStats() {
       setLoading(true);
       try {
-        // 0. Fetch active academic year
-        const { data: yearData } = await supabase
+        // 0. Fetch academic years
+        const { data: yearsData } = await supabase
           .from('academic_years')
-          .select('id')
-          .eq('is_active', true)
-          .single();
+          .select('id, name, status, is_active')
+          .order('start_date', { ascending: false });
           
-        if (yearData) {
-          setActiveYearId(yearData.id);
+        if (yearsData && yearsData.length > 0) {
+          setAcademicYears(yearsData);
+          if (!activeYearId) {
+            const active = yearsData.find(y => y.is_active || y.status === 'active');
+            setActiveYearId(active ? active.id : yearsData[0].id);
+          }
         }
+
+        const currentYearIdToFetch = activeYearId || yearsData?.find(y => y.is_active || y.status === 'active')?.id || yearsData?.[0]?.id;
 
         // 1. Fetch all classes for the active academic year
         let classesQuery = supabase
@@ -71,8 +80,8 @@ export default function MasterScoresPage() {
           .select('id, name, teacher_id, profiles:teacher_id(full_name)')
           .order('name', { ascending: true });
           
-        if (yearData) {
-          classesQuery = classesQuery.eq('academic_year_id', yearData.id);
+        if (currentYearIdToFetch) {
+          classesQuery = classesQuery.eq('academic_year_id', currentYearIdToFetch);
         }
         
         const { data: classesData, error: classErr } = await classesQuery;
@@ -85,8 +94,8 @@ export default function MasterScoresPage() {
           .select('class_id, status')
           .eq('period', selectedPeriod);
           
-        if (yearData) {
-          gradesQuery = gradesQuery.eq('academic_year_id', yearData.id);
+        if (currentYearIdToFetch) {
+          gradesQuery = gradesQuery.eq('academic_year_id', currentYearIdToFetch);
         }
 
         const { data: gradesData, error: gradeErr } = await gradesQuery;
@@ -279,6 +288,13 @@ export default function MasterScoresPage() {
 
   return (
     <div className="space-y-6 animate-fadeIn select-none p-4 md:p-8 bg-slate-50 min-h-screen">
+      {isReadOnly && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3 shadow-sm mb-6">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <p className="text-sm font-bold">🔒 ឆ្នាំសិក្សានេះត្រូវបានបិទបញ្ចប់រួចរាល់ហើយ — ទិន្នន័យស្ថិតក្នុងទម្រង់មើលតែប៉ុណ្ណោះ (Read-Only)</p>
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
@@ -295,6 +311,19 @@ export default function MasterScoresPage() {
         {activeTab === 'scores' && (
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-200">
+              <span className="text-xs font-bold text-slate-500 hidden sm:block">ឆ្នាំសិក្សា៖</span>
+              <select 
+                value={activeYearId || ''}
+                onChange={(e) => setActiveYearId(e.target.value)}
+                className="appearance-none bg-transparent text-slate-700 py-1 pr-6 focus:outline-none font-bold text-sm cursor-pointer"
+              >
+                {academicYears.map(y => (
+                  <option key={y.id} value={y.id}>{y.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-200">
               <span className="text-xs font-bold text-slate-500 hidden sm:block">ខែ៖</span>
               <select 
                 value={selectedPeriod}
@@ -309,18 +338,19 @@ export default function MasterScoresPage() {
 
             <button 
               onClick={() => setIsUploadModalOpen(true)}
-              className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-all border border-slate-200 shadow-sm flex items-center gap-2 cursor-pointer"
+              disabled={isReadOnly}
+              className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-sm transition-all border border-slate-200 shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Upload className="w-4 h-4 text-[#155EEF]" /> នាំចូលពិន្ទុ
             </button>
             
             <button 
               onClick={() => setIsPublishAuditModalOpen(true)}
-              disabled={isPublishing || draftCount === 0}
+              disabled={isPublishing || draftCount === 0 || isReadOnly}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl text-sm transition-all shadow-sm shadow-blue-500/20 flex items-center gap-2 disabled:opacity-50 disabled:shadow-none cursor-pointer"
             >
               <Send className="w-4 h-4" /> {isPublishing ? 'កំពុងប្រកាស...' : 'ប្រកាសផ្សាយពិន្ទុ'}
-              {draftCount > 0 && (
+              {draftCount > 0 && !isReadOnly && (
                 <span className="px-1.5 py-0.5 text-xs bg-blue-800 rounded-full">{draftCount}</span>
               )}
             </button>

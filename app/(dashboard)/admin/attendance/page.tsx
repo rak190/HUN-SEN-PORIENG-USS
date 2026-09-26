@@ -31,17 +31,44 @@ export default function MasterAttendancePage() {
   const todayStr = new Date().toLocaleDateString('km-KH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   const supabase = createClient();
+  const [academicYears, setAcademicYears] = useState<any[]>([]);
+  const [activeYearId, setActiveYearId] = useState<string | null>(null);
+
+  const selectedYearObj = academicYears.find(y => y.id === activeYearId);
+  const isReadOnly = selectedYearObj && (selectedYearObj.status === 'closed' || selectedYearObj.status === 'archived');
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
       try {
+        // 0. Fetch academic years
+        const { data: yearsData } = await supabase
+          .from('academic_years')
+          .select('id, name, status, is_active')
+          .order('start_date', { ascending: false });
+          
+        let currentYearIdToFetch = activeYearId;
+        if (yearsData && yearsData.length > 0) {
+          setAcademicYears(yearsData);
+          if (!activeYearId) {
+            const active = yearsData.find(y => y.is_active || y.status === 'active');
+            currentYearIdToFetch = active ? active.id : yearsData[0].id;
+            setActiveYearId(currentYearIdToFetch);
+          }
+        }
+
         // Fetch real classes from database
-        const { data: dbClassesData } = await supabase
+        let classesQuery = supabase
           .from('classes')
           .select('id, name, grade, teacher_id, profiles:teacher_id(full_name)')
           .order('grade')
           .order('name');
+          
+        if (currentYearIdToFetch) {
+          classesQuery = classesQuery.eq('academic_year_id', currentYearIdToFetch);
+        }
+
+        const { data: dbClassesData } = await classesQuery;
         
         const validClasses = dbClassesData || [];
         setDbClasses(validClasses);
@@ -60,13 +87,17 @@ export default function MasterAttendancePage() {
         }
 
         // Fetch attendance
-        const query = supabase
+        let attQuery = supabase
           .from('attendance_records')
           .select('*, students(full_name, student_id_number, gender)')
           .gte('date', startDateStr)
           .lte('date', endDateStr);
+          
+        if (currentYearIdToFetch) {
+          attQuery = attQuery.eq('academic_year_id', currentYearIdToFetch);
+        }
 
-        const { data: attData } = await query;
+        const { data: attData } = await attQuery;
         const records = attData || [];
 
         // Build data structures
@@ -172,7 +203,7 @@ export default function MasterAttendancePage() {
       }
     }
     fetchData();
-  }, [timeframe, selectedDate]); // Refresh when timeframe or date changes
+  }, [timeframe, selectedDate, activeYearId]); // Refresh when timeframe, date, or year changes
 
 
   const filteredAbsentees = absentStudents.filter(a => {
@@ -217,6 +248,13 @@ export default function MasterAttendancePage() {
 
   return (
     <div className="space-y-6 animate-fadeIn select-none">
+      {isReadOnly && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3 shadow-sm mb-6">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <p className="text-sm font-bold">🔒 ឆ្នាំសិក្សានេះត្រូវបានបិទបញ្ចប់រួចរាល់ហើយ — ទិន្នន័យស្ថិតក្នុងទម្រង់មើលតែប៉ុណ្ណោះ (Read-Only)</p>
+        </div>
+      )}
+
       {/* Top Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>
@@ -230,6 +268,19 @@ export default function MasterAttendancePage() {
         
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           
+          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-200">
+            <span className="text-xs font-bold text-slate-500 hidden sm:block">ឆ្នាំសិក្សា៖</span>
+            <select 
+              value={activeYearId || ''}
+              onChange={(e) => setActiveYearId(e.target.value)}
+              className="appearance-none bg-transparent text-slate-700 py-0.5 pr-6 focus:outline-none font-bold text-xs cursor-pointer"
+            >
+              {academicYears.map(y => (
+                <option key={y.id} value={y.id}>{y.name}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Timeframe Toggle */}
           <div className="flex bg-slate-200/50 p-1 rounded-xl">
             <button 
