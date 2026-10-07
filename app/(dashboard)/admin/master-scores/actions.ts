@@ -10,7 +10,7 @@ import { computeSummaryGrades } from '@/lib/domain/grading';
  */
 export async function createGradeSnapshot(period: string, academicYearId: string, classIds: string[], label: string) {
   const supabase = await createClient();
-  const { user } = await getServerAuth();
+  const { user, profile } = await getServerAuth();
 
   try {
     let query = supabase.from('grades').select('*').eq('period', period).eq('academic_year_id', academicYearId);
@@ -26,7 +26,9 @@ export async function createGradeSnapshot(period: string, academicYearId: string
       created_by: user?.id || null,
       snapshot_label: label || `Backup មុនពេលអាប់ឡូត ${period}`,
       records_count: snapshotPayload.length,
-      grades_payload: snapshotPayload
+      grades_payload: snapshotPayload,
+      academic_year_id: academicYearId,
+      school_id: profile?.school_id || null
     }).select().single();
 
     if (error) throw error;
@@ -437,6 +439,31 @@ export async function publishScoresAction(period: string, academicYearId: string
     await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
+
+    // 1. Validation: count active enrolled students for the academic year
+    const { count: enrolledCount, error: enrollError } = await supabase
+      .from('student_enrollments')
+      .select('*', { count: 'exact', head: true })
+      .eq('academic_year_id', academicYearId)
+      .eq('enrollment_status', 'active');
+
+    if (enrollError) throw enrollError;
+
+    // 2. Count students with valid draft scores
+    const { count: scoresCount, error: scoreError } = await supabase
+      .from('grades')
+      .select('*', { count: 'exact', head: true })
+      .eq('period', period)
+      .eq('academic_year_id', academicYearId)
+      .eq('status', 'draft');
+
+    if (scoreError) throw scoreError;
+
+    // 3. Identify discrepancies
+    if ((scoresCount || 0) < (enrolledCount || 0)) {
+      const missing = (enrolledCount || 0) - (scoresCount || 0);
+      return { success: false, error: `ការប្រកាសពិន្ទុត្រូវបានបដិសេធ៖ បាត់ពិន្ទុសិស្សចំនួន ${missing} នាក់។ សូមបញ្ចូលពិន្ទុឱ្យបានគ្រប់សិន។` };
+    }
 
     const { error } = await supabase
       .from('grades')
