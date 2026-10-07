@@ -82,7 +82,7 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   const { user, role } = await getServerAuth();
 
-  if (!user || role !== 'admin') {
+  if (!user || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 

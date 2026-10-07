@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { getServerAuth } from '@/lib/auth-server';
 
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || '';
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || '';
@@ -20,6 +21,12 @@ const s3Client = new S3Client({
 
 export async function POST(req: Request) {
   try {
+    // 1. Verify User Session
+    const { user } = await getServerAuth();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized: Please log in to upload files.' }, { status: 401 });
+    }
+
     if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME) {
       console.error('Missing Cloudflare R2 Environment Variables.');
       return NextResponse.json({ error: 'Storage configuration error' }, { status: 500 });
@@ -30,6 +37,13 @@ export async function POST(req: Request) {
 
     if (!fileName || !fileType) {
       return NextResponse.json({ error: 'Missing fileName or fileType' }, { status: 400 });
+    }
+
+    // 2. Validate file extension and type
+    const ext = fileName.slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
+    const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
+    if (!ALLOWED_EXTENSIONS.includes(ext) || !fileType.startsWith('image/')) {
+      return NextResponse.json({ error: 'Only image uploads are allowed on this endpoint.' }, { status: 400 });
     }
 
     // Clean up filename and ensure it is unique
@@ -43,7 +57,7 @@ export async function POST(req: Request) {
       ContentType: fileType,
     });
 
-    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
     
     // Construct the public URL where the image will be accessible after upload
     // R2_PUBLIC_URL must not have a trailing slash

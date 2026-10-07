@@ -129,9 +129,9 @@ DECLARE
     v_count_subjects INT;
     v_count_scales INT;
 BEGIN
-    -- Authorization: Admin only
+    -- Authorization: Admin or Principal
     IF auth.uid() IS NULL OR (SELECT role FROM public.profiles WHERE id = auth.uid()) NOT IN ('admin', 'principal') THEN
-        RAISE EXCEPTION 'Unauthorized: Only admin can clone standards';
+        RAISE EXCEPTION 'Unauthorized: Only Admin or Principal can clone standards';
     END IF;
 
     -- Clone subject standards
