@@ -269,7 +269,7 @@ export async function PATCH(req: Request) {
 
     if (action === 'update_profile') {
       const { name, role: newRole, username, phone, subject } = updates;
-      const profileUpdates: any = {};
+      const profileUpdates: Record<string, unknown> = {};
       
       if (newRole === 'admin' && role !== 'admin') {
         return NextResponse.json({ error: 'Principal cannot assign admin role.' }, { status: 403 });

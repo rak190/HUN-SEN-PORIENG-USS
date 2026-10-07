@@ -59,3 +59,6 @@ Thumbs.db
 # Legacy Isolations
 lib/legacy/
 docker/
+
+supabase/.temp/
+supabase/.branches/

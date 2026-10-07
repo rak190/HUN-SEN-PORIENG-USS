@@ -112,7 +112,7 @@ export async function PATCH(req: Request) {
       }
     }
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (is_active !== undefined) {
       updateData.is_active = is_active;
       updateData.is_current = is_active;

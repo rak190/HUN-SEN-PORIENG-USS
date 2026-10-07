@@ -244,8 +244,17 @@ export async function bulkQuickRegisterAction(payload: {
   academic_year_id: string;
 }) {
   try {
-    const { requireTeacher } = await import('@/lib/auth-server');
+    const { requireTeacher, requireClassAccess } = await import('@/lib/auth-server');
     const { user } = await requireTeacher(); // allow teachers to bulk register their students
+    
+    // Security Guard: Verify access to all unique class_ids in the payload
+    const uniqueClassIds = Array.from(new Set(payload.records.map(r => r.class_id)));
+    for (const classId of uniqueClassIds) {
+      if (classId) {
+        await requireClassAccess(classId);
+      }
+    }
+
     const supabase = createAdminClient();
 
     const { data, error } = await supabase.rpc('bulk_quick_register_students', {

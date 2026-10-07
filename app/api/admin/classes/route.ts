@@ -2,6 +2,23 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getServerAuth } from '@/lib/auth-server';
 
+interface StudentData {
+  id: string;
+  gender: string;
+  is_active: boolean;
+}
+
+interface ClassData {
+  id: string;
+  name: string;
+  grade: string;
+  shift: string;
+  room_number: string;
+  track: string;
+  students?: StudentData[];
+  [key: string]: any;
+}
+
 export async function GET(req: Request) {
   const { user, role, profile } = await getServerAuth();
 
@@ -37,10 +54,10 @@ export async function GET(req: Request) {
     if (error) throw error;
 
     // Calculate live student enrollment counts per class
-    const classes = (classesData || []).map((c: any) => {
-      const activeStudents = (c.students || []).filter((s: any) => s.is_active !== false);
+    const classes = (classesData || []).map((c: ClassData) => {
+      const activeStudents = (c.students || []).filter((s: StudentData) => s.is_active !== false);
       const student_count = activeStudents.length;
-      const female_count = activeStudents.filter((s: any) => s.gender === 'F' || s.gender === 'ស្រី').length;
+      const female_count = activeStudents.filter((s: StudentData) => s.gender === 'F' || s.gender === 'ស្រី').length;
       const { students: _, ...rest } = c;
       return {
         ...rest,
@@ -77,7 +94,7 @@ export async function POST(req: Request) {
     try {
       const resolvedSchoolId = role === 'principal' ? profile?.school_id : null;
       
-      const records = body.classes.map((c: any) => ({
+      const records = body.classes.map((c: Partial<ClassData>) => ({
         name: c.name,
         grade: String(c.grade),
         academic_year_id: c.academic_year_id,
@@ -95,7 +112,7 @@ export async function POST(req: Request) {
 
       if (error) throw error;
 
-      const classesWithCounts = (inserted || []).map((c: any) => ({
+      const classesWithCounts = (inserted || []).map((c: ClassData) => ({
         ...c,
         student_count: 0,
         female_count: 0
@@ -169,7 +186,7 @@ export async function PATCH(req: Request) {
   }
 
   try {
-    const updateData: any = {};
+    const updateData: Partial<ClassData> = {};
     if (teacher_id !== undefined) updateData.teacher_id = teacher_id || null;
     if (name !== undefined) updateData.name = name;
     if (grade !== undefined) updateData.grade = String(grade);

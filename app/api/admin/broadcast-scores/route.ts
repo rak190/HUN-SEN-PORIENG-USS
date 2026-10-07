@@ -27,6 +27,12 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 export async function POST(req: NextRequest) {
   try {
+    const { getServerAuth } = await import('@/lib/auth-server');
+    const { user, role } = await getServerAuth();
+    if (!user || (role !== 'admin' && role !== 'principal')) {
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
+    }
+
     const { class_id, month } = await req.json();
 
     if (!class_id || !month) {
