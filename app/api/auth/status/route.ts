@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerAuth } from '@/lib/auth-server';
 
 // Update this version string when you want all clients to force-refresh their caches
-export const SYSTEM_VERSION = '2.0.0-hardened';
+const SYSTEM_VERSION = '2.0.0-hardened';
 
 export async function GET() {
   const { user, profile } = await getServerAuth();
