@@ -32,7 +32,7 @@ const VIEW_TABS = [
 ];
 
 export default function StudentsPage() {
-  const { activeClass } = useAuth();
+  const { activeClass, activeAcademicYear } = useAuth();
   
   const { 
     students, setStudents, 
@@ -437,6 +437,7 @@ export default function StudentsPage() {
     const payload = {
       ...data,
       class_id: activeClass?.id,
+      academic_year_id: activeAcademicYear?.id,
       current_status: data.current_status || 'active',
       is_active: (data.current_status || 'active') === 'active',
     };

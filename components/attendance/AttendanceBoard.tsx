@@ -42,6 +42,8 @@ export default function AttendanceBoard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
+  const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -94,11 +96,19 @@ export default function AttendanceBoard() {
   }, [activeClass, selectedDate]);
 
   async function handleMarkStatus(studentId: string, status: AttendanceStatus) {
+    if (syncingIds.has(studentId)) return;
+    const prevStatus = records[studentId];
+
+    setSyncingIds(prev => new Set(prev).add(studentId));
     setRecords((prev) => ({ ...prev, [studentId]: status }));
     setSyncStatus('syncing');
+    setErrorMessage(null);
 
     if (!activeClass) {
-      setTimeout(() => setSyncStatus('synced'), 400);
+      setTimeout(() => {
+        setSyncStatus('synced');
+        setSyncingIds(prev => { const next = new Set(prev); next.delete(studentId); return next; });
+      }, 400);
       return;
     }
 
@@ -116,14 +126,31 @@ export default function AttendanceBoard() {
 
       if (error) {
         console.error('Failed to sync attendance:', error.message);
+        // Revert local state to match database ground truth
+        setRecords(prev => {
+          const copy = { ...prev };
+          if (prevStatus !== undefined) copy[studentId] = prevStatus;
+          else delete copy[studentId];
+          return copy;
+        });
         setSyncStatus('error');
+        setErrorMessage('បរាជ័យក្នុងការរក្សាទុកវត្តមានសម្រាប់សិស្សនេះ។ ស្ថានភាពត្រូវបានស្ដារមកវិញ។');
         return;
       }
 
       setSyncStatus('synced');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to sync attendance:', e);
+      setRecords(prev => {
+        const copy = { ...prev };
+        if (prevStatus !== undefined) copy[studentId] = prevStatus;
+        else delete copy[studentId];
+        return copy;
+      });
       setSyncStatus('error');
+      setErrorMessage('មានបញ្ហាបណ្តាញក្នុងការរក្សាទុកវត្តមាន។ ស្ថានភាពត្រូវបានស្ដារមកវិញ។');
+    } finally {
+      setSyncingIds(prev => { const next = new Set(prev); next.delete(studentId); return next; });
     }
   }
 
@@ -132,12 +159,14 @@ export default function AttendanceBoard() {
   }
 
   async function handleMarkAll(status: AttendanceStatus) {
+    const previousRecords = { ...records };
     const newMap: Record<string, AttendanceStatus> = {};
     students.forEach((s) => {
       newMap[s.id] = status;
     });
     setRecords(newMap);
     setSyncStatus('syncing');
+    setErrorMessage(null);
 
     if (!activeClass) {
       setTimeout(() => setSyncStatus('synced'), 400);
@@ -159,13 +188,17 @@ export default function AttendanceBoard() {
       const { error } = await supabase.from('attendance_records').upsert(upsertPayload, { onConflict: 'student_id,date,academic_year_id' });
       if (error) {
         console.error('Failed to sync batch attendance:', error.message);
+        setRecords(previousRecords);
         setSyncStatus('error');
+        setErrorMessage('បរាជ័យក្នុងការរក្សាទុកវត្តមានទាំងអស់។ បញ្ជីត្រូវបានស្ដារមកសភាពដើមវិញ។');
         return;
       }
       setSyncStatus('synced');
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to sync batch attendance:', e);
+      setRecords(previousRecords);
       setSyncStatus('error');
+      setErrorMessage('មានបញ្ហាបណ្តាញក្នុងការរក្សាទុកវត្តមានទាំងអស់។ បញ្ជីត្រូវបានស្ដារមកសភាពដើមវិញ។');
     }
   }
 
@@ -197,27 +230,19 @@ export default function AttendanceBoard() {
         </div>
       </div>
 
-      {absentCount > 0 && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center font-black shrink-0">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-xs font-black text-rose-900">
-                🔴 ប្រព័ន្ធប្រកាសអាសន្ន EWS៖ មានសិស្ស {absentCount} នាក់អវត្តមានឥតច្បាប់នៅថ្ងៃនេះ!
-              </div>
-              <div className="text-[11px] font-bold text-rose-700 mt-0.5">
-                គម្រោង GEIP តម្រូវឱ្យគ្រូបន្ទុកថ្នាក់បញ្ជាក់មូលហេតុអវត្តមាន និងចុះសួរសុខទុក្ខដល់ផ្ទះបើអវត្តមានលើសពី 3 ថ្ងៃ។
-              </div>
-            </div>
+      {errorMessage && (
+        <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between text-xs font-bold text-rose-800 animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMessage}</span>
           </div>
-          <Link
-            href="/students"
-            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs text-center shrink-0 shadow-sm transition-all"
+          <button 
+            type="button" 
+            onClick={() => setErrorMessage(null)} 
+            className="text-rose-600 hover:text-rose-800 p-1 font-bold underline cursor-pointer"
           >
-            📝 កត់ត្រាចុះដល់ផ្ទះឥឡូវនេះ
-          </Link>
+            បិទ
+          </button>
         </div>
       )}
 

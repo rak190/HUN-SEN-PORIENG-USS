@@ -22,11 +22,9 @@ test('Security & Authorization Boundaries (Role-based)', async (t) => {
       class_id: crypto.randomUUID(),
       academic_year_id: crypto.randomUUID(),
       period: 'January',
-      subject_scores: {},
+      scores: {},
       total_score: 0,
-      rank: 0,
-      status: 'draft',
-      school_id: crypto.randomUUID()
+      status: 'draft'
     });
 
     assert.ok(error !== null, 'Should block anonymous insertion into grades');

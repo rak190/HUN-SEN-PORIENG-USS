@@ -148,35 +148,89 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
         savedStudent = { ...payload, ...(data || dbRecord) };
       }
     } else {
-      // Insert new student
-      // Ensure required core fields have fallbacks for creation only if they are missing
-      if (!dbRecord.full_name) dbRecord.full_name = 'មិនមានឈ្មោះ';
-      if (!dbRecord.student_id_number) dbRecord.student_id_number = `ID-${Date.now().toString().slice(-4)}`;
-      
-      const { data, error } = await supabase
-        .from('students')
-        .insert([dbRecord])
-        .select()
-        .single();
+      let existingStudentId: string | null = null;
+      if (validatedPayload.student_id_number) {
+        const { data: existing } = await supabase
+          .from('students')
+          .select('id')
+          .eq('student_id_number', validatedPayload.student_id_number)
+          .maybeSingle();
+        if (existing?.id) {
+          existingStudentId = existing.id;
+        }
+      }
 
-      if (error) {
-        console.error('Supabase insert error:', error.message);
-        return { success: false, error: error.message };
+      if (existingStudentId) {
+        // Idempotent update of existing student to prevent duplicate records on retry
+        const { data, error } = await supabase
+          .from('students')
+          .update(dbRecord)
+          .eq('id', existingStudentId)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Supabase update error during student upsert:', error.message);
+          return { success: false, error: error.message };
+        } else {
+          savedStudent = { ...payload, ...(data || dbRecord), id: existingStudentId };
+        }
       } else {
-        savedStudent = { ...payload, ...(data || dbRecord) };
+        // Insert new student
+        // Ensure required core fields have fallbacks for creation only if they are missing
+        if (!dbRecord.full_name) dbRecord.full_name = 'មិនមានឈ្មោះ';
+        if (!dbRecord.student_id_number) dbRecord.student_id_number = `ID-${Date.now().toString().slice(-6)}`;
+        
+        const { data, error } = await supabase
+          .from('students')
+          .insert([dbRecord])
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Supabase insert error:', error.message);
+          return { success: false, error: error.message };
+        } else {
+          savedStudent = { ...payload, ...(data || dbRecord) };
+        }
       }
     }
 
-    // Attempt to update enrollment record if academic_year_id is provided
-    if (validatedPayload.academic_year_id && savedStudent?.id && validatedPayload.class_id) {
-       await supabase.from('student_enrollments').upsert({
+    // Resolve academic_year_id if not explicitly provided
+    let targetYearId = validatedPayload.academic_year_id;
+    if (!targetYearId && validatedPayload.class_id) {
+      const { data: classData } = await supabase
+        .from('classes')
+        .select('academic_year_id')
+        .eq('id', validatedPayload.class_id)
+        .maybeSingle();
+      targetYearId = classData?.academic_year_id;
+    }
+    if (!targetYearId) {
+      const { data: activeYear } = await supabase
+        .from('academic_years')
+        .select('id')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      targetYearId = activeYear?.id;
+    }
+
+    // Attempt to update enrollment record if academic_year_id is resolved and class_id is present
+    if (targetYearId && savedStudent?.id && validatedPayload.class_id) {
+       const { error: enrollError } = await supabase.from('student_enrollments').upsert({
           student_id: savedStudent.id,
           class_id: validatedPayload.class_id,
-          academic_year_id: validatedPayload.academic_year_id,
+          academic_year_id: targetYearId,
           enrollment_status: enrollmentStatus,
           desk_number: validatedPayload.desk_number || null,
           room_number: validatedPayload.room_number || null,
        }, { onConflict: 'student_id,academic_year_id' });
+
+       if (enrollError) {
+         console.error('Enrollment upsert error:', enrollError.message);
+         return { success: false, error: `រក្សាទុកសិស្សជោគជ័យ ប៉ុន្តែការចុះឈ្មោះចូលថ្នាក់មានបញ្ហា៖ ${enrollError.message}` };
+       }
     }
 
     // Bidirectional sync: If health data was entered in /students, sync into student_health_records
