@@ -57,13 +57,68 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
   try {
     const validatedPayload = StudentSchema.parse(payload);
     
-    const { requireClassAccess, requireAdmin } = await import('@/lib/auth-server');
+    const { getServerAuth, requireClassAccess, requireAdmin, requireStudentAccess } = await import('@/lib/auth-server');
+    const { user, profile, role } = await getServerAuth();
+    if (!user || !profile || !role) {
+      return { success: false, error: 'Unauthorized: Authentication required.' };
+    }
+
+    if (!['admin', 'principal', 'teacher'].includes(role)) {
+      return { success: false, error: 'Forbidden: Insufficient role privileges.' };
+    }
+
     if (validatedPayload.class_id) {
       await requireClassAccess(validatedPayload.class_id);
     } else {
       await requireAdmin();
     }
+
+    const isExistingId = Boolean(
+      validatedPayload.id &&
+      validatedPayload.id.length > 20 &&
+      !validatedPayload.id.startsWith('std-') &&
+      !validatedPayload.id.startsWith('mock-')
+    );
+
+    // Target student authorization check: verify caller owns or has authority over this student
+    if (isExistingId && validatedPayload.id) {
+      await requireStudentAccess(validatedPayload.id, validatedPayload.class_id);
+    }
+
     const supabase = createAdminClient();
+
+    // Prevent duplicate student_id_number collisions across schools
+    if (validatedPayload.student_id_number && !isExistingId) {
+      const { data: existingStudent } = await supabase
+        .from('students')
+        .select('id, student_enrollments(class_id, classes(school_id, teacher_id))')
+        .eq('student_id_number', validatedPayload.student_id_number)
+        .maybeSingle();
+
+      if (existingStudent) {
+        const enrollments = (existingStudent.student_enrollments as any[]) || [];
+        const belongsToDifferentSchool = enrollments.some(
+          (e) => e.classes?.school_id && e.classes.school_id !== profile.school_id
+        );
+        if (role !== 'admin' && belongsToDifferentSchool) {
+          return {
+            success: false,
+            error: 'Student ID number is already registered at another school institution.',
+          };
+        }
+        if (role === 'teacher') {
+          const isTeacherClass = enrollments.some(
+            (e) => e.classes?.teacher_id === user.id || e.class_id === validatedPayload.class_id
+          );
+          if (!isTeacherClass) {
+            return {
+              success: false,
+              error: 'Forbidden: You do not have permission to modify this student in another class.',
+            };
+          }
+        }
+      }
+    }
 
 
     const normalizedGender = validatedPayload.gender === 'F' || validatedPayload.gender === 'ស្រី' ? 'F' : 'M';
@@ -130,72 +185,6 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
     if (validatedPayload.birth_cert_no !== undefined) dbRecord.birth_cert_no = validatedPayload.birth_cert_no || null;
     if (validatedPayload.migrant_status !== undefined) dbRecord.migrant_status = validatedPayload.migrant_status || null;
 
-    let savedStudent = null;
-
-    if (validatedPayload.id && validatedPayload.id.length > 20 && !validatedPayload.id.startsWith('std-') && !validatedPayload.id.startsWith('mock-')) {
-      // Update existing student
-      const { data, error } = await supabase
-        .from('students')
-        .update(dbRecord)
-        .eq('id', validatedPayload.id)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Supabase update error:', error.message);
-        return { success: false, error: error.message };
-      } else {
-        savedStudent = { ...payload, ...(data || dbRecord) };
-      }
-    } else {
-      let existingStudentId: string | null = null;
-      if (validatedPayload.student_id_number) {
-        const { data: existing } = await supabase
-          .from('students')
-          .select('id')
-          .eq('student_id_number', validatedPayload.student_id_number)
-          .maybeSingle();
-        if (existing?.id) {
-          existingStudentId = existing.id;
-        }
-      }
-
-      if (existingStudentId) {
-        // Idempotent update of existing student to prevent duplicate records on retry
-        const { data, error } = await supabase
-          .from('students')
-          .update(dbRecord)
-          .eq('id', existingStudentId)
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Supabase update error during student upsert:', error.message);
-          return { success: false, error: error.message };
-        } else {
-          savedStudent = { ...payload, ...(data || dbRecord), id: existingStudentId };
-        }
-      } else {
-        // Insert new student
-        // Ensure required core fields have fallbacks for creation only if they are missing
-        if (!dbRecord.full_name) dbRecord.full_name = 'មិនមានឈ្មោះ';
-        if (!dbRecord.student_id_number) dbRecord.student_id_number = `ID-${Date.now().toString().slice(-6)}`;
-        
-        const { data, error } = await supabase
-          .from('students')
-          .insert([dbRecord])
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Supabase insert error:', error.message);
-          return { success: false, error: error.message };
-        } else {
-          savedStudent = { ...payload, ...(data || dbRecord) };
-        }
-      }
-    }
-
     // Resolve academic_year_id if not explicitly provided
     let targetYearId = validatedPayload.academic_year_id;
     if (!targetYearId && validatedPayload.class_id) {
@@ -216,29 +205,19 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
       targetYearId = activeYear?.id;
     }
 
-    // Attempt to update enrollment record if academic_year_id is resolved and class_id is present
-    if (targetYearId && savedStudent?.id && validatedPayload.class_id) {
-       const { error: enrollError } = await supabase.from('student_enrollments').upsert({
-          student_id: savedStudent.id,
-          class_id: validatedPayload.class_id,
-          academic_year_id: targetYearId,
-          enrollment_status: enrollmentStatus,
-          desk_number: validatedPayload.desk_number || null,
-          room_number: validatedPayload.room_number || null,
-       }, { onConflict: 'student_id,academic_year_id' });
-
-       if (enrollError) {
-         console.error('Enrollment upsert error:', enrollError.message);
-         return { success: false, error: `រក្សាទុកសិស្សជោគជ័យ ប៉ុន្តែការចុះឈ្មោះចូលថ្នាក់មានបញ្ហា៖ ${enrollError.message}` };
-       }
+    if (!targetYearId) {
+      return { success: false, error: 'Target academic year could not be resolved.' };
     }
 
-    // Bidirectional sync: If health data was entered in /students, sync into student_health_records
-    const studentId = validatedPayload.id || savedStudent?.id;
-    if (studentId && (validatedPayload.weight_kg || validatedPayload.height_m || healthNotes || validatedPayload.assistive_device)) {
+    if (!validatedPayload.class_id) {
+      return { success: false, error: 'Target class ID is required.' };
+    }
+
+    // Prepare health payload if entered
+    let healthPayload: Record<string, any> | null = null;
+    if (validatedPayload.weight_kg || validatedPayload.height_m || healthNotes || validatedPayload.assistive_device) {
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
       const heightCm = validatedPayload.height_m ? Math.round(Number(validatedPayload.height_m) * 100) : null;
-      
       let vision = '6/6';
       if (validatedPayload.assistive_device === 'glasses' || healthNotes?.includes('ភ្នែក')) {
         vision = '6/12';
@@ -248,25 +227,37 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
         hearing = 'ខ្សោយ';
       }
 
-      try {
-        await supabase.from('student_health_records').upsert({
-          student_id: studentId,
-          class_id: validatedPayload.class_id || undefined,
-          academic_year_id: validatedPayload.academic_year_id,
-          recorded_date: today,
-          weight_kg: validatedPayload.weight_kg ? Number(validatedPayload.weight_kg) : null,
-          height_cm: heightCm,
-          bmi: calculatedBmi,
-          vision_left: vision,
-          vision_right: vision,
-          hearing: hearing,
-          dental: 'ធម្មតា',
-          notes: healthNotes || ''
-        }, { onConflict: 'student_id,recorded_date,academic_year_id' });
-      } catch (healthSyncErr) {
-        console.warn('Failed to auto-sync to health records:', healthSyncErr);
-      }
+      healthPayload = {
+        recorded_date: today,
+        weight_kg: validatedPayload.weight_kg ? Number(validatedPayload.weight_kg) : null,
+        height_cm: heightCm,
+        bmi: calculatedBmi,
+        vision_left: vision,
+        vision_right: vision,
+        hearing: hearing,
+        dental: 'ធម្មតា',
+        notes: healthNotes || '',
+      };
     }
+
+    // Atomically save student, enrollment, and health record in a single transaction
+    const { data: atomicResult, error: atomicError } = await supabase.rpc('save_student_atomic', {
+      p_student: dbRecord,
+      p_class_id: validatedPayload.class_id,
+      p_academic_year_id: targetYearId,
+      p_health: healthPayload,
+      p_caller_id: user.id,
+    });
+
+    if (atomicError || !atomicResult?.success) {
+      console.error('save_student_atomic error:', atomicError?.message);
+      return {
+        success: false,
+        error: atomicError?.message || 'Failed to save student record atomically.',
+      };
+    }
+
+    const savedStudent = { ...payload, ...dbRecord, id: atomicResult.student_id };
 
     revalidatePath('/students');
     revalidatePath('/health');
@@ -298,15 +289,28 @@ export async function bulkQuickRegisterAction(payload: {
   academic_year_id: string;
 }) {
   try {
-    const { requireTeacher, requireClassAccess } = await import('@/lib/auth-server');
-    const { user } = await requireTeacher(); // allow teachers to bulk register their students
-    
-    // Security Guard: Verify access to all unique class_ids in the payload
-    const uniqueClassIds = Array.from(new Set(payload.records.map(r => r.class_id)));
-    for (const classId of uniqueClassIds) {
-      if (classId) {
-        await requireClassAccess(classId);
+    if (!payload?.records || !Array.isArray(payload.records) || payload.records.length === 0) {
+      return { success: false, error: 'No student records provided for registration.' };
+    }
+
+    if (!payload.academic_year_id) {
+      return { success: false, error: 'Target academic year ID is required.' };
+    }
+
+    // Security Guard: Verify every single record has a valid class_id
+    for (const r of payload.records) {
+      if (!r.class_id) {
+        return { success: false, error: 'All student records must have an assigned class_id.' };
       }
+    }
+
+    const { requireTeacher, requireClassAccess } = await import('@/lib/auth-server');
+    const { user } = await requireTeacher(); // allow teachers, principals, admins
+
+    // Security Guard: Verify access to all unique class_ids in the payload
+    const uniqueClassIds = Array.from(new Set(payload.records.map((r) => r.class_id)));
+    for (const classId of uniqueClassIds) {
+      await requireClassAccess(classId);
     }
 
     const supabase = createAdminClient();

@@ -31,22 +31,28 @@ export async function GET(request: Request) {
       return new NextResponse('Class not found', { status: 404 });
     }
 
-    if (profile?.role === 'teacher') {
+    const allowedRoles = ['admin', 'principal', 'teacher'];
+    if (!profile?.role || !allowedRoles.includes(profile.role)) {
+      return new NextResponse('Forbidden: Insufficient privileges to export class roster.', { status: 403 });
+    }
+
+    if (profile.role === 'teacher') {
       if (classData.teacher_id !== user.id) {
         return new NextResponse('Forbidden: You do not own this class', { status: 403 });
       }
-    } else if (profile?.role === 'principal') {
-      if (classData.school_id !== profile?.school_id) {
+    } else if (profile.role === 'principal') {
+      if (classData.school_id !== profile.school_id) {
         return new NextResponse('Forbidden: Class belongs to another school', { status: 403 });
       }
     }
 
-    // Fetch students
+    // Fetch students with row limit protection
     let query = supabase
       .from('active_class_rosters')
       .select('*')
       .eq('enrollment_class_id', classId)
-      .order('student_id_number', { ascending: true });
+      .order('student_id_number', { ascending: true })
+      .limit(300);
 
     if (academicYearId) {
       query = query.eq('academic_year_id', academicYearId);

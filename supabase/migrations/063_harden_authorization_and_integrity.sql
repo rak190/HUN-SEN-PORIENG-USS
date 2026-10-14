@@ -10,7 +10,7 @@
 -- 1. Ensure grade_snapshots column types are strictly compatible
 DO $$
 BEGIN
-    -- If school_id is UUID, alter or replace to TEXT referencing schools(id)
+    -- If school_id is UUID, convert non-destructively to TEXT referencing schools(id)
     IF EXISTS (
         SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' 
@@ -18,8 +18,29 @@ BEGIN
           AND column_name = 'school_id' 
           AND data_type = 'uuid'
     ) THEN
-        ALTER TABLE public.grade_snapshots DROP COLUMN school_id CASCADE;
-        ALTER TABLE public.grade_snapshots ADD COLUMN school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE;
+        -- Safely convert UUID column to TEXT without dropping column or data
+        ALTER TABLE public.grade_snapshots ALTER COLUMN school_id TYPE TEXT USING school_id::text;
+        
+        -- Backfill dangling/null school_ids from associated classes before adding FK
+        UPDATE public.grade_snapshots gs
+        SET school_id = c.school_id
+        FROM public.classes c
+        WHERE gs.class_id = c.id
+          AND (gs.school_id IS NULL OR NOT EXISTS (SELECT 1 FROM public.schools s WHERE s.id = gs.school_id));
+
+        -- Re-add foreign key constraint safely if not present
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+            WHERE tc.table_schema = 'public'
+              AND tc.table_name = 'grade_snapshots'
+              AND kcu.column_name = 'school_id'
+              AND tc.constraint_type = 'FOREIGN KEY'
+        ) THEN
+            ALTER TABLE public.grade_snapshots 
+            ADD CONSTRAINT grade_snapshots_school_id_fkey 
+            FOREIGN KEY (school_id) REFERENCES public.schools(id) ON DELETE CASCADE;
+        END IF;
     ELSIF NOT EXISTS (
         SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' 

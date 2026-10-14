@@ -28,7 +28,7 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 export async function POST(req: NextRequest) {
   try {
     const { getServerAuth } = await import('@/lib/auth-server');
-    const { user, role } = await getServerAuth();
+    const { user, profile, role } = await getServerAuth();
     if (!user || (role !== 'admin' && role !== 'principal')) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
     }
@@ -42,12 +42,16 @@ export async function POST(req: NextRequest) {
     // 1. Get class info
     const { data: classData, error: classError } = await supabase
       .from('classes')
-      .select('name')
+      .select('name, school_id')
       .eq('id', class_id)
       .single();
 
     if (classError || !classData) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 });
+    }
+
+    if (role === 'principal' && classData.school_id !== profile?.school_id) {
+      return NextResponse.json({ error: 'Forbidden: You cannot broadcast scores for a class outside your school.' }, { status: 403 });
     }
 
     // 2. Get students in the class

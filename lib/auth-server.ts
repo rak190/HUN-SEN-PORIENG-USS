@@ -13,8 +13,13 @@ export interface AuthContextResult {
  * Verifies genuine cryptographic Supabase Auth Session and retrieves authoritative DB Profile.
  */
 export async function getServerAuth(): Promise<AuthContextResult> {
-  const cookieStore = await cookies();
-  const supabase = await createClient();
+  let supabase;
+  try {
+    supabase = await createClient();
+  } catch (err) {
+    // Outside request store context (e.g. testing or CLI) -> fail closed
+    return { user: null, profile: null, role: null };
+  }
 
   let userId: string | null = null;
   let email: string = '';
@@ -125,37 +130,44 @@ export async function requireClassAccess(classId: string): Promise<{ user: { id:
 /**
  * Reusable Guard: Require Student Access
  */
-export async function requireStudentAccess(studentId: string): Promise<{ user: { id: string; email: string }; profile: Profile; role: Role }> {
+export async function requireStudentAccess(studentId: string, classId?: string): Promise<{ user: { id: string; email: string }; profile: Profile; role: Role }> {
   const auth = await requireAuth();
   if (auth.role === 'admin') return auth;
 
   const supabase = await createClient();
-  const { data: enrollment } = await supabase
+  const { data: enrollments, error } = await supabase
     .from('student_enrollments')
     .select('id, class_id, classes(id, teacher_id, school_id)')
-    .eq('student_id', studentId)
-    .eq('enrollment_status', 'active')
-    .maybeSingle();
+    .eq('student_id', studentId);
 
-  if (!enrollment) {
-    // If no active enrollment is found, teachers/principals shouldn't be modifying it anyway.
-    throw new Error('Forbidden: Student record or active enrollment not found.');
+  if (error || !enrollments || enrollments.length === 0) {
+    throw new Error('Forbidden: Student record or enrollment not found.');
   }
 
-  const classData = enrollment.classes as any;
-
   if (auth.role === 'principal') {
-    if (classData?.school_id !== auth.profile.school_id) {
+    const belongsToSchool = enrollments.some(e => (e.classes as any)?.school_id === auth.profile.school_id);
+    if (!belongsToSchool) {
       throw new Error('Forbidden: You are not authorized to modify students outside your school.');
     }
     return auth;
   }
 
-  if (classData?.teacher_id !== auth.user.id) {
-    throw new Error('Forbidden: You are not authorized to modify records for this student.');
+  if (auth.role === 'teacher') {
+    const isEnrolledInTeacherClass = enrollments.some(e => {
+      const cls = e.classes as any;
+      if (classId) {
+        return cls?.id === classId && cls?.teacher_id === auth.user.id;
+      }
+      return cls?.teacher_id === auth.user.id;
+    });
+
+    if (!isEnrolledInTeacherClass) {
+      throw new Error('Forbidden: You are not authorized to modify records for this student.');
+    }
+    return auth;
   }
 
-  return auth;
+  throw new Error('Forbidden: Insufficient role privileges to modify student records.');
 }
 
 export async function requireAdmin() { return requireRole(['admin']); }

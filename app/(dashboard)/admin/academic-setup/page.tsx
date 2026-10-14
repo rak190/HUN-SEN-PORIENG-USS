@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import React, { useState, useEffect } from 'react';
 import { 
   School, Calendar, Plus, Save, Trash2, Edit3, Check, X, FileSpreadsheet, 

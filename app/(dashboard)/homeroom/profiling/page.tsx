@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import ProfileCompletionClient from './ProfileCompletionClient';
 import { getProfileCompletionStats } from './actions';
 
+export const dynamic = 'force-dynamic';
+
 interface PageProps {
   searchParams: Promise<{ classId?: string }>;
 }

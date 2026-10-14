@@ -83,31 +83,23 @@ export async function addStudent(data: {
     throw new Error('មិនមានឆ្នាំសិក្សាសកម្មទេ (No active academic year found)');
   }
 
-  // 3. Insert student securely without the class_id
-  const { data: newStudent, error } = await supabase.from('students').insert({
-    full_name: data.full_name,
-    student_id_number: data.student_id_number || null,
-    gender: data.gender || null,
-    is_active: true
-  }).select().single();
-
-  if (error || !newStudent) {
-    console.error('Error adding student:', error);
-    throw new Error('បរាជ័យក្នុងការបន្ថែមសិស្ស');
-  }
-
-  // 4. Enroll the student in the teacher's class
-  const { error: enrollError } = await supabase.from('student_enrollments').insert({
-    student_id: newStudent.id,
-    class_id: classroom.id,
-    academic_year_id: currentYear.id,
-    enrollment_status: 'active'
+  // 3. Atomically create student and enroll in class
+  const { data: atomicResult, error: atomicError } = await supabase.rpc('save_student_atomic', {
+    p_student: {
+      full_name: data.full_name,
+      student_id_number: data.student_id_number || null,
+      gender: data.gender || null,
+      is_active: true
+    },
+    p_class_id: classroom.id,
+    p_academic_year_id: currentYear.id,
+    p_health: null,
+    p_caller_id: user.id
   });
 
-  if (enrollError) {
-    console.error('Error enrolling student:', enrollError);
-    // Ideally we would rollback the student creation, but for now we throw
-    throw new Error('សិស្សត្រូវបានបង្កើត ប៉ុន្តែបរាជ័យក្នុងការចុះឈ្មោះចូលថ្នាក់');
+  if (atomicError || !atomicResult?.success) {
+    console.error('Error adding student atomically:', atomicError);
+    throw new Error(atomicError?.message || 'បរាជ័យក្នុងការបន្ថែមសិស្ស');
   }
 
   revalidatePath('/homeroom');
