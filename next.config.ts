@@ -33,7 +33,8 @@ const withPWA = withPWAInit({
         },
       },
       {
-        urlPattern: /\.(?:jpg|jpeg|gif|png|svg|ico|webp)$/i,
+        // Only cache public application UI assets; explicitly exclude storage buckets, private student docs and photos
+        urlPattern: /^\/(?:icons|images|_next\/static)\/.*\.(?:jpg|jpeg|gif|png|svg|ico|webp)$/i,
         handler: "StaleWhileRevalidate",
         options: {
           cacheName: "static-image-assets",
@@ -74,12 +75,16 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['lucide-react'],
   },
   async rewrites() {
-    return [
-      {
-        source: '/rest/v1/:path*',
-        destination: 'http://127.0.0.1:3001/:path*',
-      },
-    ];
+    // Only enable mock proxy in local development if explicitly opted-in
+    if (process.env.NODE_ENV === 'development' && process.env.ENABLE_LOCAL_POSTGREST_PROXY === 'true') {
+      return [
+        {
+          source: '/rest/v1/:path*',
+          destination: 'http://127.0.0.1:3001/:path*',
+        },
+      ];
+    }
+    return [];
   },
   async headers() {
     return [

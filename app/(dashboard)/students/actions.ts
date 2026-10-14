@@ -335,3 +335,133 @@ export async function bulkQuickRegisterAction(payload: {
   }
 }
 
+export async function updateStudentStatusAction(payload: {
+  student_id: string;
+  action_type: string;
+  action_date: string;
+  reason?: string;
+  class_id?: string;
+}) {
+  try {
+    const { getServerAuth, requireStudentAccess } = await import('@/lib/auth-server');
+    const { user, profile, role } = await getServerAuth();
+    if (!user || !profile || !role) {
+      return { success: false, error: 'Unauthorized: Authentication required.' };
+    }
+
+    if (!['admin', 'principal', 'teacher'].includes(role)) {
+      return { success: false, error: 'Forbidden: Insufficient privileges.' };
+    }
+
+    await requireStudentAccess(payload.student_id, payload.class_id);
+
+    const supabase = createAdminClient();
+
+    let newStatus = 'dropout';
+    let enrollmentStatus = 'dropped_out';
+    if (payload.action_type === 'ផ្ទេរចេញ' || payload.action_type === 'transfer') {
+      newStatus = 'transfer';
+      enrollmentStatus = 'transferred_out';
+    } else if (payload.action_type === 'មរណភាព' || payload.action_type === 'deceased') {
+      newStatus = 'deceased';
+      enrollmentStatus = 'dropped_out';
+    }
+
+    const noteDetails = `មូលហេតុ: ${payload.reason || 'មិនបានបញ្ជាក់'} | កាលបរិច្ឆេទ: ${payload.action_date} | ដោយ: ${profile.full_name || profile.username}`;
+
+    // 1. Update students table
+    const { error: studentError } = await supabase
+      .from('students')
+      .update({
+        enrollment_status: newStatus,
+        is_active: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', payload.student_id);
+
+    if (studentError) {
+      return { success: false, error: studentError.message };
+    }
+
+    // 2. Update active enrollment in student_enrollments
+    let enrollQuery = supabase
+      .from('student_enrollments')
+      .update({
+        enrollment_status: enrollmentStatus,
+        notes: noteDetails,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('student_id', payload.student_id)
+      .eq('enrollment_status', 'active');
+
+    if (payload.class_id) {
+      enrollQuery = enrollQuery.eq('class_id', payload.class_id);
+    }
+
+    await enrollQuery;
+
+    // 3. Audit log
+    await supabase.from('audit_logs').insert({
+      user_id: user.id,
+      action: 'UPDATE_STUDENT_STATUS',
+      target_table: 'students',
+      record_id: payload.student_id,
+      details: {
+        action_type: payload.action_type,
+        action_date: payload.action_date,
+        reason: payload.reason,
+        class_id: payload.class_id,
+      },
+    });
+
+    revalidatePath('/students');
+    revalidatePath('/homeroom');
+    revalidatePath('/admin/students');
+    return { success: true };
+  } catch (err: any) {
+    console.error('updateStudentStatusAction error:', err);
+    return { success: false, error: err?.message || 'Unknown error occurred while updating status' };
+  }
+}
+
+export async function fetchStudentTransferHistoryAction(classId: string) {
+  try {
+    const { getServerAuth, requireClassAccess } = await import('@/lib/auth-server');
+    await getServerAuth();
+    await requireClassAccess(classId);
+
+    const supabase = createAdminClient();
+    const { data: records, error } = await supabase
+      .from('student_enrollments')
+      .select('id, student_id, enrollment_status, notes, updated_at, students(student_id_number, full_name, gender)')
+      .eq('class_id', classId)
+      .in('enrollment_status', ['transferred_out', 'dropped_out', 'suspended'])
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const history = (records || []).map((r) => {
+      const student = (r.students as any) || {};
+      let statusLabel = 'ផ្ទេរចេញ';
+      if (r.enrollment_status === 'dropped_out') statusLabel = 'បោះបង់ការសិក្សា';
+      else if (r.enrollment_status === 'suspended') statusLabel = 'ផ្អាកការសិក្សា';
+
+      return {
+        id: r.id,
+        student_id: r.student_id,
+        student_id_number: student.student_id_number || '-',
+        full_name: student.full_name || 'Unknown',
+        status: statusLabel,
+        date: r.updated_at ? r.updated_at.split('T')[0] : '-',
+        reason: r.notes || '-',
+      };
+    });
+
+    return { success: true, history };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to fetch transfer history' };
+  }
+}
+

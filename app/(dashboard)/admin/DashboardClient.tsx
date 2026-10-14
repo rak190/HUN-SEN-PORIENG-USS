@@ -41,9 +41,10 @@ interface AdminDashboardClientProps {
     missingIdCount: number;
     pendingCorrections: number;
   };
+  dbErrors?: string[];
 }
 
-export default function AdminDashboardClient({ stats, pieData, activities, atRiskStudents, currentMonth, dataQuality }: AdminDashboardClientProps) {
+export default function AdminDashboardClient({ stats, pieData, activities, atRiskStudents, currentMonth, dataQuality, dbErrors }: AdminDashboardClientProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showEwsModal, setShowEwsModal] = useState(false);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
@@ -51,23 +52,25 @@ export default function AdminDashboardClient({ stats, pieData, activities, atRis
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Generate 10 months of the academic year (November to August)
+  // Generate 10 months of the academic year (November to August) with explicit calendar math
   const monthsList = React.useMemo(() => {
     const today = new Date();
-    const currentMonth = today.getMonth(); // 0-11
+    const currentMonthIdx = today.getMonth(); // 0-11
     
     // Academic year starts in November (month index 10)
     // If we are currently in Jan-Oct (0-9), the start year is last year
     // If we are in Nov-Dec (10-11), the start year is this year
-    const startYear = currentMonth >= 10 ? today.getFullYear() : today.getFullYear() - 1;
+    const startYear = currentMonthIdx >= 10 ? today.getFullYear() : today.getFullYear() - 1;
     
     return Array.from({ length: 10 }).map((_, i) => {
-      // Start in November (month 10)
-      const d = new Date(startYear, 10 + i, 1);
-      return {
-        value: d.toISOString().slice(0, 7),
-        label: d.toLocaleDateString('km-KH', { year: 'numeric', month: 'long' })
-      };
+      const totalMonth = 10 + i; // 10=Nov, 11=Dec, 12=Jan, 13=Feb, ...
+      const year = startYear + Math.floor(totalMonth / 12);
+      const monthNum = (totalMonth % 12) + 1; // 1-12
+      const value = `${year}-${String(monthNum).padStart(2, '0')}`;
+      
+      const d = new Date(year, monthNum - 1, 15);
+      const label = d.toLocaleDateString('km-KH', { year: 'numeric', month: 'long' });
+      return { value, label };
     });
   }, []);
 
@@ -122,6 +125,17 @@ export default function AdminDashboardClient({ stats, pieData, activities, atRis
           </button>
         </div>
       </header>
+
+      {/* Partial Database Query Failure Warning */}
+      {dbErrors && dbErrors.length > 0 && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-xs font-bold flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+          <div>
+            <p className="font-extrabold text-amber-900">ការទាញយកទិន្នន័យខ្លះមិនបានពេញលេញ (Partial Query Failure)</p>
+            <p className="text-amber-700 font-medium mt-0.5">ទិន្នន័យស្ថិតិខ្លះប្រហែលជាមិនទាន់ធ្វើបច្ចុប្បន្នភាពពេញលេញដោយសារបញ្ហាតភ្ជាប់បណ្តោះអាសន្ន។</p>
+          </div>
+        </div>
+      )}
 
       {/* 4 Top Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">

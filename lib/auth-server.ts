@@ -114,7 +114,7 @@ export async function requireClassAccess(classId: string): Promise<{ user: { id:
   }
 
   if (auth.role === 'principal') {
-    if (classroom.school_id !== auth.profile.school_id) {
+    if (!auth.profile.school_id || classroom.school_id !== auth.profile.school_id) {
       throw new Error('Forbidden: You are not authorized to modify records outside your school.');
     }
     return auth;
@@ -145,7 +145,10 @@ export async function requireStudentAccess(studentId: string, classId?: string):
   }
 
   if (auth.role === 'principal') {
-    const belongsToSchool = enrollments.some(e => (e.classes as any)?.school_id === auth.profile.school_id);
+    const belongsToSchool = Boolean(
+      auth.profile.school_id &&
+      enrollments.some(e => (e.classes as any)?.school_id === auth.profile.school_id)
+    );
     if (!belongsToSchool) {
       throw new Error('Forbidden: You are not authorized to modify students outside your school.');
     }

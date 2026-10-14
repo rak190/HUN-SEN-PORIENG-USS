@@ -1,18 +1,28 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { getServerAuth } from '@/lib/auth-server';
+import { getServerAuth, requireRole } from '@/lib/auth-server';
 
 export async function fetchExportData(filters: { q?: string, class?: string, teacher?: string, gender?: string, desk?: string }) {
-  const { user, role } = await getServerAuth();
+  const { user, profile, role } = await getServerAuth();
   
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || !profile || (role !== 'admin' && role !== 'principal')) {
     return { success: false, error: 'Unauthorized: Admin access required.' };
   }
 
   const supabase = await createClient();
 
   let query = supabase.from('active_class_rosters').select('*');
+
+  // Principal institutional scoping
+  if (role === 'principal' && profile.school_id) {
+    const { data: schoolClasses } = await supabase
+      .from('classes')
+      .select('id')
+      .eq('school_id', profile.school_id);
+    const classIds = schoolClasses?.map((c) => c.id) || [];
+    query = query.in('enrollment_class_id', classIds);
+  }
 
   // Apply filters
   if (filters.q) {
@@ -129,17 +139,26 @@ export async function adminBasicRegisterAction(payload: {
 
 export async function processGiepMatchingAction(records: any[], academic_year_id: string) {
   try {
-    const { requirePrincipal } = await import('@/lib/auth-server');
-    await requirePrincipal();
+    const { profile, role } = await requireRole(['admin', 'principal']);
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
-    // Fetch existing students for the current academic year
-    // To match we need student_id_number, full_name, gender, etc.
-    const { data: existingStudents, error } = await supabase
+    // Fetch existing students for the current academic year, scoped to school
+    let rostersQuery = supabase
       .from('active_class_rosters')
       .select('id, student_id_number, full_name, gender, class_name')
       .eq('academic_year_id', academic_year_id);
+
+    if (role === 'principal' && profile.school_id) {
+      const { data: schoolClasses } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('school_id', profile.school_id);
+      const classIds = schoolClasses?.map((c) => c.id) || [];
+      rostersQuery = rostersQuery.in('enrollment_class_id', classIds);
+    }
+
+    const { data: existingStudents, error } = await rostersQuery;
 
     if (error) throw error;
 
@@ -511,7 +530,7 @@ export async function bulkArchiveStudents(studentIds: string[], academicYearId: 
 export async function bulkTransferClass(studentIds: string[], newClassId: string, academicYearId: string) {
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
-    await requirePrincipal();
+    const { profile, role } = await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -521,11 +540,41 @@ export async function bulkTransferClass(studentIds: string[], newClassId: string
         .from('academic_years')
         .select('id')
         .eq('is_active', true)
-        .single();
+        .limit(1)
+        .maybeSingle();
       if (yearData) targetYearId = yearData.id;
     }
 
     if (!targetYearId) return { success: false, error: 'No active academic year found.' };
+
+    // Principal boundary enforcement
+    if (role === 'principal' && profile.school_id) {
+      // 1. Verify target class belongs to principal's school
+      const { data: targetClass } = await supabase
+        .from('classes')
+        .select('school_id')
+        .eq('id', newClassId)
+        .maybeSingle();
+
+      if (!targetClass || targetClass.school_id !== profile.school_id) {
+        return { success: false, error: 'Forbidden: Cannot transfer students to a class outside your school institution.' };
+      }
+
+      // 2. Verify all students belong to classes in principal's school
+      const { data: currentEnrollments } = await supabase
+        .from('student_enrollments')
+        .select('student_id, classes!inner(school_id)')
+        .in('student_id', studentIds)
+        .eq('academic_year_id', targetYearId);
+
+      const hasForeignStudent = (currentEnrollments || []).some(
+        (e: any) => e.classes?.school_id && e.classes.school_id !== profile.school_id
+      );
+
+      if (hasForeignStudent) {
+        return { success: false, error: 'Forbidden: Cannot transfer students belonging to another school institution.' };
+      }
+    }
 
     const { error } = await supabase
       .from('student_enrollments')
@@ -552,7 +601,7 @@ export async function bulkTransferClass(studentIds: string[], newClassId: string
 export async function bulkUpdateStudentStatus(studentIds: string[], status: string, academicYearId: string) {
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
-    await requirePrincipal();
+    const { profile, role } = await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
@@ -562,13 +611,32 @@ export async function bulkUpdateStudentStatus(studentIds: string[], status: stri
         .from('academic_years')
         .select('id')
         .eq('is_active', true)
-        .single();
+        .limit(1)
+        .maybeSingle();
       if (yearData) targetYearId = yearData.id;
     }
 
     if (!targetYearId) return { success: false, error: 'No active academic year found.' };
 
-    const { error } = await supabase
+    // Principal boundary enforcement
+    if (role === 'principal' && profile.school_id) {
+      const { data: currentEnrollments } = await supabase
+        .from('student_enrollments')
+        .select('student_id, classes!inner(school_id)')
+        .in('student_id', studentIds)
+        .eq('academic_year_id', targetYearId);
+
+      const hasForeignStudent = (currentEnrollments || []).some(
+        (e: any) => e.classes?.school_id && e.classes.school_id !== profile.school_id
+      );
+
+      if (hasForeignStudent) {
+        return { success: false, error: 'Forbidden: Cannot modify students belonging to another school institution.' };
+      }
+    }
+
+    // 1. Update student_enrollments
+    const { error: enrollError } = await supabase
       .from('student_enrollments')
       .update({
         enrollment_status: status,
@@ -577,10 +645,25 @@ export async function bulkUpdateStudentStatus(studentIds: string[], status: stri
       .in('student_id', studentIds)
       .eq('academic_year_id', targetYearId);
 
-    if (error) throw error;
+    if (enrollError) throw enrollError;
+
+    // 2. Synchronize students table active state
+    const isActive = (status === 'active' || status === 'enrolled');
+    const { error: studentError } = await supabase
+      .from('students')
+      .update({
+        is_active: isActive,
+        enrollment_status: status,
+        updated_at: new Date().toISOString()
+      })
+      .in('id', studentIds);
+
+    if (studentError) throw studentError;
 
     const { revalidatePath } = await import('next/cache');
     revalidatePath('/admin/students');
+    revalidatePath('/students');
+    revalidatePath('/homeroom');
     
     return { success: true };
   } catch (err: any) {

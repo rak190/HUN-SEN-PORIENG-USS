@@ -111,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return null;
   }
 
-  async function refreshClassesForUser(userId: string, userRole?: string) {
+  async function refreshClassesForUser(userId: string, userRole?: string, userSchoolId?: string) {
     try {
       // 1. Try to find classes assigned to this teacher
       const { data: teacherClasses } = await supabase
@@ -134,11 +134,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // 2. If no classes assigned to this user (e.g. Admin or Principal), fetch all classes
-      const { data: allClasses } = await supabase
+      // 2. If no classes assigned to this user (e.g. Admin or Principal), fetch classes scoped to school
+      let query = supabase
         .from('classes')
         .select('*')
         .order('name');
+
+      const targetSchool = userSchoolId || profile?.school_id;
+      if (targetSchool) {
+        query = query.eq('school_id', targetSchool);
+      }
+
+      const { data: allClasses } = await query;
 
       if (allClasses && allClasses.length > 0) {
         setClasses(allClasses as Classroom[]);
@@ -154,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function refreshClasses() {
     if (user && !isDemoMode) {
-      await refreshClassesForUser(user.id, profile?.role);
+      await refreshClassesForUser(user.id, profile?.role, profile?.school_id);
     } else {
       setClasses([]);
     }
@@ -177,10 +184,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .from('profiles')
           .select('*')
           .eq('id', authData.user.id)
-          .single();
+          .maybeSingle();
         const effectiveRole = dbProfile?.role || 'teacher';
 
         if (expectedRole && effectiveRole !== expectedRole) {
+          // Immediately sign out to prevent stale authenticated session in cookies
+          await supabase.auth.signOut();
+          document.cookie = 'kruai_user_id=; path=/; max-age=0';
+          document.cookie = 'kruai_role=; path=/; max-age=0';
+          document.cookie = 'kruai_username=; path=/; max-age=0';
           const roleLabel = expectedRole === 'admin' ? 'អ្នកគ្រប់គ្រង' : expectedRole === 'principal' ? 'នាយកសាលា' : expectedRole === 'monitor' ? 'ប្រធានថ្នាក់' : 'គ្រូបន្ទុកថ្នាក់';
           return { error: `គណនីនេះមិនមានសិទ្ធិជា ${roleLabel} ទេ។ សូមជ្រើសរើសតួនាទីឲ្យបានត្រឹមត្រូវ។` };
         }
@@ -190,16 +202,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(dbProfile as Profile);
         
         if (dbProfile) {
-          const { data: academicYear } = await supabase
+          let yearQuery = supabase
             .from('academic_years')
             .select('*')
-            .eq('school_id', dbProfile.school_id)
-            .eq('is_active', true)
-            .single();
+            .eq('is_active', true);
+
+          if (dbProfile.school_id) {
+            yearQuery = yearQuery.eq('school_id', dbProfile.school_id);
+          }
+
+          const { data: academicYear } = await yearQuery
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
           if (academicYear) setActiveAcademicYear(academicYear as AcademicYear);
         }
 
-        await refreshClassesForUser(dbProfile.id);
+        await refreshClassesForUser(dbProfile.id, effectiveRole, dbProfile.school_id);
         return { role: effectiveRole };
       }
     } catch (authErr) {
@@ -217,6 +237,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     document.cookie = 'kruai_role=; path=/; max-age=0';
     document.cookie = 'kruai_username=; path=/; max-age=0';
     localStorage.removeItem('demo_profile');
+
+    // Purge browser runtime image & api caches to prevent data retention across accounts
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      try {
+        const cacheKeys = await window.caches.keys();
+        for (const key of cacheKeys) {
+          if (key.includes('static-image-assets') || key.includes('api')) {
+            await window.caches.delete(key);
+          }
+        }
+      } catch (cacheErr) {
+        console.debug('Failed to clear caches on logout:', cacheErr);
+      }
+    }
+
     setUser(null);
     setProfile(null);
     setClasses([]);

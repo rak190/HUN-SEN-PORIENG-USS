@@ -73,6 +73,23 @@ export default function StudentsPage() {
   });
   const [transferRecords, setTransferRecords] = useState<any[]>([]);
 
+  useEffect(() => {
+    const classId = activeClass?.id;
+    if (!classId) return;
+    async function loadTransferHistory(cid: string) {
+      try {
+        const { fetchStudentTransferHistoryAction } = await import('./actions');
+        const res = await fetchStudentTransferHistoryAction(cid);
+        if (res.success && res.history) {
+          setTransferRecords(res.history);
+        }
+      } catch (e) {
+        console.error('Failed to load transfer history:', e);
+      }
+    }
+    loadTransferHistory(classId);
+  }, [activeClass?.id]);
+
   const handleStatusSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!statusForm.studentId) return;
@@ -80,32 +97,36 @@ export default function StudentsPage() {
     setIsSaving(true);
     const student = students.find(s => s.id === statusForm.studentId);
     if (student) {
-       let newStatus = 'dropout';
-       if (statusForm.actionType === 'ផ្ទេរចេញ') newStatus = 'transfer';
-       else if (statusForm.actionType === 'មរណភាព') newStatus = 'deceased';
-       
-       const { error } = await supabase
-         .from('students')
-         .update({ 
-            enrollment_status: newStatus,
-            is_active: newStatus === 'active'
-         })
-         .eq('id', student.id);
+      try {
+        const { updateStudentStatusAction } = await import('./actions');
+        const res = await updateStudentStatusAction({
+          student_id: student.id,
+          action_type: statusForm.actionType,
+          action_date: statusForm.actionDate,
+          reason: statusForm.reason,
+          class_id: activeClass?.id,
+        });
 
-       if (!error) {
-         setStudents(students.map(s => s.id === student.id ? { ...s, current_status: newStatus as any } : s));
-         setTransferRecords([{
-            id: Date.now().toString(),
-            student_id_number: student.student_id_number,
-            full_name: student.full_name,
-            status: statusForm.actionType,
-            date: statusForm.actionDate,
-            reason: statusForm.reason
-         }, ...transferRecords]);
-       } else {
-         console.error('Error updating status:', error);
-         alert('មានបញ្ហាក្នុងការកែប្រែស្ថានភាពសិស្ស');
-       }
+        if (res.success) {
+          setStudents(students.filter(s => s.id !== student.id));
+          setTransferRecords(prev => [
+            {
+              id: Date.now().toString(),
+              student_id: student.id,
+              student_id_number: student.student_id_number || '-',
+              full_name: student.full_name,
+              status: statusForm.actionType,
+              date: statusForm.actionDate,
+              reason: statusForm.reason || '-'
+            },
+            ...prev
+          ]);
+        } else {
+          alert(`មានបញ្ហាក្នុងការកែប្រែស្ថានភាពសិស្ស៖ ${res.error || 'សូមព្យាយាមម្តងទៀត'}`);
+        }
+      } catch (err: any) {
+        alert(`មានបញ្ហាក្នុងការកែប្រែស្ថានភាពសិស្ស៖ ${err?.message || 'សូមព្យាយាមម្តងទៀត'}`);
+      }
     }
     
     setIsSaving(false);

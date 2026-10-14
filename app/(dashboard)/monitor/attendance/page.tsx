@@ -227,9 +227,24 @@ export default function MonitorAttendancePage() {
     setIsSaving(true);
     
     try {
+      let targetYearId = activeClass.academic_year_id;
+      if (!targetYearId) {
+        const { data: classInfo } = await supabase
+          .from('classes')
+          .select('academic_year_id')
+          .eq('id', activeClass.id)
+          .maybeSingle();
+        targetYearId = classInfo?.academic_year_id;
+      }
+
+      if (!targetYearId) {
+        throw new Error('រកមិនឃើញឆ្នាំសិក្សាសកម្មសម្រាប់ថ្នាក់រៀននេះទេ');
+      }
+
       const upsertPayload = students.map(s => ({
         class_id: activeClass.id,
         student_id: s.id,
+        academic_year_id: targetYearId,
         date: selectedDate,
         status: s.status,
         recorded_by: profile?.id || null,
@@ -238,7 +253,7 @@ export default function MonitorAttendancePage() {
 
       const { error: dbError } = await supabase
         .from('attendance_records')
-        .upsert(upsertPayload, { onConflict: 'class_id,student_id,date' });
+        .upsert(upsertPayload, { onConflict: 'student_id,date,academic_year_id' });
 
       if (dbError) {
         console.error('Supabase attendance error:', dbError);

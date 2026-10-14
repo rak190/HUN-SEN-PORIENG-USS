@@ -96,7 +96,7 @@ export default function AttendanceBoard() {
   }, [activeClass, selectedDate]);
 
   async function handleMarkStatus(studentId: string, status: AttendanceStatus) {
-    if (syncingIds.has(studentId)) return;
+    if (syncingIds.has(studentId) || syncStatus === 'syncing') return;
     const prevStatus = records[studentId];
 
     setSyncingIds(prev => new Set(prev).add(studentId));
@@ -113,19 +113,18 @@ export default function AttendanceBoard() {
     }
 
     try {
-      const { error } = await supabase.from('attendance_records').upsert({
+      const { saveAttendanceSingleAction } = await import('@/app/(dashboard)/attendance/actions');
+      const res = await saveAttendanceSingleAction({
         class_id: activeClass.id,
         student_id: studentId,
-        academic_year_id: activeClass.academic_year_id,
         date: selectedDate,
         status,
         root_cause: rootCauses[studentId] || null,
-        recorded_by: user?.id || null,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'student_id,date,academic_year_id' });
+        academic_year_id: activeClass.academic_year_id || undefined,
+      });
 
-      if (error) {
-        console.error('Failed to sync attendance:', error.message);
+      if (!res.success) {
+        console.error('Failed to sync attendance:', res.error);
         // Revert local state to match database ground truth
         setRecords(prev => {
           const copy = { ...prev };
@@ -134,7 +133,7 @@ export default function AttendanceBoard() {
           return copy;
         });
         setSyncStatus('error');
-        setErrorMessage('បរាជ័យក្នុងការរក្សាទុកវត្តមានសម្រាប់សិស្សនេះ។ ស្ថានភាពត្រូវបានស្ដារមកវិញ។');
+        setErrorMessage(res.error || 'បរាជ័យក្នុងការរក្សាទុកវត្តមានសម្រាប់សិស្សនេះ។ ស្ថានភាពត្រូវបានស្ដារមកវិញ។');
         return;
       }
 
@@ -159,6 +158,8 @@ export default function AttendanceBoard() {
   }
 
   async function handleMarkAll(status: AttendanceStatus) {
+    if (syncStatus === 'syncing' || syncingIds.size > 0) return;
+
     const previousRecords = { ...records };
     const newMap: Record<string, AttendanceStatus> = {};
     students.forEach((s) => {
@@ -173,24 +174,24 @@ export default function AttendanceBoard() {
       return;
     }
 
-    const upsertPayload = students.map((s) => ({
-      class_id: activeClass.id,
-      student_id: s.id,
-      academic_year_id: activeClass.academic_year_id,
-      date: selectedDate,
-      status,
-      root_cause: rootCauses[s.id] || null,
-      recorded_by: user?.id || null,
-      updated_at: new Date().toISOString(),
-    }));
-
     try {
-      const { error } = await supabase.from('attendance_records').upsert(upsertPayload, { onConflict: 'student_id,date,academic_year_id' });
-      if (error) {
-        console.error('Failed to sync batch attendance:', error.message);
+      const { saveAttendanceBatchAction } = await import('@/app/(dashboard)/attendance/actions');
+      const res = await saveAttendanceBatchAction({
+        class_id: activeClass.id,
+        date: selectedDate,
+        records: students.map(s => ({
+          student_id: s.id,
+          status,
+          root_cause: rootCauses[s.id] || null,
+        })),
+        academic_year_id: activeClass.academic_year_id || undefined,
+      });
+
+      if (!res.success) {
+        console.error('Failed to sync batch attendance:', res.error);
         setRecords(previousRecords);
         setSyncStatus('error');
-        setErrorMessage('បរាជ័យក្នុងការរក្សាទុកវត្តមានទាំងអស់។ បញ្ជីត្រូវបានស្ដារមកសភាពដើមវិញ។');
+        setErrorMessage(res.error || 'បរាជ័យក្នុងការរក្សាទុកវត្តមានទាំងអស់។ បញ្ជីត្រូវបានស្ដារមកសភាពដើមវិញ។');
         return;
       }
       setSyncStatus('synced');
