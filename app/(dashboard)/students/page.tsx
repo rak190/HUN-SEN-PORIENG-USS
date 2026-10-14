@@ -459,36 +459,11 @@ export default function StudentsPage() {
         }
         setProfileDrawerData(null);
       } else {
-        // Optimistic fallback update
-        const fallbackStudent = {
-          ...DEFAULT_FORM,
-          ...data,
-          id: data.id || `std-${Date.now()}`,
-          current_status: data.current_status || 'active',
-        } as MassiveProfilingStudent;
-
-        if (data.id) {
-          setStudents(prev => prev.map(s => s.id === data.id ? fallbackStudent : s));
-        } else {
-          setStudents(prev => [fallbackStudent, ...prev]);
-        }
-        setProfileDrawerData(null);
+        alert(res?.error ? `មិនអាចរក្សាទុកសិស្សបានទេ៖ ${res.error}` : 'មិនអាចរក្សាទុកសិស្សបានទេ។ សូមព្យាយាមម្តងទៀត។');
       }
     } catch (err: any) {
-      console.warn('handleSave error (applied local update):', err?.message);
-      const fallbackStudent = {
-        ...DEFAULT_FORM,
-        ...data,
-        id: data.id || `std-${Date.now()}`,
-        current_status: data.current_status || 'active',
-      } as MassiveProfilingStudent;
-
-      if (data.id) {
-        setStudents(prev => prev.map(s => s.id === data.id ? fallbackStudent : s));
-      } else {
-        setStudents(prev => [fallbackStudent, ...prev]);
-      }
-      setProfileDrawerData(null);
+      console.error('handleSave error:', err?.message);
+      alert('មានបញ្ហាក្នុងការតភ្ជាប់ ឬរក្សាទុកទិន្នន័យ។ សូមព្យាយាមម្តងទៀត។');
     } finally {
       setIsSaving(false);
     }

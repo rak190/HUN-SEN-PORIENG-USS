@@ -41,7 +41,7 @@ export default function AttendanceBoard() {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'realtime'>('synced');
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
 
   const supabase = createClient();
 
@@ -103,7 +103,7 @@ export default function AttendanceBoard() {
     }
 
     try {
-      await supabase.from('attendance_records').upsert({
+      const { error } = await supabase.from('attendance_records').upsert({
         class_id: activeClass.id,
         student_id: studentId,
         academic_year_id: activeClass.academic_year_id,
@@ -114,10 +114,16 @@ export default function AttendanceBoard() {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'student_id,date,academic_year_id' });
 
+      if (error) {
+        console.error('Failed to sync attendance:', error.message);
+        setSyncStatus('error');
+        return;
+      }
+
       setSyncStatus('synced');
     } catch (e) {
       console.error('Failed to sync attendance:', e);
-      setSyncStatus('synced');
+      setSyncStatus('error');
     }
   }
 
@@ -149,8 +155,18 @@ export default function AttendanceBoard() {
       updated_at: new Date().toISOString(),
     }));
 
-    await supabase.from('attendance_records').upsert(upsertPayload, { onConflict: 'student_id,date,academic_year_id' });
-    setSyncStatus('synced');
+    try {
+      const { error } = await supabase.from('attendance_records').upsert(upsertPayload, { onConflict: 'student_id,date,academic_year_id' });
+      if (error) {
+        console.error('Failed to sync batch attendance:', error.message);
+        setSyncStatus('error');
+        return;
+      }
+      setSyncStatus('synced');
+    } catch (e) {
+      console.error('Failed to sync batch attendance:', e);
+      setSyncStatus('error');
+    }
   }
 
   const filteredStudents = students.filter((s) =>
@@ -237,6 +253,11 @@ export default function AttendanceBoard() {
               <>
                 <RefreshCw className="w-3 h-3 animate-spin text-[#155EEF]" />
                 <span>កំពុងរក្សាទុក...</span>
+              </>
+            ) : syncStatus === 'error' ? (
+              <>
+                <AlertTriangle className="w-3 h-3 text-rose-500" />
+                <span className="text-rose-600">បរាជ័យក្នុងការរក្សាទុក</span>
               </>
             ) : (
               <>
