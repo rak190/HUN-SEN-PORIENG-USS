@@ -11,6 +11,7 @@ import { CertificateTemplateConfig, DEFAULT_TEMPLATE } from './types';
 
 interface RankedStudent {
   total_score: number;
+  average?: number | null;
   period: string;
   student: {
     id: string;
@@ -22,7 +23,8 @@ interface RankedStudent {
   class: {
     id: string;
     name: string;
-    grade: string;
+    grade: string | number;
+    academic_year_id?: string;
   };
 }
 
@@ -41,7 +43,8 @@ export default function CertificatesPage() {
 
   // Filters (Generator Mode)
   const [grade, setGrade] = useState('all');
-  const [academicYear, setAcademicYear] = useState('2025-2026');
+  const [selectedAcademicYearId, setSelectedAcademicYearId] = useState<string>('');
+  const [academicYearName, setAcademicYearName] = useState('2025-2026');
   const [availableYears, setAvailableYears] = useState<{ id: string; name: string }[]>([]);
 
   // Templates
@@ -85,8 +88,11 @@ export default function CertificatesPage() {
 
       if (yearsData && yearsData.length > 0) {
         setAvailableYears(yearsData);
-        const activeY = yearsData.find(y => y.is_active);
-        if (activeY) setAcademicYear(activeY.name);
+        const activeY = yearsData.find(y => y.is_active) || yearsData[0];
+        if (activeY) {
+          setSelectedAcademicYearId(activeY.id);
+          setAcademicYearName(activeY.name);
+        }
       }
     }
     loadInitialData();
@@ -97,14 +103,21 @@ export default function CertificatesPage() {
     if (viewMode !== 'generator') return;
 
     async function fetchData() {
+      if (!selectedAcademicYearId) {
+        setTotalClasses(0);
+        setRankedStudents([]);
+        return;
+      }
+
       setLoading(true);
       
       let classesQuery = supabase
         .from('classes')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('academic_year_id', selectedAcademicYearId);
         
       if (grade !== 'all') {
-        classesQuery = classesQuery.eq('grade', grade);
+        classesQuery = classesQuery.eq('grade', Number(grade));
       }
       
       const { count: classesCount } = await classesQuery;
@@ -117,17 +130,22 @@ export default function CertificatesPage() {
           .from('grades')
           .select(`
             total_score,
+            average,
             period,
+            academic_year_id,
             student:students!inner(id, full_name, gender, dob, student_id_number),
-            class:classes!inner(id, name, grade)
+            class:classes!inner(id, name, grade, academic_year_id)
           `)
-          .eq('period', 'annual');
+          .eq('period', 'annual')
+          .eq('academic_year_id', selectedAcademicYearId)
+          .eq('class.academic_year_id', selectedAcademicYearId);
           
         if (grade !== 'all') {
-          gradesQuery = gradesQuery.eq('class.grade', grade);
+          gradesQuery = gradesQuery.eq('class.grade', Number(grade));
         }
 
         const { data } = await gradesQuery
+          .order('average', { ascending: false, nullsFirst: false })
           .order('total_score', { ascending: false })
           .limit(quota);
 
@@ -145,7 +163,7 @@ export default function CertificatesPage() {
     }
     
     fetchData();
-  }, [grade, academicYear, viewMode, supabase]);
+  }, [grade, selectedAcademicYearId, viewMode, supabase]);
 
 
 
@@ -245,9 +263,9 @@ export default function CertificatesPage() {
               dob: rank.student.dob || 'មិនបញ្ជាក់',
               grade_class: rank.class.name,
               grade_rank: idx + 1,
-              grade_average: rank.total_score,
+              grade_average: rank.average ?? rank.total_score,
               total_students: rankedStudents.length,
-              academic_year: academicYear,
+              academic_year: academicYearName,
               issue_date: new Date().toLocaleDateString('km-KH'),
               school_director: 'ម៉ៅ សុជេត្រា',
               solar_date: `${new Date().getDate()} ខែ ${new Date().toLocaleString('km-KH', { month: 'long' })} ឆ្នាំ ${new Date().getFullYear()}`,
@@ -327,19 +345,22 @@ export default function CertificatesPage() {
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1.5">ឆ្នាំសិក្សា</label>
                 <select 
-                  value={academicYear}
-                  onChange={(e) => setAcademicYear(e.target.value)}
+                  value={selectedAcademicYearId}
+                  onChange={(e) => {
+                    const chosen = availableYears.find(y => y.id === e.target.value);
+                    if (chosen) {
+                      setSelectedAcademicYearId(chosen.id);
+                      setAcademicYearName(chosen.name);
+                    }
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none cursor-pointer"
                 >
                   {availableYears.length > 0 ? (
                     availableYears.map(y => (
-                      <option key={y.id} value={y.name}>{y.name}</option>
+                      <option key={y.id} value={y.id}>{y.name}</option>
                     ))
                   ) : (
-                    <>
-                      <option value="2024-2025">២០២៤-២០២៥</option>
-                      <option value="2025-2026">២០២៥-២០២៦</option>
-                    </>
+                    <option value="">គ្មានទិន្នន័យឆ្នាំសិក្សា</option>
                   )}
                 </select>
               </div>
@@ -400,7 +421,7 @@ export default function CertificatesPage() {
                       <th className="px-6 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider">ចំណាត់ថ្នាក់</th>
                       <th className="px-6 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider">ឈ្មោះសិស្ស</th>
                       <th className="px-6 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider text-center">ថ្នាក់</th>
-                      <th className="px-6 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider text-right">ពិន្ទុសរុប</th>
+                      <th className="px-6 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider text-right">មធ្យមភាគ / ពិន្ទុសរុប</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -411,14 +432,30 @@ export default function CertificatesPage() {
                         </td>
                       </tr>
                     )}
-                    {rankedStudents.map((rank, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-3 font-black text-xs">#{idx + 1}</td>
-                        <td className="px-6 py-3 font-extrabold text-slate-800 text-sm">{rank.student.full_name}</td>
-                        <td className="px-6 py-3 text-center text-xs font-bold">{rank.class.name}</td>
-                        <td className="px-6 py-3 text-right font-black text-emerald-600 text-sm">{rank.total_score}</td>
-                      </tr>
-                    ))}
+                    {rankedStudents.map((rank, idx) => {
+                      const isTie = idx > 0 && 
+                        rank.average === rankedStudents[idx - 1].average && 
+                        rank.total_score === rankedStudents[idx - 1].total_score;
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-3 font-black text-xs">
+                            <span className="inline-flex items-center gap-1.5">
+                              #{idx + 1}
+                              {isTie && (
+                                <span className="text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
+                                  ស្មើ
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3 font-extrabold text-slate-800 text-sm">{rank.student.full_name}</td>
+                          <td className="px-6 py-3 text-center text-xs font-bold">{rank.class.name}</td>
+                          <td className="px-6 py-3 text-right font-black text-emerald-600 text-sm">
+                            {rank.average !== null && rank.average !== undefined ? `${rank.average} (សរុប: ${rank.total_score})` : rank.total_score}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

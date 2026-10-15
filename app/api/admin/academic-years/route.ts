@@ -42,6 +42,33 @@ export async function POST(req: Request) {
   const body = await req.json();
   const { name, start_date, end_date } = body;
 
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    return NextResponse.json({ 
+      error: 'សូមបញ្ចូលឈ្មោះឆ្នាំសិក្សាឱ្យបានត្រឹមត្រូវ (Academic year name is required)' 
+    }, { status: 400 });
+  }
+
+  if (!start_date || !end_date) {
+    return NextResponse.json({ 
+      error: 'សូមបញ្ចូលកាលបរិច្ឆេទចាប់ផ្តើម និងបញ្ចប់ឱ្យបានពេញលេញ (Start and end dates are required)' 
+    }, { status: 400 });
+  }
+
+  const startDateObj = new Date(start_date);
+  const endDateObj = new Date(end_date);
+
+  if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
+    return NextResponse.json({ 
+      error: 'កាលបរិច្ឆេទមិនត្រឹមត្រូវតាមទម្រង់ (Invalid date format)' 
+    }, { status: 400 });
+  }
+
+  if (startDateObj >= endDateObj) {
+    return NextResponse.json({ 
+      error: 'កាលបរិច្ឆេទចាប់ផ្តើមត្រូវតែនៅមុនកាលបរិច្ឆេទបញ្ចប់ (Start date must be before end date)' 
+    }, { status: 400 });
+  }
+
   const adminClient = createAdminClient();
 
   if (!adminClient) {
@@ -52,7 +79,7 @@ export async function POST(req: Request) {
     const { data: newYear, error } = await adminClient
       .from('academic_years')
       .insert([{ 
-        name, 
+        name: name.trim(), 
         start_date: start_date || null, 
         end_date: end_date || null,
         is_active: false, 
@@ -77,7 +104,17 @@ export async function PATCH(req: Request) {
   }
 
   const body = await req.json();
-  const { id, is_active, is_archived, name, start_date } = body;
+  const { id, is_active, is_archived, name, start_date, end_date } = body;
+
+  if (!id) {
+    return NextResponse.json({ error: 'Academic year ID is required' }, { status: 400 });
+  }
+
+  if (name !== undefined && (typeof name !== 'string' || name.trim().length === 0)) {
+    return NextResponse.json({ 
+      error: 'ឈ្មោះឆ្នាំសិក្សាមិនអាចទទេបានទេ (Academic year name cannot be empty)' 
+    }, { status: 400 });
+  }
 
   const adminClient = createAdminClient();
 
@@ -86,6 +123,38 @@ export async function PATCH(req: Request) {
   }
 
   try {
+    // Validate date sequence if dates are provided in update
+    if (start_date !== undefined || end_date !== undefined) {
+      let effectiveStart = start_date;
+      let effectiveEnd = end_date;
+
+      if (!effectiveStart || !effectiveEnd) {
+        const { data: existingRow } = await adminClient
+          .from('academic_years')
+          .select('start_date, end_date')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (existingRow) {
+          if (!effectiveStart) effectiveStart = existingRow.start_date;
+          if (!effectiveEnd) effectiveEnd = existingRow.end_date;
+        }
+      }
+
+      if (effectiveStart && effectiveEnd) {
+        const startObj = new Date(effectiveStart);
+        const endObj = new Date(effectiveEnd);
+        if (isNaN(startObj.getTime()) || isNaN(endObj.getTime())) {
+          return NextResponse.json({ error: 'កាលបរិច្ឆេទមិនត្រឹមត្រូវតាមទម្រង់ (Invalid date format)' }, { status: 400 });
+        }
+        if (startObj >= endObj) {
+          return NextResponse.json({ 
+            error: 'កាលបរិច្ឆេទចាប់ផ្តើមត្រូវតែនៅមុនកាលបរិច្ឆេទបញ្ចប់ (Start date must be before end date)' 
+          }, { status: 400 });
+        }
+      }
+    }
+
     // If setting a new active year, deactivate others and auto-archive
     if (is_active) {
       // 1. Get the currently active years
@@ -118,8 +187,9 @@ export async function PATCH(req: Request) {
       updateData.is_current = is_active;
     }
     if (is_archived !== undefined) updateData.is_archived = is_archived;
-    if (name !== undefined) updateData.name = name;
+    if (name !== undefined) updateData.name = name.trim();
     if (start_date !== undefined) updateData.start_date = start_date || null;
+    if (end_date !== undefined) updateData.end_date = end_date || null;
 
     const { error } = await adminClient
       .from('academic_years')

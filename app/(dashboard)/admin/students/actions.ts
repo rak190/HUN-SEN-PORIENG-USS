@@ -268,18 +268,26 @@ export async function bulkAssignClassAction(studentIds: string[], targetClassId:
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
     await requirePrincipal();
-    const { createAdminClient } = await import('@/lib/supabase/admin');
-    const supabase = createAdminClient();
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = await createClient();
 
-    const enrollmentsToUpsert = studentIds.map(id => ({
-      student_id: id,
-      class_id: targetClassId,
-      academic_year_id: academicYearId,
-      enrollment_status: 'active'
-    }));
+    let targetYearId = academicYearId;
+    if (!targetYearId || targetYearId === 'fetch-active') {
+      const { data: yearData } = await supabase
+        .from('academic_years')
+        .select('id')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (yearData) targetYearId = yearData.id;
+    }
 
-    const { error } = await supabase.from('student_enrollments').upsert(enrollmentsToUpsert, {
-      onConflict: 'student_id,academic_year_id'
+    if (!targetYearId) return { success: false, error: 'No active academic year found.' };
+
+    const { data: rpcRes, error } = await supabase.rpc('batch_reassign_class_atomic', {
+      p_student_ids: studentIds,
+      p_target_class_id: targetClassId,
+      p_academic_year_id: targetYearId
     });
 
     if (error) throw error;
@@ -289,7 +297,7 @@ export async function bulkAssignClassAction(studentIds: string[], targetClassId:
     revalidatePath('/students');
     revalidatePath('/classes/info');
 
-    return { success: true };
+    return { success: true, count: rpcRes?.reassigned_count || studentIds.length };
   } catch (err: any) {
     console.error('Bulk assign class error:', err);
     return { success: false, error: err.message || 'Unknown error occurred' };
@@ -530,9 +538,9 @@ export async function bulkArchiveStudents(studentIds: string[], academicYearId: 
 export async function bulkTransferClass(studentIds: string[], newClassId: string, academicYearId: string) {
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
-    const { profile, role } = await requirePrincipal();
-    const { createAdminClient } = await import('@/lib/supabase/admin');
-    const supabase = createAdminClient();
+    await requirePrincipal();
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = await createClient();
 
     let targetYearId = academicYearId;
     if (!targetYearId || targetYearId === 'fetch-active') {
@@ -547,51 +555,21 @@ export async function bulkTransferClass(studentIds: string[], newClassId: string
 
     if (!targetYearId) return { success: false, error: 'No active academic year found.' };
 
-    // Principal boundary enforcement
-    if (role === 'principal' && profile.school_id) {
-      // 1. Verify target class belongs to principal's school
-      const { data: targetClass } = await supabase
-        .from('classes')
-        .select('school_id')
-        .eq('id', newClassId)
-        .maybeSingle();
-
-      if (!targetClass || targetClass.school_id !== profile.school_id) {
-        return { success: false, error: 'Forbidden: Cannot transfer students to a class outside your school institution.' };
-      }
-
-      // 2. Verify all students belong to classes in principal's school
-      const { data: currentEnrollments } = await supabase
-        .from('student_enrollments')
-        .select('student_id, classes!inner(school_id)')
-        .in('student_id', studentIds)
-        .eq('academic_year_id', targetYearId);
-
-      const hasForeignStudent = (currentEnrollments || []).some(
-        (e: any) => e.classes?.school_id && e.classes.school_id !== profile.school_id
-      );
-
-      if (hasForeignStudent) {
-        return { success: false, error: 'Forbidden: Cannot transfer students belonging to another school institution.' };
-      }
-    }
-
-    const { error } = await supabase
-      .from('student_enrollments')
-      .update({
-        class_id: newClassId,
-        updated_at: new Date().toISOString()
-      })
-      .in('student_id', studentIds)
-      .eq('academic_year_id', targetYearId);
+    const { data: rpcRes, error } = await supabase.rpc('batch_reassign_class_atomic', {
+      p_student_ids: studentIds,
+      p_target_class_id: newClassId,
+      p_academic_year_id: targetYearId
+    });
 
     if (error) throw error;
 
     const { revalidatePath } = await import('next/cache');
     revalidatePath('/admin/students');
     revalidatePath('/homeroom');
+    revalidatePath('/students');
+    revalidatePath('/classes/info');
     
-    return { success: true };
+    return { success: true, count: rpcRes?.reassigned_count || studentIds.length };
   } catch (err: any) {
     console.error('Bulk transfer class error:', err);
     return { success: false, error: err?.message || 'Unknown error occurred' };

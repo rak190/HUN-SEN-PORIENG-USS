@@ -70,6 +70,7 @@ export async function GET(req: Request) {
     label: r.description_khmer,
     min: r.min_percentage,
     max: r.max_percentage,
+    gpa_point: r.gpa_point,
     color: r.grade_letter === 'A' || r.grade_letter === 'B' ? 'emerald' :
            r.grade_letter === 'C' ? 'blue' :
            r.grade_letter === 'D' ? 'amber' :
@@ -96,7 +97,24 @@ export async function PATCH(req: Request) {
   const adminClient = createAdminClient();
   if (!adminClient) return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
 
-  // 1. Sync exam_subject_standards
+  // 0. Verify academic year is not locked
+  const { data: yearData } = await adminClient
+    .from('academic_years')
+    .select('id, status')
+    .eq('id', academicYearId)
+    .maybeSingle();
+
+  if (!yearData) {
+    return NextResponse.json({ error: 'រកមិនឃើញឆ្នាំសិក្សាដែលបានស្នើសុំ (Academic year not found)' }, { status: 404 });
+  }
+
+  if (['closed', 'archived'].includes(yearData.status)) {
+    return NextResponse.json({ 
+      error: 'ប្រតិបត្តិការត្រូវបានបដិសេធ៖ ឆ្នាំសិក្សានេះត្រូវបានបិទបញ្ចប់ និងចាក់សោរួចហើយ (Academic year is locked)' 
+    }, { status: 403 });
+  }
+
+  // 1. Sync exam_subject_standards (with subject deletion pruning)
   if (standards.globalSubjects && Array.isArray(standards.globalSubjects)) {
     try {
       const recordsToUpsert: any[] = [];
@@ -145,6 +163,32 @@ export async function PATCH(req: Request) {
         });
       });
 
+      // Fetch existing rows for this academic year to find and delete pruned subjects
+      const { data: existingRows } = await adminClient
+        .from('exam_subject_standards')
+        .select('id, subject_name, grade_level, stream_type')
+        .eq('academic_year_id', academicYearId);
+
+      const newKeySet = new Set(
+        recordsToUpsert.map(r => `${r.subject_name}::${r.grade_level}::${r.stream_type}`)
+      );
+
+      const idsToDelete = (existingRows || [])
+        .filter(row => !newKeySet.has(`${row.subject_name}::${row.grade_level}::${row.stream_type}`))
+        .map(row => row.id);
+
+      if (idsToDelete.length > 0) {
+        const { error: deleteError } = await adminClient
+          .from('exam_subject_standards')
+          .delete()
+          .in('id', idsToDelete);
+
+        if (deleteError) {
+          console.error("Failed to prune deleted exam_subject_standards:", deleteError);
+          return NextResponse.json({ error: 'បរាជ័យក្នុងការលុបមុខវិជ្ជាចាស់: ' + deleteError.message }, { status: 500 });
+        }
+      }
+
       if (recordsToUpsert.length > 0) {
         const { error: syncError } = await adminClient
           .from('exam_subject_standards')
@@ -161,24 +205,25 @@ export async function PATCH(req: Request) {
     }
   }
 
-  // 2. Sync exam_grading_scales
+  // 2. Sync exam_grading_scales (respecting dynamic numeric gpa_point)
   if (standards.gradingRanges && Array.isArray(standards.gradingRanges)) {
     try {
       const scalesToUpsert = standards.gradingRanges.map((r: any) => {
-        // compute mock gpa_point based on letter grade (A=4, B=3, etc.)
-        let gpa = 0;
-        if (r.id === 'A') gpa = 4.0;
-        else if (r.id === 'B') gpa = 3.0;
-        else if (r.id === 'C') gpa = 2.0;
-        else if (r.id === 'D') gpa = 1.0;
-        else if (r.id === 'E') gpa = 0.5;
+        let fallbackGpa = 0;
+        if (r.id === 'A') fallbackGpa = 4.0;
+        else if (r.id === 'B') fallbackGpa = 3.0;
+        else if (r.id === 'C') fallbackGpa = 2.0;
+        else if (r.id === 'D') fallbackGpa = 1.0;
+        else if (r.id === 'E') fallbackGpa = 0.5;
         
+        const finalGpa = Number.isFinite(Number(r.gpa_point)) ? Number(r.gpa_point) : fallbackGpa;
+
         return {
           academic_year_id: academicYearId,
           grade_letter: r.id,
           min_percentage: r.min,
           max_percentage: r.max,
-          gpa_point: gpa,
+          gpa_point: finalGpa,
           description_khmer: r.label
         };
       });

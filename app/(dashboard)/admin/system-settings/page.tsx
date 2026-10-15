@@ -17,6 +17,32 @@ export default function MergedSystemPage() {
   const [passwordInput, setPasswordInput] = useState('');
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isPurgingCache, setIsPurgingCache] = useState(false);
+  const [cachePurgeSuccess, setCachePurgeSuccess] = useState(false);
+
+  const handlePurgeCache = async () => {
+    setIsPurgingCache(true);
+    setCachePurgeSuccess(false);
+    try {
+      const res = await fetch('/api/admin/system-actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'purge-cache' })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to purge cache');
+      }
+      setCachePurgeSuccess(true);
+      alert('បានសម្អាតឃ្លាំងទិន្នន័យបណ្តោះអាសន្ន (Cache) ដោយជោគជ័យ!');
+      setTimeout(() => setCachePurgeSuccess(false), 4000);
+    } catch (e: any) {
+      console.error('Failed to purge cache:', e);
+      alert(e.message || 'បរាជ័យក្នុងការសម្អាតឃ្លាំងទិន្នន័យ');
+    } finally {
+      setIsPurgingCache(false);
+    }
+  };
 
   // Logs State
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -295,8 +321,13 @@ export default function MergedSystemPage() {
                       <h4 className="font-extrabold text-rose-900">លុបឃ្លាំងទិន្នន័យបណ្តោះអាសន្ន (Clear Cache)</h4>
                       <p className="text-xs text-rose-600 font-bold mt-1">សម្អាតទិន្នន័យចាស់ៗ ដើម្បីអោយប្រព័ន្ធដើរលឿនជាងមុន</p>
                     </div>
-                    <button disabled className="px-5 py-2.5 bg-rose-100/50 text-rose-400 font-bold rounded-xl text-xs border border-rose-100 whitespace-nowrap cursor-not-allowed">
-                      មុខងារកំពុងអភិវឌ្ឍ (Coming Soon)
+                    <button 
+                      onClick={handlePurgeCache}
+                      disabled={isPurgingCache}
+                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs transition-colors whitespace-nowrap cursor-pointer flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed shadow-sm"
+                    >
+                      {isPurgingCache ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      {isPurgingCache ? 'កំពុងសម្អាត...' : cachePurgeSuccess ? 'បានសម្អាតរួចរាល់ ✓' : 'សម្អាត Cache ឥឡូវនេះ'}
                     </button>
                   </div>
                   
