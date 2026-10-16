@@ -20,36 +20,70 @@ export default async function PrincipalClassesPage() {
   }
 
   const { profile } = auth;
-  const schoolId = profile?.school_id || '';
+  const schoolId = profile?.school_id;
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
 
-  // 2. Fetch Active Academic Year
-  let yearQuery = supabase
-    .from('academic_years')
-    .select('id, name')
-    .eq('is_active', true);
-
-  if (schoolId) {
-    yearQuery = yearQuery.eq('school_id', schoolId);
+  // Fail closed: Principal must have an assigned school
+  if (!schoolId) {
+    return (
+      <PrincipalClassesClient
+        classes={[]}
+        classGradesByPeriod={{}}
+        initialPeriod="dec"
+        stats={{
+          totalClasses: 0,
+          classesWithTeacher: 0,
+          totalStudents: 0,
+          totalFemale: 0,
+          attendanceSubmittedToday: 0,
+          todayDate: todayStr,
+        }}
+        schoolCode="មិនស្គាល់សាលា"
+      />
+    );
   }
 
-  const { data: activeYear } = await yearQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
-  const activeYearId = activeYear?.id || null;
+  // 2. Fetch Active Academic Year specifically for Principal's school
+  const { data: activeYear } = await supabase
+    .from('academic_years')
+    .select('id, name')
+    .eq('school_id', schoolId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  // 3. Fetch Classes scoped to school (if set) and not archived
-  let classesQuery = supabase
+  const activeYearId = activeYear?.id;
+
+  // Fail closed: School must have an active academic year configured
+  if (!activeYearId) {
+    return (
+      <PrincipalClassesClient
+        classes={[]}
+        classGradesByPeriod={{}}
+        initialPeriod="dec"
+        stats={{
+          totalClasses: 0,
+          classesWithTeacher: 0,
+          totalStudents: 0,
+          totalFemale: 0,
+          attendanceSubmittedToday: 0,
+          todayDate: todayStr,
+        }}
+        schoolCode={profile?.school_code || 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង'}
+      />
+    );
+  }
+
+  // 3. Fetch Classes strictly scoped to this school and active academic year (not archived)
+  const { data: classesData, error: classesError } = await supabase
     .from('classes')
     .select('id, name, grade, track, room_number, shift, teacher_id, monitor_id, academic_year_id')
+    .eq('school_id', schoolId)
+    .eq('academic_year_id', activeYearId)
     .eq('is_archived', false)
     .order('name');
 
-  if (schoolId) {
-    classesQuery = classesQuery.eq('school_id', schoolId);
-  }
-  if (activeYearId) {
-    classesQuery = classesQuery.eq('academic_year_id', activeYearId);
-  }
-
-  const { data: classesData, error: classesError } = await classesQuery;
   if (classesError) {
     console.error('Error loading classes for principal:', classesError);
   }
@@ -57,53 +91,81 @@ export default async function PrincipalClassesPage() {
   const classIds = rawClasses.map(c => c.id);
 
   // 4. Fetch Teachers and Staff for mapping
-  let profilesQuery = supabase
+  const { data: profilesData } = await supabase
     .from('profiles')
-    .select('id, full_name, phone, role, username');
+    .select('id, full_name, phone, role, username')
+    .eq('school_id', schoolId);
 
-  if (schoolId) {
-    profilesQuery = profilesQuery.eq('school_id', schoolId);
-  }
-
-  const { data: profilesData } = await profilesQuery;
   const profilesMap = new Map((profilesData || []).map(p => [p.id, p]));
 
   // 5. Fetch Student counts (Total and Female) per class from active_class_rosters
-  const { data: rosterData } = await supabase
-    .from('active_class_rosters')
-    .select('enrollment_class_id, gender');
-
+  // Paginated in chunks of 1,000 to prevent silent row truncation at Supabase PostgREST default limit
   const studentCounts: Record<string, { total: number; female: number }> = {};
-  (rosterData || []).forEach((r: any) => {
-    const cid = r.enrollment_class_id;
-    if (!cid) return;
-    if (!studentCounts[cid]) {
-      studentCounts[cid] = { total: 0, female: 0 };
+  if (classIds.length > 0) {
+    const CHUNK_SIZE = 1000;
+    let from = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const to = from + CHUNK_SIZE - 1;
+      const { data: rosterChunk, error: rosterError } = await supabase
+        .from('active_class_rosters')
+        .select('enrollment_class_id, gender')
+        .eq('academic_year_id', activeYearId)
+        .in('enrollment_class_id', classIds)
+        .range(from, to);
+
+      if (rosterError) {
+        console.error('Error fetching active class roster chunk for principal classes:', rosterError);
+        break;
+      }
+
+      if (!rosterChunk || rosterChunk.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const r of rosterChunk) {
+        const cid = r.enrollment_class_id;
+        if (!cid) continue;
+        if (!studentCounts[cid]) {
+          studentCounts[cid] = { total: 0, female: 0 };
+        }
+        studentCounts[cid].total += 1;
+        if (r.gender === 'F' || r.gender === 'ស្រី') {
+          studentCounts[cid].female += 1;
+        }
+      }
+
+      if (rosterChunk.length < CHUNK_SIZE) {
+        hasMore = false;
+      } else {
+        from += CHUNK_SIZE;
+      }
     }
-    studentCounts[cid].total += 1;
-    if (r.gender === 'F' || r.gender === 'ស្រី') {
-      studentCounts[cid].female += 1;
-    }
-  });
+  }
 
   // 6. Fetch Today's Attendance records to check submission status
-  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
-  const { data: todayAttendance } = await supabase
-    .from('attendance_records')
-    .select('class_id')
-    .eq('date', todayStr);
+  let todayAttendance: any[] = [];
+  if (classIds.length > 0) {
+    const { data: attData } = await supabase
+      .from('attendance_records')
+      .select('class_id')
+      .eq('date', todayStr)
+      .in('class_id', classIds);
+    todayAttendance = attData || [];
+  }
 
-  const recordedClassIds = new Set((todayAttendance || []).map(a => a.class_id));
+  const recordedClassIds = new Set(todayAttendance.map(a => a.class_id));
 
   // 7. Fetch Dynamic Grading Scales (if configured in /admin/exam-standards)
-  let scalesQuery = supabase.from('exam_grading_scales').select('*');
-  if (activeYearId) {
-    scalesQuery = scalesQuery.eq('academic_year_id', activeYearId);
-  }
-  const { data: dynamicScalesData } = await scalesQuery;
+  const { data: dynamicScalesData } = await supabase
+    .from('exam_grading_scales')
+    .select('*')
+    .eq('academic_year_id', activeYearId);
   const dynamicScales = dynamicScalesData || [];
 
-  // 8. Fetch Published Grades for these classes
+  // 8. Fetch Published Grades for these classes with pagination
   const classGradesByPeriod: Record<string, Record<string, {
     isPublished: boolean;
     totalGraded: number;
@@ -115,17 +177,39 @@ export default async function PrincipalClassesPage() {
   const publishedPeriodsSet = new Set<string>();
 
   if (classIds.length > 0) {
-    let gradesQuery = supabase
-      .from('grades')
-      .select('class_id, period, total_score, average, status, student_id')
-      .in('class_id', classIds)
-      .eq('status', 'published');
+    const CHUNK_SIZE = 1000;
+    let from = 0;
+    let hasMore = true;
+    const publishedGrades: any[] = [];
 
-    if (activeYearId) {
-      gradesQuery = gradesQuery.eq('academic_year_id', activeYearId);
+    while (hasMore) {
+      const to = from + CHUNK_SIZE - 1;
+      const { data: gradesChunk, error: gradesError } = await supabase
+        .from('grades')
+        .select('class_id, period, total_score, average, status, student_id')
+        .in('class_id', classIds)
+        .eq('status', 'published')
+        .eq('academic_year_id', activeYearId)
+        .range(from, to);
+
+      if (gradesError) {
+        console.error('Error loading published grades chunk:', gradesError);
+        break;
+      }
+
+      if (!gradesChunk || gradesChunk.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      publishedGrades.push(...gradesChunk);
+
+      if (gradesChunk.length < CHUNK_SIZE) {
+        hasMore = false;
+      } else {
+        from += CHUNK_SIZE;
+      }
     }
-
-    const { data: publishedGrades } = await gradesQuery;
 
     // Intermediate aggregation structure
     const rawAggregates: Record<string, Record<string, {
@@ -135,7 +219,7 @@ export default async function PrincipalClassesPage() {
       passingCount: number;
     }>> = {};
 
-    (publishedGrades || []).forEach((row: any) => {
+    publishedGrades.forEach((row: any) => {
       const cid = row.class_id;
       const pid = row.period;
       if (!cid || !pid) return;

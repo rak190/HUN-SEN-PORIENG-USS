@@ -221,4 +221,76 @@ test('Principal Role Streamlining & School Classes Navigation Test Suite', async
       'handleSaveTemplate must fail closed if caller is not admin'
     );
   });
+
+  // --------------------------------------------------------------------------
+  // Scenario 7: P1 Hardening — Fail-Closed Isolation, Active Year Scoping & Pagination Chunking
+  // --------------------------------------------------------------------------
+  await t.test('Scenario 7: Principal Classes enforces fail-closed isolation, active-year scoping, and 1,000-row pagination', () => {
+    assert.ok(fs.existsSync(principalClassesPagePath), 'Principal classes page must exist');
+    const pageContent = fs.readFileSync(principalClassesPagePath, 'utf8');
+
+    // 1. Fail closed on missing school_id
+    assert.ok(
+      pageContent.includes('if (!schoolId)') &&
+      pageContent.includes('totalClasses: 0') &&
+      pageContent.includes('totalStudents: 0'),
+      'Page must fail closed immediately if profile?.school_id is missing'
+    );
+
+    // 2. Query active academic year strictly for the principal school
+    assert.ok(
+      pageContent.includes(".eq('school_id', schoolId)") &&
+      pageContent.includes(".eq('is_active', true)"),
+      'Must query active academic year strictly for the user school_id'
+    );
+
+    // 3. Fail closed on missing activeYearId
+    assert.ok(
+      pageContent.includes('if (!activeYearId)') &&
+      pageContent.includes('totalClasses: 0'),
+      'Page must fail closed if no active academic year is configured for the school'
+    );
+
+    // 4. Classes query strictly scoped to school_id and active_year_id
+    assert.ok(
+      pageContent.includes(".from('classes')") &&
+      pageContent.includes(".eq('school_id', schoolId)") &&
+      pageContent.includes(".eq('academic_year_id', activeYearId)") &&
+      pageContent.includes(".eq('is_archived', false)"),
+      'Classes query must be strictly scoped to school_id, activeYearId, and is_archived = false'
+    );
+
+    // 5. Active class rosters strictly scoped to active_year_id and classIds with pagination chunking
+    assert.ok(
+      pageContent.includes(".from('active_class_rosters')") &&
+      pageContent.includes(".eq('academic_year_id', activeYearId)") &&
+      pageContent.includes(".in('enrollment_class_id', classIds)"),
+      'active_class_rosters must be strictly scoped to activeYearId and classIds'
+    );
+    assert.ok(
+      pageContent.includes('.range(from, to)') &&
+      pageContent.includes('CHUNK_SIZE = 1000'),
+      'active_class_rosters must implement chunked pagination to prevent 1,000-row limit truncation'
+    );
+
+    // 6. Attendance records strictly scoped to classIds
+    assert.ok(
+      pageContent.includes(".from('attendance_records')") &&
+      pageContent.includes(".in('class_id', classIds)"),
+      'Attendance records must be scoped to the school active classIds'
+    );
+
+    // 7. Published grades strictly scoped to active_year_id with pagination chunking
+    assert.ok(
+      pageContent.includes(".from('grades')") &&
+      pageContent.includes(".in('class_id', classIds)") &&
+      pageContent.includes(".eq('status', 'published')") &&
+      pageContent.includes(".eq('academic_year_id', activeYearId)"),
+      'Grades query must be strictly scoped to activeYearId and published status'
+    );
+    assert.ok(
+      pageContent.includes('publishedGrades.push(...gradesChunk)'),
+      'Grades query must accumulate paginated chunks to avoid row truncation'
+    );
+  });
 });
