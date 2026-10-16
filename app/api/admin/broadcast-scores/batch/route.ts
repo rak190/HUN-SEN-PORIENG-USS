@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getCurriculumSchemaForClass } from '@/lib/curriculum';
+import { calculateStudentMonthlyGrade } from '@/lib/domain/grading';
+import { resolvePeriodDateRange } from '@/lib/domain/periods';
 
 const TELEGRAM_BOT_TOKEN = process.env.PARENT_TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
+const APP_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://hun-sen-porieng-uss.vercel.app';
 
 // Initialize Supabase with service role key to bypass RLS
 const supabase = createClient(
@@ -20,6 +24,26 @@ async function sendMessage(chatId: number, text: string) {
       parse_mode: 'HTML'
     })
   });
+}
+
+async function sendPhotoOrMessage(chatId: number, photoUrl: string, caption: string) {
+  try {
+    const res = await fetch(`${TELEGRAM_API_URL}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo: photoUrl,
+        caption,
+        parse_mode: 'HTML'
+      })
+    });
+    if (res.ok) return res;
+    // Fallback to text message if photo delivery encounters an error
+    return await sendMessage(chatId, caption);
+  } catch {
+    return await sendMessage(chatId, caption);
+  }
 }
 
 // Helper to delay for rate limits
@@ -61,7 +85,7 @@ export async function POST(req: NextRequest) {
         // 1. Get class info
         const { data: classData, error: classError } = await supabase
           .from('classes')
-          .select('name, school_id')
+          .select('id, name, school_id, academic_year_id, grade, track')
           .eq('id', class_id)
           .single();
 
@@ -75,10 +99,21 @@ export async function POST(req: NextRequest) {
 
         const className = classData.name;
 
+        // Fetch Academic Year details for period boundary resolution
+        let academicYear: { start_date?: string; end_date?: string; name?: string } | null = null;
+        if (classData.academic_year_id) {
+          const { data: yearData } = await supabase
+            .from('academic_years')
+            .select('name, start_date, end_date')
+            .eq('id', classData.academic_year_id)
+            .maybeSingle();
+          academicYear = yearData;
+        }
+
         // 2. Get students in the class
         const { data: enrollments, error: enrollmentsError } = await supabase
           .from('student_enrollments')
-          .select('student_id, students(full_name)')
+          .select('student_id, students(id, full_name, is_active)')
           .eq('class_id', class_id);
 
         if (enrollmentsError || !enrollments) {
@@ -88,7 +123,7 @@ export async function POST(req: NextRequest) {
         const studentIds = enrollments.map(e => e.student_id);
 
         if (studentIds.length === 0) {
-          summary.failed.push({ classId: class_id, className, error: 'មិនទាន់កំណត់ Telegram Chat ID ឬគ្មានអ្នកទទួល' });
+          summary.failed.push({ classId: class_id, className, error: 'មិនទាន់មានសិស្សក្នុងថ្នាក់នេះ' });
           continue; // No students to broadcast to
         }
 
@@ -100,7 +135,7 @@ export async function POST(req: NextRequest) {
           .eq('is_active', true);
 
         if (subsError) {
-           throw new Error('Failed to fetch parent subscriptions');
+          throw new Error('Failed to fetch parent subscriptions');
         }
         
         if (!subscriptions || subscriptions.length === 0) {
@@ -108,69 +143,87 @@ export async function POST(req: NextRequest) {
           continue; // No subscriptions
         }
 
-        // 4. Fetch scores & attendance
-        const { data: masterScores, error: scoreError } = await supabase
+        // 4. Fetch published scores restricted to class, period, and academic year
+        let scoreQuery = supabase
           .from('grades')
-          .select('student_id, total_score')
+          .select('student_id, total_score, scores, status, academic_year_id')
           .eq('class_id', class_id)
-          .eq('period', month);
+          .eq('period', month)
+          .eq('status', 'published');
 
+        if (classData.academic_year_id) {
+          scoreQuery = scoreQuery.eq('academic_year_id', classData.academic_year_id);
+        }
+
+        const { data: masterScores, error: scoreError } = await scoreQuery;
         if (scoreError) throw new Error('Failed to fetch scores');
 
         const sortedScores = (masterScores || []).sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
         const rankedScores = sortedScores.map((s, index) => ({
           ...s,
-          rank: index + 1
+          rank: index + 1,
+          totalCount: sortedScores.length
         }));
 
+        // 5. Query attendance using authoritative date range
+        const range = resolvePeriodDateRange(month, academicYear);
         const { data: attendance, error: attError } = await supabase
           .from('attendance_records')
           .select('student_id, status')
           .eq('class_id', class_id)
-          .like('date', `${month}%`); // Simple matching for YYYY-MM
+          .gte('date', range.startDate)
+          .lte('date', range.endDate);
 
         if (attError) throw new Error('Failed to fetch attendance');
 
+        const schema = getCurriculumSchemaForClass(classData.grade, classData.track);
         let classHasErrors = false;
         let lastErrorMsg = '';
         
-        // 5. Broadcast to each subscribed parent
+        // 6. Broadcast to each subscribed parent
         for (const sub of subscriptions) {
           const student = enrollments.find(e => e.student_id === sub.student_id)?.students;
           if (!student) continue;
 
           const scoreData = rankedScores.find(s => s.student_id === sub.student_id);
-          const attData = attendance?.filter(a => a.student_id === sub.student_id && a.status !== 'present') || [];
-          const absences = attData.length;
+          const studentScores = (scoreData?.scores as Record<string, number>) || {};
+          const calculation = calculateStudentMonthlyGrade(studentScores, schema);
+
+          const attData = attendance?.filter(a => a.student_id === sub.student_id) || [];
+          const excused = attData.filter(a => a.status === 'permission').length;
+          const unexcused = attData.filter(a => a.status === 'absent').length;
 
           const message = `
-🏫 <b>សាលា:</b> វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង
-👤 <b>សិស្ស:</b> ${(student as any).full_name} | ថ្នាក់: ${className}
-📊 <b>លទ្ធផលសិក្សាប្រចាំខែ:</b> ${month}
+🏫 <b>វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</b>
+📜 <b>ព្រឹត្តិបត្រពិន្ទុ:</b> ${range.khmerLabel}
+👤 <b>សិស្ស:</b> ${(student as any).full_name} | ថ្នាក់៖ ${className}
 ------------------------------
-🥇 <b>ចំណាត់ថ្នាក់:</b> ${scoreData?.rank || 'N/A'}
-📈 <b>ពិន្ទុសរុប:</b> ${scoreData?.total_score || 0}
-📅 <b>អវត្តមានខែនេះ:</b> ${absences} ដង
+🥇 <b>ចំណាត់ថ្នាក់:</b> ${scoreData ? `${scoreData.rank} / ${scoreData.totalCount}` : 'N/A'}
+📈 <b>ពិន្ទុសរុប:</b> ${scoreData?.total_score || 0} / ${calculation.maxTotal}
+⭐️ <b>មធ្យមភាគ:</b> ${calculation.averageScore.toFixed(2)} / 10 (និទ្ទេស៖ ${calculation.gradeMentionKh})
+📅 <b>អវត្តមាន:</b> ច្បាប់ ${excused} ដង | ឥតច្បាប់ ${unexcused} ដង
 ------------------------------
-<i>សូមជម្រាបជូនអាណាព្យាបាលជ្រាបជាព័ត៌មាន។ សូមអរគុណ!</i>
-          `;
+<i>ភ្ជាប់ជូននូវសន្លឹកព្រឹត្តិបត្រពិន្ទុផ្លូវការ (រូបភាព)។</i>
+          `.trim();
 
-          const tgRes = await sendMessage(sub.telegram_chat_id, message);
-          if (!tgRes.ok) {
-             const errBody = await tgRes.json().catch(() => ({}));
-             const errorMsg = errBody.description || `HTTP ${tgRes.status}`;
-             console.error(`Telegram failed for class ${className}:`, errorMsg);
-             classHasErrors = true;
-             lastErrorMsg = errorMsg;
+          const reportCardImageUrl = `${APP_URL}/api/report-cards/image?student_id=${sub.student_id}&period=${encodeURIComponent(month)}${classData.academic_year_id ? `&academic_year_id=${classData.academic_year_id}` : ''}`;
+
+          const tgRes = await sendPhotoOrMessage(sub.telegram_chat_id, reportCardImageUrl, message);
+          if (!tgRes || !tgRes.ok) {
+            const errBody = tgRes ? await tgRes.json().catch(() => ({})) : {};
+            const errorMsg = errBody.description || (tgRes ? `HTTP ${tgRes.status}` : 'Network error');
+            console.error(`Telegram failed for student ${sub.student_id} in class ${className}:`, errorMsg);
+            classHasErrors = true;
+            lastErrorMsg = errorMsg;
           }
           // Rate limiting: delay between 50-75ms as requested to respect limits
           await delay(75);
         }
 
         if (classHasErrors) {
-           summary.failed.push({ classId: class_id, className, error: lastErrorMsg });
+          summary.failed.push({ classId: class_id, className, error: lastErrorMsg });
         } else {
-           summary.succeeded.push({ classId: class_id, className });
+          summary.succeeded.push({ classId: class_id, className });
         }
         
         // Wait between classes to reduce overall load
@@ -185,6 +238,7 @@ export async function POST(req: NextRequest) {
          });
       }
     }
+
     
     // Resolve class names for failed items that couldn't fetch it
     for (const f of summary.failed) {

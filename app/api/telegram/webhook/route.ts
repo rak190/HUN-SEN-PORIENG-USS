@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getCurriculumSchemaForClass } from '@/lib/curriculum';
+import { calculateStudentMonthlyGrade } from '@/lib/domain/grading';
+import { resolvePeriodDateRange } from '@/lib/domain/periods';
 
 const TELEGRAM_BOT_TOKEN = process.env.PARENT_TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
+const APP_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://hun-sen-porieng-uss.vercel.app';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,6 +35,31 @@ async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
       reply_markup: replyMarkup
     })
   });
+}
+
+async function sendPhoto(chatId: number, photoUrl: string, caption: string, replyMarkup?: any) {
+  try {
+    const res = await fetch(`${TELEGRAM_API_URL}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo: photoUrl,
+        caption,
+        parse_mode: 'HTML',
+        reply_markup: replyMarkup
+      })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('Telegram sendPhoto failed, falling back to sendMessage:', err);
+      return await sendMessage(chatId, caption, replyMarkup);
+    }
+    return res;
+  } catch (err) {
+    console.error('sendPhoto network error, falling back to sendMessage:', err);
+    return await sendMessage(chatId, caption, replyMarkup);
+  }
 }
 
 async function answerCallbackQuery(callbackQueryId: string, text?: string) {
@@ -269,7 +298,13 @@ export async function POST(req: NextRequest) {
           });
         }
       }
-      else if (text === '📊 ពិន្ទុចុងក្រោយ' || text === '📊 មើលពិន្ទុខែចុងក្រោយ') {
+      else if (
+        text === '📊 ពិន្ទុចុងក្រោយ' || 
+        text === '📊 មើលពិន្ទុខែចុងក្រោយ' || 
+        text === '📜 ព្រឹត្តិបត្រពិន្ទុ' || 
+        text === '/scores' || 
+        text === '/report_card'
+      ) {
         await handleScoreCheck(chatId);
       }
       else if (text === '⚠️ រាយការណ៍បញ្ហា' || text === '⚠️ មើលវត្តមានខែនេះ') {
@@ -285,55 +320,119 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleScoreCheck(chatId: number) {
-  const { data: subs } = await supabase.from('telegram_parent_subscriptions').select('student_id, students(full_name)').eq('telegram_chat_id', chatId).eq('is_active', true);
-  if (!subs || subs.length === 0) {
-    await sendMessage(chatId, 'សូមភ្ជាប់ឈ្មោះសិស្សជាមុនសិន។');
+  const { data: subs, error: subsError } = await supabase
+    .from('telegram_parent_subscriptions')
+    .select('student_id, students(id, full_name)')
+    .eq('telegram_chat_id', chatId)
+    .eq('is_active', true);
+
+  if (subsError || !subs || subs.length === 0) {
+    await sendMessage(chatId, 'សូមភ្ជាប់ឈ្មោះសិស្សជាមុនសិន ដោយចុច "➕ បន្ថែមកូនម្នាក់ទៀត" ឬចែករំលែកលេខទូរស័ព្ទ។');
     return;
   }
 
-  const studentIds = subs.map(s => s.student_id);
-  const { data: recentGrades } = await supabase.from('grades').select('*').in('student_id', studentIds).order('created_at', { ascending: false }).limit(studentIds.length);
-  
-  if (recentGrades && recentGrades.length > 0) {
-    let msg = `📊 <b>ពិន្ទុចុងក្រោយ៖</b>\n\n`;
-    for (const sub of subs) {
-      const g = recentGrades.find(r => r.student_id === sub.student_id);
-      if (g) {
-        // Calculate dynamic rank
-        const { data: classGrades } = await supabase.from('grades').select('student_id, total_score').eq('class_id', g.class_id).eq('period', g.period);
-        let rank = 'N/A';
-        if (classGrades) {
-          const sorted = classGrades.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
-          const idx = sorted.findIndex(s => s.student_id === sub.student_id);
-          if (idx !== -1) rank = (idx + 1).toString();
-        }
+  // 1. Fetch Active Academic Year
+  const { data: activeYear } = await supabase
+    .from('academic_years')
+    .select('id, name, start_date, end_date')
+    .eq('status', 'active')
+    .maybeSingle();
 
-        // Calculate average
-        const subjectCount = g.scores ? Object.keys(g.scores).length : 0;
-        let averageStr = 'N/A';
-        if (subjectCount > 0 && g.total_score) {
-          averageStr = (g.total_score / subjectCount).toFixed(2);
-        }
+  let foundAnyGrades = false;
 
-        // Fetch attendance
-        const { data: attendance } = await supabase.from('attendance_records').select('status').eq('student_id', sub.student_id).like('date', `${g.period}%`);
-        let present = 0, excused = 0, unexcused = 0;
-        if (attendance) {
-          present = attendance.filter(a => a.status === 'present').length;
-          excused = attendance.filter(a => a.status === 'excused').length;
-          unexcused = attendance.filter(a => a.status === 'unexcused').length;
-        }
+  for (const sub of subs) {
+    const studentName = (sub.students as any)?.full_name || 'សិស្ស';
 
-        msg += `👤 <b>${(sub.students as any).full_name}</b> (ខែ ${g.period})\n`;
-        msg += `🥇 <b>ចំណាត់ថ្នាក់៖</b> ${rank}\n`;
-        msg += `📈 <b>ពិន្ទុសរុប៖</b> ${g.total_score || 0}\n`;
-        msg += `⭐️ <b>មធ្យមភាគ៖</b> ${averageStr}\n`;
-        msg += `📅 <b>អវត្តមាន៖</b> ច្បាប់ ${excused} ដង | ឥតច្បាប់ ${unexcused} ដង\n`;
-        msg += `------------------------------\n`;
+    // 2. Fetch the latest published grade for this student in the active academic year
+    let gradeQuery = supabase
+      .from('grades')
+      .select('id, student_id, class_id, period, total_score, scores, status, academic_year_id, created_at')
+      .eq('student_id', sub.student_id)
+      .eq('status', 'published')
+      .order('created_at', { ascending: false });
+
+    if (activeYear?.id) {
+      gradeQuery = gradeQuery.eq('academic_year_id', activeYear.id);
+    }
+
+    const { data: latestGrades } = await gradeQuery.limit(1);
+    const g = latestGrades && latestGrades.length > 0 ? latestGrades[0] : null;
+
+    if (!g) {
+      await sendMessage(chatId, `ℹ️ <b>${studentName}</b>៖ មិនទាន់មានទិន្នន័យពិន្ទុដែលបានចេញផ្សាយ (Published) នៅឡើយទេ។`);
+      continue;
+    }
+
+    foundAnyGrades = true;
+
+    // 3. Fetch class information for curriculum schema & name
+    const { data: classData } = await supabase
+      .from('classes')
+      .select('id, name, grade, track')
+      .eq('id', g.class_id)
+      .maybeSingle();
+
+    const className = classData?.name || 'ទូទៅ';
+
+    // 4. Calculate MoEYS 10.00 standard average & mention
+    const schema = getCurriculumSchemaForClass(classData?.grade, classData?.track);
+    const scores = (g.scores as Record<string, number>) || {};
+    const calculation = calculateStudentMonthlyGrade(scores, schema);
+
+    // 5. Calculate class rank strictly among published grades in the same academic year
+    let rankStr = 'N/A';
+    let rankQuery = supabase
+      .from('grades')
+      .select('student_id, total_score')
+      .eq('class_id', g.class_id)
+      .eq('period', g.period)
+      .eq('status', 'published');
+
+    if (g.academic_year_id) {
+      rankQuery = rankQuery.eq('academic_year_id', g.academic_year_id);
+    }
+
+    const { data: classGrades } = await rankQuery;
+    if (classGrades && classGrades.length > 0) {
+      const sorted = [...classGrades].sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
+      const idx = sorted.findIndex(s => s.student_id === sub.student_id);
+      if (idx !== -1) {
+        rankStr = `${idx + 1}/${sorted.length}`;
       }
     }
-    await sendMessage(chatId, msg);
-  } else {
-    await sendMessage(chatId, 'មិនទាន់មានទិន្នន័យពិន្ទុនៅឡើយទេ។');
+
+    // 6. Query attendance using authoritative period date range
+    const range = resolvePeriodDateRange(g.period, activeYear);
+    const { data: attendance } = await supabase
+      .from('attendance_records')
+      .select('status')
+      .eq('student_id', sub.student_id)
+      .gte('date', range.startDate)
+      .lte('date', range.endDate);
+
+    const excused = (attendance || []).filter(a => a.status === 'permission').length;
+    const unexcused = (attendance || []).filter(a => a.status === 'absent').length;
+
+    // 7. Compose Official Khmer Caption
+    const caption = `🏫 <b>វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</b>\n` +
+      `📜 <b>ព្រឹត្តិបត្រពិន្ទុ:</b> ${range.khmerLabel}\n` +
+      `👤 <b>សិស្ស:</b> <b>${studentName}</b> | ថ្នាក់៖ ${className}\n` +
+      `------------------------------\n` +
+      `🥇 <b>ចំណាត់ថ្នាក់៖</b> ${rankStr}\n` +
+      `📈 <b>ពិន្ទុសរុប៖</b> ${calculation.totalScore} / ${calculation.maxTotal}\n` +
+      `⭐️ <b>មធ្យមភាគ៖</b> ${calculation.averageScore.toFixed(2)} / 10 (និទ្ទេស៖ ${calculation.gradeMentionKh})\n` +
+      `📅 <b>អវត្តមាន៖</b> ច្បាប់ ${excused} ដង | ឥតច្បាប់ ${unexcused} ដង\n` +
+      `------------------------------\n` +
+      `<i>ភ្ជាប់ជូននូវសន្លឹកព្រឹត្តិបត្រពិន្ទុផ្លូវការ (រូបភាព)។</i>`;
+
+    // 8. Generate Report Card Image URL and send via sendPhoto
+    const reportCardImageUrl = `${APP_URL}/api/report-cards/image?student_id=${sub.student_id}&period=${encodeURIComponent(g.period)}${g.academic_year_id ? `&academic_year_id=${g.academic_year_id}` : ''}`;
+
+    await sendPhoto(chatId, reportCardImageUrl, caption, getPersistentMenu());
+  }
+
+  if (!foundAnyGrades) {
+    await sendMessage(chatId, 'មិនទាន់មានទិន្នន័យពិន្ទុដែលបានចេញផ្សាយនៅឡើយទេ។ សូមទាក់ទងគ្រូបន្ទុកថ្នាក់។', getPersistentMenu());
   }
 }
+
