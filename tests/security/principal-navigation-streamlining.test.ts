@@ -293,4 +293,78 @@ test('Principal Role Streamlining & School Classes Navigation Test Suite', async
       'Grades query must accumulate paginated chunks to avoid row truncation'
     );
   });
+
+  // --------------------------------------------------------------------------
+  // Scenario 8: P1 Hardening — Main Principal Dashboard Data Scoping & Absence Metric Alignment
+  // --------------------------------------------------------------------------
+  await t.test('Scenario 8: Main Principal Dashboard aligns all data queries to school institution and active academic year', () => {
+    const mainPagePath = path.join(rootDir, 'app', '(dashboard)', 'principal', 'page.tsx');
+    const actionsPath = path.join(rootDir, 'app', '(dashboard)', 'principal', 'actions.ts');
+    assert.ok(fs.existsSync(mainPagePath), 'Main principal page.tsx must exist');
+    assert.ok(fs.existsSync(actionsPath), 'actions.ts must exist');
+
+    const mainContent = fs.readFileSync(mainPagePath, 'utf8');
+    const actionsContent = fs.readFileSync(actionsPath, 'utf8');
+    const clientContent = fs.readFileSync(dashboardClientPath, 'utf8');
+
+    // 1. Guard with requirePrincipal and fail-closed
+    assert.ok(
+      mainContent.includes('requirePrincipal()'),
+      'Main dashboard page must call requirePrincipal'
+    );
+    assert.ok(
+      mainContent.includes('if (!schoolId)') && mainContent.includes('if (!activeYearId)'),
+      'Main dashboard must fail closed if school_id or activeYearId is absent'
+    );
+
+    // 2. Teachers count strictly scoped to school_id
+    assert.ok(
+      mainContent.includes(".from('profiles')") &&
+      mainContent.includes(".eq('school_id', schoolId)") &&
+      mainContent.includes(".eq('role', 'teacher')"),
+      'Teachers count must be strictly scoped to school_id and teacher role'
+    );
+
+    // 3. Classes strictly scoped to school_id and activeYearId
+    assert.ok(
+      mainContent.includes(".from('classes')") &&
+      mainContent.includes(".eq('school_id', schoolId)") &&
+      mainContent.includes(".eq('academic_year_id', activeYearId)") &&
+      mainContent.includes(".eq('is_archived', false)"),
+      'Classes count and list must be strictly scoped to school_id and activeYearId'
+    );
+
+    // 4. Attendance strictly scoped to activeClassIds
+    assert.ok(
+      mainContent.includes(".from('attendance_records')") &&
+      mainContent.includes(".in('class_id', activeClassIds)"),
+      'Attendance submission check must be strictly scoped to activeClassIds'
+    );
+
+    // 5. Support cases strictly scoped to activeClassIds
+    assert.ok(
+      mainContent.includes(".from('support_cases')") &&
+      mainContent.includes(".in('class_id', activeClassIds)"),
+      'Support cases count must be strictly scoped to activeClassIds'
+    );
+
+    // 6. Audit logs strictly scoped to school_id
+    assert.ok(
+      mainContent.includes(".from('audit_logs')") &&
+      mainContent.includes(".eq('school_id', schoolId)"),
+      'Audit logs must be strictly scoped to school_id'
+    );
+
+    // 7. Absence rate distinguishes monthly vs yearly figures
+    assert.ok(
+      actionsContent.includes('thisMonthAbsentRate') &&
+      actionsContent.includes('yearlyAbsentRate'),
+      'actions.ts must resolve both thisMonthAbsentRate and yearlyAbsentRate'
+    );
+    assert.ok(
+      clientContent.includes('stats.absentRateLabel') &&
+      clientContent.includes('stats.yearlyAbsentRate'),
+      'DashboardClient must accurately render dynamic label and yearly absent rate subtitle'
+    );
+  });
 });

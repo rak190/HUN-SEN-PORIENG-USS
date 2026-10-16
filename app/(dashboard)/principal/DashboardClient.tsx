@@ -27,6 +27,8 @@ export interface PrincipalDashboardClientProps {
     activeClasses: number;
     teachers: number;
     absentRate: string;
+    absentRateLabel?: string;
+    yearlyAbsentRate?: string;
   };
   trendData: any[];
   atRiskStudents: any[];
@@ -210,7 +212,12 @@ export default function PrincipalDashboardClient({
               <ArrowUpRight className="w-4 h-4 text-emerald-500 transition-colors" />
             </div>
           </div>
-          <p className="text-sm font-bold text-emerald-600 mt-4">អត្រាអវត្តមានខែនេះ</p>
+          <div>
+            <p className="text-sm font-bold text-emerald-600 mt-4">{stats.absentRateLabel || 'អត្រាអវត្តមានខែនេះ'}</p>
+            {stats.yearlyAbsentRate && (
+              <p className="text-[11px] font-semibold text-emerald-700/70 mt-0.5">ប្រចាំឆ្នាំ: {stats.yearlyAbsentRate}%</p>
+            )}
+          </div>
         </Link>
 
         <Link href="/principal/students" className="bg-gradient-to-br from-[#155EEF] to-blue-700 rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">

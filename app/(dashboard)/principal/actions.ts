@@ -100,6 +100,22 @@ export async function fetchPrincipalDashboardData() {
        totalAtt += (a.total_count || 0);
     });
     const overallAttendance = totalAtt > 0 ? ((totalPresent / totalAtt) * 100).toFixed(1) : '0.0';
+    const yearlyAbsentRate = totalAtt > 0 ? (100 - (totalPresent / totalAtt) * 100).toFixed(1) : '0.0';
+
+    // Calculate true current month attendance if available in this academic year
+    const currentMonthKey = new Intl.DateTimeFormat('en-CA', { 
+      timeZone: 'Asia/Phnom_Penh', 
+      year: 'numeric', 
+      month: '2-digit' 
+    }).format(new Date()); // e.g. "2026-10"
+
+    const currentMonthData = (stats.attendance_by_month || []).find(
+      (a: any) => a.month_key === currentMonthKey
+    );
+
+    const thisMonthAbsentRate = currentMonthData && currentMonthData.total_count > 0
+      ? (100 - (currentMonthData.present_count / currentMonthData.total_count) * 100).toFixed(1)
+      : null;
 
     return { 
       trendData,
@@ -107,6 +123,8 @@ export async function fetchPrincipalDashboardData() {
       girlsCount: stats.girls_count || 0,
       boysCount: stats.boys_count || 0,
       overallAttendance,
+      yearlyAbsentRate,
+      thisMonthAbsentRate,
       overallGpa,
       atRiskCount: stats.at_risk_count || 0,
       atRiskList: stats.at_risk_list || [],
