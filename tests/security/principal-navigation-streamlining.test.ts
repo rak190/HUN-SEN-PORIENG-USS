@@ -179,4 +179,46 @@ test('Principal Role Streamlining & School Classes Navigation Test Suite', async
       'ClassesClient must render prominent "ពិន្ទុមិនទាន់បោះពុម្ពផ្សាយ" badge when scores are pending'
     );
   });
+
+  // --------------------------------------------------------------------------
+  // Scenario 6: 7 Core Destinations & Certificate Template Role Hardening
+  // --------------------------------------------------------------------------
+  await t.test('Scenario 6: 7 Core Principal destinations labeled correctly and Certificate template editing restricted to Admin', () => {
+    const certPagePath = path.join(rootDir, 'app', '(dashboard)', 'admin', 'certificates', 'page.tsx');
+    assert.ok(fs.existsSync(certPagePath), 'Certificates page must exist');
+    const certContent = fs.readFileSync(certPagePath, 'utf8');
+    const sidebarContent = fs.readFileSync(sidebarPath, 'utf8');
+
+    // 1. Verify 7 core destination labels
+    assert.ok(sidebarContent.includes("label: 'School Overview'"), 'Must label School Overview');
+    assert.ok(sidebarContent.includes("label: 'Teachers & Staff'"), 'Must label Teachers & Staff');
+    assert.ok(sidebarContent.includes("label: 'School Classes'"), 'Must label School Classes');
+    assert.ok(sidebarContent.includes("label: 'School Students'"), 'Must label School Students');
+    assert.ok(sidebarContent.includes("label: 'School Reports'"), 'Must label School Reports');
+    assert.ok(sidebarContent.includes("label: 'MoEYS Reports'"), 'Must label MoEYS Reports');
+    assert.ok(sidebarContent.includes("label: 'Announcements'"), 'Must label Announcements');
+    assert.ok(sidebarContent.includes("label: 'Certificates'"), 'Must label Certificates');
+
+    // 2. Announcements must appear before Certificates in the Principal list
+    const announcementsIndex = sidebarContent.indexOf("id: 'principal-announcements'");
+    const certificatesIndex = sidebarContent.indexOf("id: 'principal-certificates'");
+    assert.ok(
+      announcementsIndex !== -1 && certificatesIndex !== -1 && announcementsIndex < certificatesIndex,
+      'Announcements (#7) must precede Certificates (#8) in the Principal menu'
+    );
+
+    // 3. Certificate template editing is restricted to admin
+    assert.ok(
+      certContent.includes('const isAdmin = profile?.role === \'admin\';'),
+      'Certificates page must determine isAdmin'
+    );
+    assert.ok(
+      certContent.includes('{isAdmin && (') && certContent.includes('Edit Template'),
+      'Edit Template controls must be wrapped in isAdmin check'
+    );
+    assert.ok(
+      certContent.includes('if (!isAdmin) {') && certContent.includes('handleSaveTemplate'),
+      'handleSaveTemplate must fail closed if caller is not admin'
+    );
+  });
 });

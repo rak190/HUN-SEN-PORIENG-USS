@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Award, Download, Trophy, Loader2, Save, LayoutTemplate, X, Trash2 } from 'lucide-react';
 import { toJpeg } from 'html-to-image';
@@ -31,6 +32,8 @@ interface RankedStudent {
 type ViewMode = 'generator' | 'editor';
 
 export default function CertificatesPage() {
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === 'admin';
   const supabase = createClient();
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -192,6 +195,10 @@ export default function CertificatesPage() {
 
   // 3. Save Template to system_settings
   const handleSaveTemplate = async () => {
+    if (!isAdmin) {
+      alert('សិទ្ធិមិនគ្រប់គ្រាន់៖ មានតែ Admin (គ្រូ ICT) ប៉ុណ្ណោះដែលអាចកែប្រែពុម្ពបណ្ណសរសើរបាន។');
+      return;
+    }
     setSaving(true);
     try {
       const updatedTemplates = templates.map(t => t.id === editConfig.id ? editConfig : t);
@@ -295,27 +302,29 @@ export default function CertificatesPage() {
           </p>
         </div>
         
-        <div className="flex flex-wrap items-center gap-3 bg-slate-100 p-1.5 rounded-2xl">
-          <button
-            onClick={() => {
-              setViewMode('generator');
-              setEditConfig(activeTemplate); // Reset unsaved changes when switching back
-            }}
-            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-              viewMode === 'generator' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Batch Generator
-          </button>
-          <button
-            onClick={() => setViewMode('editor')}
-            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
-              viewMode === 'editor' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <LayoutTemplate size={16} /> Edit Template
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex flex-wrap items-center gap-3 bg-slate-100 p-1.5 rounded-2xl">
+            <button
+              onClick={() => {
+                setViewMode('generator');
+                setEditConfig(activeTemplate); // Reset unsaved changes when switching back
+              }}
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                viewMode === 'generator' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Batch Generator
+            </button>
+            <button
+              onClick={() => setViewMode('editor')}
+              className={`px-4 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+                viewMode === 'editor' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <LayoutTemplate size={16} /> Edit Template
+            </button>
+          </div>
+        )}
       </header>
 
       {viewMode === 'generator' ? (

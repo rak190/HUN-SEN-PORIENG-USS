@@ -90,15 +90,15 @@ const MENU_ITEMS: MenuItem[] = [
     ]
   },
 
-  // --- PRINCIPAL TABS (School Leadership) ---
-  { id: 'principal-dashboard', label: 'Principal Dashboard', khmerLabel: 'ផ្ទាំងគ្រប់គ្រងនាយក', href: '/principal', icon: LayoutDashboard, roles: ['principal'] },
-  { id: 'principal-staff', label: 'Staff & Teachers', khmerLabel: 'គ្រូ & បុគ្គលិក', href: '/principal/staff', icon: Users, roles: ['principal'] },
+  // --- PRINCIPAL TABS (School Leadership - 7 Core Destinations + Optional Awards) ---
+  { id: 'principal-dashboard', label: 'School Overview', khmerLabel: 'ផ្ទាំងទិដ្ឋភាពទូទៅ', href: '/principal', icon: LayoutDashboard, roles: ['principal'] },
+  { id: 'principal-staff', label: 'Teachers & Staff', khmerLabel: 'គ្រូ & បុគ្គលិក', href: '/principal/staff', icon: Users, roles: ['principal'] },
   { id: 'principal-classes', label: 'School Classes', khmerLabel: 'ថ្នាក់រៀនទូទាំងសាលា', href: '/principal/classes', icon: BookOpen, roles: ['principal'] },
   { id: 'principal-students', label: 'School Students', khmerLabel: 'សិស្សទូទាំងសាលា', href: '/principal/students', icon: GraduationCap, roles: ['principal'] },
   { id: 'principal-reports', label: 'School Reports', khmerLabel: 'របាយការណ៍សាលា', href: '/principal/reports', icon: BarChart3, roles: ['principal'] },
   { id: 'principal-moeys-reports', label: 'MoEYS Reports', khmerLabel: 'របាយការណ៍ក្រសួង', href: '/admin/moeys-reports', icon: FileText, roles: ['principal'] },
-  { id: 'principal-certificates', label: 'Certificates', khmerLabel: 'បណ្ណសរសើរ', href: '/admin/certificates', icon: Award, roles: ['principal'] },
   { id: 'principal-announcements', label: 'Announcements', khmerLabel: 'សេចក្តីជូនដំណឹង', href: '/principal/announcements', icon: Megaphone, roles: ['principal'], badge: 'ថ្មី' },
+  { id: 'principal-certificates', label: 'Certificates', khmerLabel: 'បណ្ណសរសើរ', href: '/admin/certificates', icon: Award, roles: ['principal'] },
 
   // --- ADMIN TABS (ICT Focal Teacher / GIEP Assistant) ---
   { id: 'admin-dashboard', label: 'Dashboard', khmerLabel: 'ផ្ទាំងគ្រប់គ្រង', href: '/admin', icon: LayoutDashboard, roles: ['admin'] },
