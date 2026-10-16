@@ -14,7 +14,11 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
   const { user, profile, role } = await getServerAuth();
   if (!user || !profile) redirect('/login');
 
-  if (role !== 'admin' && role !== 'principal') {
+  if (role === 'principal') {
+    redirect('/principal');
+  }
+
+  if (role !== 'admin') {
     redirect('/homeroom');
   }
 

@@ -6,7 +6,7 @@ export default async function AdminOnlyLayout({ children }: { children: React.Re
   try {
     await requireAdmin();
   } catch (error) {
-    redirect('/admin'); // Redirect principal back to the main admin overview
+    redirect('/principal/classes');
   }
   return <>{children}</>;
 }

@@ -10,7 +10,8 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
   const { user, role } = await getServerAuth();
   
   if (!user) redirect('/login');
-  if (role !== 'admin' && role !== 'principal') redirect('/homeroom');
+  if (role === 'principal') redirect('/principal/students');
+  if (role !== 'admin') redirect('/homeroom');
 
   const resolvedParams = await searchParams;
   const page = parseInt(resolvedParams.page as string) || 1;

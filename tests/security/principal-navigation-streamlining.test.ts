@@ -585,6 +585,66 @@ test('Principal Role Streamlining & School Classes Navigation Test Suite', async
       'reports/page.tsx must implement native window.print() and print styles'
     );
   });
+
+  // --------------------------------------------------------------------------
+  // Scenario 13: Server-Side Admin Authorization Hardening & Principal Exceptions
+  // --------------------------------------------------------------------------
+  await t.test('Scenario 13: Enforces server-side requireAdmin() on all Admin-only subpages while preserving Principal exceptions', () => {
+    // 1. Root admin/layout.tsx must retain requirePrincipal to allow approved exceptions
+    const adminLayoutPath = path.join(rootDir, 'app', '(dashboard)', 'admin', 'layout.tsx');
+    assert.ok(fs.existsSync(adminLayoutPath), 'admin/layout.tsx must exist');
+    const adminLayoutContent = fs.readFileSync(adminLayoutPath, 'utf8');
+    assert.ok(
+      adminLayoutContent.includes('requirePrincipal()'),
+      'admin/layout.tsx must call requirePrincipal() to avoid locking out Principal from MoEYS Reports and Certificates'
+    );
+    assert.strictEqual(
+      adminLayoutContent.includes('requireAdmin()'),
+      false,
+      'admin/layout.tsx must NOT be blindly locked to requireAdmin(), which would break Principal exceptions'
+    );
+
+    // 2. Main Admin Dashboard redirects Principal to /principal
+    const adminPagePath = path.join(rootDir, 'app', '(dashboard)', 'admin', 'page.tsx');
+    assert.ok(fs.existsSync(adminPagePath), 'admin/page.tsx must exist');
+    const adminPageContent = fs.readFileSync(adminPagePath, 'utf8');
+    assert.ok(
+      adminPageContent.includes("if (role === 'principal')") &&
+      adminPageContent.includes("redirect('/principal')"),
+      'admin/page.tsx must redirect Principals attempting direct URL access to /principal'
+    );
+
+    // 3. All truly Admin-only subpages enforce requireAdmin() via layout.tsx
+    const adminOnlySubpaths = [
+      'master-scores',
+      'attendance',
+      'students',
+      'classes',
+      'teachers',
+      'users',
+      'system-settings',
+      'school-info',
+      'exam-standards',
+      'academic-setup',
+    ];
+
+    for (const sub of adminOnlySubpaths) {
+      const layoutFile = path.join(rootDir, 'app', '(dashboard)', 'admin', sub, 'layout.tsx');
+      assert.ok(fs.existsSync(layoutFile), `admin/${sub}/layout.tsx must exist to enforce server-side RBAC`);
+      const layoutContent = fs.readFileSync(layoutFile, 'utf8');
+      assert.ok(
+        layoutContent.includes('requireAdmin()'),
+        `admin/${sub}/layout.tsx must enforce requireAdmin()`
+      );
+    }
+
+    // 4. Approved exceptions: MoEYS Reports and Certificates exist and are accessible
+    const moeysPagePath = path.join(rootDir, 'app', '(dashboard)', 'admin', 'moeys-reports', 'page.tsx');
+    const certPagePath = path.join(rootDir, 'app', '(dashboard)', 'admin', 'certificates', 'page.tsx');
+    assert.ok(fs.existsSync(moeysPagePath), 'admin/moeys-reports/page.tsx must exist');
+    assert.ok(fs.existsSync(certPagePath), 'admin/certificates/page.tsx must exist');
+  });
 });
+
 
 
