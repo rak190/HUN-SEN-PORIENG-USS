@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function HealthPage() {
   const supabase = await createClient();
-  const { user, role } = await getServerAuth();
+  const { user, role, profile } = await getServerAuth();
 
   let studentsQuery = supabase
     .from('students')
@@ -26,6 +26,20 @@ export default async function HealthPage() {
     const classIds = (teacherClasses || []).map(c => c.id);
     if (classIds.length > 0) {
       studentsQuery = studentsQuery.in('class_id', classIds);
+    } else {
+      studentsQuery = studentsQuery.in('class_id', ['00000000-0000-0000-0000-000000000000']);
+    }
+  } else if (user && role === 'principal' && profile?.school_id) {
+    const { data: schoolClasses } = await supabase
+      .from('classes')
+      .select('id')
+      .eq('school_id', profile.school_id);
+
+    const classIds = (schoolClasses || []).map(c => c.id);
+    if (classIds.length > 0) {
+      studentsQuery = studentsQuery.in('class_id', classIds);
+    } else {
+      studentsQuery = studentsQuery.in('class_id', ['00000000-0000-0000-0000-000000000000']);
     }
   }
 

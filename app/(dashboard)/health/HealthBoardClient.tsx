@@ -283,16 +283,19 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
         throw new Error('រកមិនឃើញឆ្នាំសិក្សាសកម្មទេ');
       }
       
-      await upsertHealthRecords(recordsToSave, activeYearId);
+      const res = await upsertHealthRecords(recordsToSave, activeYearId);
+      if (!res || !res.success) {
+        throw new Error(res?.error || 'បរាជ័យក្នុងការរក្សាទុកទិន្នន័យ');
+      }
       setToast({
         text: 'បានកំណត់ «ធម្មតា» និងរក្សាទុកទិន្នន័យជូនសិស្សទាំងអស់ដោយជោគជ័យ!',
         type: 'success'
       });
       router.refresh();
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Quick fill save error:', err);
       setToast({
-        text: 'បានកំណត់ «ធម្មតា» លើតារាងរួចរាល់! ' + (err instanceof Error ? err.message : ''),
+        text: 'បរាជ័យក្នុងការរក្សាទុកទិន្នន័យ៖ ' + (err?.message || ''),
         type: 'error'
       });
     } finally {
@@ -325,7 +328,10 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
         throw new Error('រកមិនឃើញឆ្នាំសិក្សាសកម្មទេ');
       }
 
-      await upsertHealthRecords(recordsToSave, activeYearId);
+      const res = await upsertHealthRecords(recordsToSave, activeYearId);
+      if (!res || !res.success) {
+        throw new Error(res?.error || 'បរាជ័យក្នុងការរក្សាទុកទិន្នន័យ។');
+      }
 
       // Update in-memory records
       setHealthRecords(prev => {
@@ -359,9 +365,9 @@ export default function HealthBoardClient({ allStudents, initialHealthRecords }:
         type: 'success'
       });
       router.refresh();
-    } catch {
+    } catch (err: any) {
       setToast({
-        text: 'បរាជ័យក្នុងការរក្សាទុកទិន្នន័យ។',
+        text: err?.message || 'បរាជ័យក្នុងការរក្សាទុកទិន្នន័យ។',
         type: 'error'
       });
     } finally {
