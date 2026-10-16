@@ -15,7 +15,7 @@ export async function fetchPrincipalDashboardData() {
     // 2. Fetch Active Academic Year
     const { data: activeYear } = await supabase
       .from('academic_years')
-      .select('id, start_date, end_date')
+      .select('id, name, start_date, end_date')
       .eq('school_id', profile.school_id)
       .eq('is_active', true)
       .maybeSingle();
@@ -128,6 +128,7 @@ export async function fetchPrincipalDashboardData() {
       overallGpa,
       atRiskCount: stats.at_risk_count || 0,
       atRiskList: stats.at_risk_list || [],
+      academicYearName: activeYear.name || 'ឆ្នាំសិក្សា ២០២៥-២០២៦',
       tableData
     };
   } catch (err) {

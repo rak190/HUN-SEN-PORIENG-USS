@@ -481,5 +481,110 @@ test('Principal Role Streamlining & School Classes Navigation Test Suite', async
       'EWS alert must remain cleanly accessible via header notification bell/triangle'
     );
   });
+
+  // --------------------------------------------------------------------------
+  // Scenario 11: P1 Hardening — Staff Directory Scoping & Unmeasured Attendance Elimination
+  // --------------------------------------------------------------------------
+  await t.test('Scenario 11: Principal Staff page scopes to school & active year and eliminates invented 100% attendance', () => {
+    const staffPagePath = path.join(rootDir, 'app', '(dashboard)', 'principal', 'staff', 'page.tsx');
+    const staffClientPath = path.join(rootDir, 'app', '(dashboard)', 'principal', 'staff', 'StaffClient.tsx');
+    assert.ok(fs.existsSync(staffPagePath), 'staff/page.tsx must exist');
+    assert.ok(fs.existsSync(staffClientPath), 'staff/StaffClient.tsx must exist');
+
+    const pageContent = fs.readFileSync(staffPagePath, 'utf8');
+    const clientContent = fs.readFileSync(staffClientPath, 'utf8');
+
+    // 1. Never hardcodes att: '100%'
+    assert.strictEqual(
+      pageContent.includes("att: '100%'"),
+      false,
+      'staff/page.tsx must never assign hard-coded 100% attendance'
+    );
+
+    // 2. Classes strictly scoped to school_id, active_academic_year_id, and unarchived
+    assert.ok(
+      pageContent.includes(".from('classes')") &&
+      pageContent.includes(".eq('school_id', schoolId)") &&
+      pageContent.includes(".eq('academic_year_id', activeYearId)") &&
+      pageContent.includes(".eq('is_archived', false)"),
+      'Classes query must be strictly scoped to school_id, activeYearId, and unarchived'
+    );
+
+    // 3. Student enrollments scoped to activeYearId and activeClassIds with chunked pagination
+    assert.ok(
+      pageContent.includes(".from('student_enrollments')") &&
+      pageContent.includes(".eq('academic_year_id', activeYearId)") &&
+      pageContent.includes(".eq('enrollment_status', 'active')") &&
+      pageContent.includes('.range(from, to)'),
+      'Student enrollments query must be scoped to activeYearId and paginated in chunks'
+    );
+
+    // 4. Genuine class attendance computation or 'គ្មានទិន្នន័យ' fallback
+    assert.ok(
+      pageContent.includes(".from('attendance_records')") &&
+      pageContent.includes('គ្មានទិន្នន័យ'),
+      'staff/page.tsx must calculate genuine class attendance or provide "គ្មានទិន្នន័យ" fallback'
+    );
+
+    // 5. StaffClient dynamically handles no data or genuine rate
+    assert.ok(
+      clientContent.includes("គ្មានទិន្នន័យ"),
+      'StaffClient must render "គ្មានទិន្នន័យ" badge for unmeasured classes'
+    );
+  });
+
+  // --------------------------------------------------------------------------
+  // Scenario 12: P1 Hardening — Reports Admin Decoupling, Dynamic Terms & Native PDF
+  // --------------------------------------------------------------------------
+  await t.test('Scenario 12: Principal Reports decouples Admin grade ingestion, makes terms dynamic, and implements real print/PDF', () => {
+    const reportsPagePath = path.join(rootDir, 'app', '(dashboard)', 'principal', 'reports', 'page.tsx');
+    const modalPath = path.join(rootDir, 'components', 'principal', 'MasterGradeImportModal.tsx');
+    assert.ok(fs.existsSync(reportsPagePath), 'reports/page.tsx must exist');
+
+    const reportsContent = fs.readFileSync(reportsPagePath, 'utf8');
+
+    // 1. MasterGradeImportModal must not be used or exist
+    assert.strictEqual(
+      reportsContent.includes('MasterGradeImportModal'),
+      false,
+      'reports/page.tsx must not import or render MasterGradeImportModal'
+    );
+    assert.strictEqual(
+      reportsContent.includes('Import Master Grades'),
+      false,
+      'reports/page.tsx must not expose Import Master Grades admin button'
+    );
+    assert.strictEqual(
+      fs.existsSync(modalPath),
+      false,
+      'MasterGradeImportModal.tsx must be completely removed from repository'
+    );
+
+    // 2. Term Selector is dynamic and drives calculations
+    assert.strictEqual(
+      reportsContent.includes('sem1-2026'),
+      false,
+      'reports/page.tsx must not use hard-coded sem1-2026 term values'
+    );
+    assert.ok(
+      reportsContent.includes("selectedTerm === 'sem1'") &&
+      reportsContent.includes("selectedTerm === 'sem2'") &&
+      reportsContent.includes('filteredTrendData'),
+      'Term selector must genuinely drive period filtering on trendData and metrics'
+    );
+
+    // 3. Real print / PDF export replaces placeholder alert
+    assert.strictEqual(
+      reportsContent.includes("alert("),
+      false,
+      'reports/page.tsx must not contain placeholder alert() calls'
+    );
+    assert.ok(
+      reportsContent.includes('window.print()') &&
+      reportsContent.includes('@media print'),
+      'reports/page.tsx must implement native window.print() and print styles'
+    );
+  });
 });
+
 

@@ -3,11 +3,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { 
-  Calendar, Upload, Download, ArrowUpRight, 
+  Calendar, Printer, ArrowUpRight, 
   TrendingUp, AlertTriangle, X
 } from 'lucide-react';
 import Link from 'next/link';
-import { MasterGradeImportModal } from '@/components/principal/MasterGradeImportModal';
 import { fetchPrincipalDashboardData } from '../actions';
 import Modal from '@/components/ui/Modal';
 
@@ -23,13 +22,12 @@ const DEFAULT_STATE = {
   tableData: []
 };
 
-type TermKey = 'sem1-2026' | 'sem2-2026' | 'annual-2026';
+export type TermKey = 'annual' | 'sem1' | 'sem2';
 
 export default function PrincipalReportsPage() {
   const { profile } = useAuth();
-  const [selectedTerm, setSelectedTerm] = useState<TermKey>('sem1-2026');
+  const [selectedTerm, setSelectedTerm] = useState<TermKey>('annual');
   const [showEwsModal, setShowEwsModal] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
   const [liveData, setLiveData] = useState<any | null>(null);
@@ -46,25 +44,57 @@ export default function PrincipalReportsPage() {
     loadData();
   }, []);
 
+  // Filter trendData based on genuine academic semester selection
+  const filteredTrendData = useMemo(() => {
+    const allTrends = liveData?.trendData || [];
+    if (selectedTerm === 'sem1') {
+      // Semester 1: Dec, Jan, Feb, Mar (months 1-4)
+      return allTrends.slice(0, 4);
+    }
+    if (selectedTerm === 'sem2') {
+      // Semester 2: Apr, May, Jun, Jul (months 5-8)
+      return allTrends.slice(4, 8);
+    }
+    return allTrends;
+  }, [liveData?.trendData, selectedTerm]);
+
+  // Dynamically recompute displayed attendance and GPA when a specific term is selected
+  const filteredMetrics = useMemo(() => {
+    if (!filteredTrendData.length) {
+      return {
+        attendance: liveData?.overallAttendance || '0.0',
+        gpa: liveData?.overallGpa || '0.00'
+      };
+    }
+    const attSum = filteredTrendData.reduce((sum: number, d: any) => sum + (d.attendancePct || 0), 0);
+    const gradeSum = filteredTrendData.reduce((sum: number, d: any) => sum + (d.gradePct || 0), 0);
+    const avgAtt = (attSum / filteredTrendData.length).toFixed(1);
+    const avgGradePct = gradeSum / filteredTrendData.length;
+    const avgGpa = avgGradePct > 0 ? Math.min(4.0, (avgGradePct / 100) * 4.0).toFixed(2) : '0.00';
+    return {
+      attendance: avgAtt,
+      gpa: avgGpa
+    };
+  }, [filteredTrendData, liveData?.overallAttendance, liveData?.overallGpa]);
+
   const currentData = useMemo(() => {
     if (liveData) {
       return { 
         ...DEFAULT_STATE,
-        trendData: liveData.trendData || [],
+        trendData: filteredTrendData,
         students: liveData.totalStudents?.toString() || '0',
         girls: liveData.girlsCount?.toString() || '0',
         boys: liveData.boysCount?.toString() || '0',
-        attendance: liveData.overallAttendance || '0.0',
-        gpa: liveData.overallGpa || '0.00',
+        attendance: selectedTerm === 'annual' ? (liveData.overallAttendance || '0.0') : filteredMetrics.attendance,
+        gpa: selectedTerm === 'annual' ? (liveData.overallGpa || '0.00') : filteredMetrics.gpa,
         atRisk: liveData.atRiskCount?.toString() || '0',
         tableData: liveData.tableData || []
       };
     }
     return DEFAULT_STATE;
-  }, [liveData]);
+  }, [liveData, filteredTrendData, selectedTerm, filteredMetrics]);
 
   const atRiskStudents = liveData?.atRiskList || [];
-
 
   const generateSvgPath = (data: any[], key: 'attendancePct' | 'gradePct') => {
     if (!data || data.length === 0) return '';
@@ -79,6 +109,8 @@ export default function PrincipalReportsPage() {
   const attendancePath = generateSvgPath(currentData.trendData, 'attendancePct');
   const gradesPath = generateSvgPath(currentData.trendData, 'gradePct');
 
+  const academicYearLabel = liveData?.academicYearName || 'ឆ្នាំសិក្សា ២០២៥-២០២៦';
+
   return (
     <div className="space-y-6 animate-fadeIn select-none">
       {/* Header */}
@@ -90,61 +122,51 @@ export default function PrincipalReportsPage() {
           <p className="text-xs font-semibold text-[#64748B] mt-0.5 flex items-center gap-1.5">
             <span>វិភាគទិន្នន័យសរុបសម្រាប់៖</span>
             <span className="font-bold text-[#155EEF] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-              {profile?.school_code || 'Porieng-2026'}
+              {profile?.school_code === 'Porieng-2026' ? 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង' : profile?.school_code || 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង'}
             </span>
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 print:hidden">
           {/* EWS Alert Symbol */}
-          <button 
-            onClick={() => setShowEwsModal(true)}
-            className="relative p-3 bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-full shadow-sm text-rose-600 transition-all hover:scale-105 active:scale-95 cursor-pointer mr-2"
-            title="សិស្សកំពុងប្រឈមហានិភ័យទូទាំងសាលា"
-          >
-            <AlertTriangle className="w-5 h-5 animate-pulse" />
-            <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-rose-600 text-white flex items-center justify-center text-[9px] font-black rounded-full border border-white">
-              {currentData.atRisk}
-            </span>
-          </button>
+          {Number(currentData.atRisk) > 0 && (
+            <button 
+              onClick={() => setShowEwsModal(true)}
+              className="relative p-3 bg-rose-50 hover:bg-rose-100 border border-rose-100 rounded-full shadow-sm text-rose-600 transition-all hover:scale-105 active:scale-95 cursor-pointer mr-2"
+              title="សិស្សកំពុងប្រឈមហានិភ័យទូទាំងសាលា"
+            >
+              <AlertTriangle className="w-5 h-5 animate-pulse" />
+              <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-rose-600 text-white flex items-center justify-center text-[9px] font-black rounded-full border border-white">
+                {currentData.atRisk}
+              </span>
+            </button>
+          )}
 
-          {/* Term Selector */}
+          {/* Genuine Dynamic Term Selector */}
           <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-full border border-slate-200/80 shadow-xs">
-            <Calendar className="w-4 h-4 text-[#FFCF59]" />
+            <Calendar className="w-4 h-4 text-[#155EEF]" />
             <select
               value={selectedTerm}
               onChange={(e) => setSelectedTerm(e.target.value as TermKey)}
               className="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer"
             >
-              <option value="sem1-2026">ឆមាសទី 1 ឆ្នាំសិក្សា 2025-2026</option>
-              <option value="sem2-2026">ឆមាសទី 2 ឆ្នាំសិក្សា 2025-2026</option>
-              <option value="annual-2026">សរុបប្រចាំឆ្នាំសិក្សា 2025-2026</option>
+              <option value="annual">សរុបប្រចាំឆ្នាំ ({academicYearLabel})</option>
+              <option value="sem1">ឆមាសទី ១ ({academicYearLabel})</option>
+              <option value="sem2">ឆមាសទី ២ ({academicYearLabel})</option>
             </select>
           </div>
-
-          <button 
-            onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-2 bg-[#155EEF] hover:bg-[#155EEF]/90 text-white px-4 py-2.5 rounded-full text-xs font-bold shadow-md shadow-blue-500/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-          >
-            <Upload className="w-4 h-4" />
-            <span className="hidden sm:inline">Import Master Grades</span>
-          </button>
           
+          {/* Native Print / Save as PDF Button */}
           <button
-            onClick={() => alert('កំពុងទាញយករហាយការណ៍ PDF...')}
-            className="flex items-center justify-center bg-white p-2.5 rounded-full text-slate-600 border border-slate-200/80 shadow-sm transition-all hover:scale-105 active:scale-95 cursor-pointer"
-            title="ទាញយក PDF"
+            onClick={() => window.print()}
+            className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-full text-xs font-bold border border-slate-200/80 shadow-xs transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            title="បោះពុម្ព ឬរក្សាទុកជារបាយការណ៍ PDF"
           >
-            <Download className="w-4 h-4" />
+            <Printer className="w-4 h-4 text-[#155EEF]" />
+            <span className="hidden sm:inline">បោះពុម្ព / PDF</span>
           </button>
         </div>
       </header>
-
-      <MasterGradeImportModal 
-        isOpen={isImportModalOpen} 
-        onClose={() => setIsImportModalOpen(false)} 
-        onImportComplete={() => {}} 
-      />
 
       {/* EWS Modal (Full-Screen Frosted Glass Portal) */}
       <Modal
@@ -198,11 +220,11 @@ export default function PrincipalReportsPage() {
                 </div>
                 <div className="shrink-0 w-full sm:w-auto">
                   <Link
-                    href="/parents"
+                    href={`/principal/students?filter=search:${encodeURIComponent(student.name)}`}
                     onClick={() => setShowEwsModal(false)}
                     className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-[#155EEF] hover:text-white text-slate-700 font-extrabold rounded-xl text-xs transition-all cursor-pointer block text-center shadow-xs active:scale-95"
                   >
-                    ចុះហៅអាណាព្យាបាល
+                    ពិនិត្យប្រវត្តិសិស្ស
                   </Link>
                 </div>
               </div>
@@ -211,12 +233,12 @@ export default function PrincipalReportsPage() {
         </div>
       </Modal>
 
-      {/* 4 Top Stat Cards (Homeroom Style) */}
+      {/* 4 Top Stat Cards (KruAI Standard Style) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
         <Link href="/principal/students" className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] border border-yellow-400/30 cursor-pointer">
           <div className="flex justify-between items-start">
             <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{currentData.students}</h2>
-            <div className="w-9 h-9 rounded-full border border-yellow-900/20 flex items-center justify-center group-hover:bg-yellow-900 group-hover:text-white transition-all shadow-2xs">
+            <div className="w-9 h-9 rounded-full border border-yellow-900/20 flex items-center justify-center group-hover:bg-yellow-900 group-hover:text-white transition-all shadow-2xs print:hidden">
               <ArrowUpRight className="w-4 h-4 text-yellow-950 group-hover:text-white transition-colors" />
             </div>
           </div>
@@ -226,21 +248,25 @@ export default function PrincipalReportsPage() {
         <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] border border-yellow-400/30">
           <div className="flex justify-between items-start">
             <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{currentData.attendance}%</h2>
-            <div className="w-9 h-9 rounded-full border border-yellow-900/20 flex items-center justify-center group-hover:bg-yellow-900 group-hover:text-white transition-all shadow-2xs">
+            <div className="w-9 h-9 rounded-full border border-yellow-900/20 flex items-center justify-center group-hover:bg-yellow-900 group-hover:text-white transition-all shadow-2xs print:hidden">
               <ArrowUpRight className="w-4 h-4 text-yellow-950 group-hover:text-white transition-colors" />
             </div>
           </div>
-          <p className="text-sm font-bold text-yellow-950 mt-4">អត្រាវត្តមានសរុបមធ្យម</p>
+          <p className="text-sm font-bold text-yellow-950 mt-4">
+            {selectedTerm === 'annual' ? 'អត្រាវត្តមានសរុបប្រចាំឆ្នាំ' : `អត្រាវត្តមាន (${selectedTerm === 'sem1' ? 'ឆមាសទី ១' : 'ឆមាសទី ២'})`}
+          </p>
         </div>
 
         <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] border border-blue-400/30">
           <div className="flex justify-between items-start">
             <h2 className="text-4xl font-black text-white tracking-tight leading-none">{currentData.gpa}</h2>
-            <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all shadow-2xs">
+            <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all shadow-2xs print:hidden">
               <ArrowUpRight className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
             </div>
           </div>
-          <p className="text-sm font-bold text-blue-100 mt-4">មធ្យមភាគពិន្ទុ</p>
+          <p className="text-sm font-bold text-blue-100 mt-4">
+            {selectedTerm === 'annual' ? 'មធ្យមភាគពិន្ទុ (GPA)' : `មធ្យមភាគ GPA (${selectedTerm === 'sem1' ? 'ឆមាសទី ១' : 'ឆមាសទី ២'})`}
+          </p>
         </div>
 
         <button 
@@ -249,7 +275,7 @@ export default function PrincipalReportsPage() {
         >
           <div className="flex justify-between items-start w-full">
             <h2 className="text-4xl font-black text-white tracking-tight leading-none">{currentData.atRisk}</h2>
-            <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-rose-500 transition-all shadow-2xs">
+            <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-rose-500 transition-all shadow-2xs print:hidden">
               <ArrowUpRight className="w-4 h-4 text-white group-hover:text-rose-500 transition-colors" />
             </div>
           </div>
@@ -264,7 +290,9 @@ export default function PrincipalReportsPage() {
           <div className="flex justify-between items-center mb-4">
             <div>
               <h3 className="font-extrabold text-slate-800 text-base">កម្រិតវត្តមាន និងពិន្ទុមធ្យមទូទាំងសាលា</h3>
-              <p className="text-[11px] text-[#64748B] font-medium">ស្ថិតិប្រៀបធៀបប្រចាំខែ</p>
+              <p className="text-[11px] text-[#64748B] font-medium">
+                ស្ថិតិប្រៀបធៀបប្រចាំខែ ({selectedTerm === 'sem1' ? 'ឆមាសទី ១' : selectedTerm === 'sem2' ? 'ឆមាសទី ២' : 'ប្រចាំឆ្នាំ'})
+              </p>
             </div>
             <span className="text-xs font-bold text-[#64748B] bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/60">
               និន្នាការ
@@ -350,7 +378,7 @@ export default function PrincipalReportsPage() {
           </h3>
           <div className="flex gap-2">
             <span className="text-xs font-extrabold text-[#64748B] bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200">
-              ទិន្នន័យផ្លូវការ
+              ទិន្នន័យផ្លូវការ ({academicYearLabel})
             </span>
           </div>
         </div>
@@ -417,11 +445,23 @@ export default function PrincipalReportsPage() {
         </div>
       </div>
       
-      {/* CSS for animating SVG dash (same as homeroom) */}
+      {/* CSS for animating SVG dash and print styling */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes dash {
           0% { stroke-dasharray: 0, 1000; }
           100% { stroke-dasharray: 1000, 0; }
+        }
+        @media print {
+          nav, aside, header .print\\:hidden, button {
+            display: none !important;
+          }
+          body {
+            background-color: white !important;
+            color: black !important;
+          }
+          .animate-fadeIn {
+            animation: none !important;
+          }
         }
       `}} />
     </div>

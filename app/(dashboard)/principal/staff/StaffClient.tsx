@@ -190,8 +190,17 @@ export default function PrincipalStaffClient({ teachersList, stats }: StaffClien
                       </span>
                     </td>
                     <td className="px-4 py-2.5 border-y border-slate-100 group-hover:border-blue-200 transition-colors text-center font-bold text-slate-700">{t.subject}</td>
-                    <td className="px-4 py-2.5 border-y border-slate-100 group-hover:border-blue-200 transition-colors text-center text-slate-600">{t.students} នាក់</td>
-                    <td className="px-4 py-2.5 border-y border-slate-100 group-hover:border-blue-200 transition-colors text-center font-extrabold text-emerald-600">{t.att}</td>
+                    <td className="px-4 py-2.5 border-y border-slate-100 group-hover:border-blue-200 transition-colors text-center">
+                      {t.att.endsWith('%') ? (
+                        <span className="font-extrabold text-emerald-600">{t.att}</span>
+                      ) : t.att === 'គ្មានទិន្នន័យ' ? (
+                        <span className="text-[11px] font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200/60">
+                          គ្មានទិន្នន័យ
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 font-bold">-</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 border-y border-slate-100 group-hover:border-blue-200 transition-colors">
                       <div className="flex flex-col text-[11px] font-bold text-slate-500 gap-1">
                         <span className="flex items-center gap-1.5 text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-100 w-fit shadow-sm"><Phone className="w-3 h-3 text-slate-400" /> {t.phone}</span>
