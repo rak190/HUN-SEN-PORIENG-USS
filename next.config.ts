@@ -72,6 +72,7 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   experimental: {
+    agentUpgrade: 'latest',
     optimizePackageImports: ['lucide-react'],
   },
   async rewrites() {
