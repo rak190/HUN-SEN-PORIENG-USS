@@ -1,17 +1,28 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { GraduationCap, Search, Filter, Award, Users, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 export default function PrincipalStudentsPage() {
+  return (
+    <Suspense fallback={<div className="p-12 text-center text-slate-400 font-bold">កំពុងទាញយក...</div>}>
+      <PrincipalStudentsContent />
+    </Suspense>
+  );
+}
+
+function PrincipalStudentsContent() {
+  const searchParams = useSearchParams();
+  const filterParam = searchParams.get('filter') || 'all';
   const { profile } = useAuth();
   const supabase = createClient();
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState('all');
+  const [selectedFilter, setSelectedFilter] = useState(filterParam);
   const [currentPage, setCurrentPage] = useState(1);
 
   const [totalStudents, setTotalStudents] = useState(0);

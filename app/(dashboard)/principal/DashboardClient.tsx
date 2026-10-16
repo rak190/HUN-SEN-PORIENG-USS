@@ -12,6 +12,7 @@ import {
   Clock,
   ArrowUpRight,
   Building2,
+  BookOpen,
   Search,
   Mic,
   AlertTriangle,
@@ -61,10 +62,10 @@ export default function PrincipalDashboardClient({
 
   const quickLinks = [
     { title: 'គ្រូ & បុគ្គលិក', desc: 'គ្រប់គ្រងបញ្ជីគ្រូ និងថ្នាក់បន្ទុក', href: '/principal/staff', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { title: 'ថ្នាក់រៀនទូទាំងសាលា', desc: 'ពិនិត្យបញ្ជីថ្នាក់ គ្រូបន្ទុក និងចំនួនសិស្ស', href: '/principal/classes', icon: BookOpen, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { title: 'សិស្សទូទាំងសាលា', desc: 'ពិនិត្យទិន្នន័យ និងស្ថិតិសិស្សានុសិស្ស', href: '/principal/students', icon: GraduationCap, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { title: 'របាយការណ៍សាលា', desc: 'វិភាគអត្រាវត្តមាន និងលទ្ធផលសិក្សា', href: '/principal/reports', icon: BarChart3, color: 'text-purple-600', bg: 'bg-purple-50' },
     { title: 'សេចក្តីជូនដំណឹង', desc: 'ផ្សព្វផ្សាយព័ត៌មាន និងសេចក្តីប្រកាស', href: '/principal/announcements', icon: Megaphone, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { title: 'ការកំណត់សាលា', desc: 'កែប្រែព័ត៌មាន និងឆ្នាំសិក្សា', href: '/principal/settings', icon: Building2, color: 'text-indigo-600', bg: 'bg-indigo-50' },
   ];
 
   return (
@@ -192,7 +193,7 @@ export default function PrincipalDashboardClient({
           <p className="text-sm font-bold text-slate-500 mt-4">ចំនួនគ្រូបង្រៀនសរុប</p>
         </Link>
 
-        <Link href="/classes" className="bg-white rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-slate-200">
+        <Link href="/principal/classes" className="bg-white rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-slate-200">
           <div className="flex justify-between items-start">
             <h2 className="text-4xl font-black text-slate-800 tracking-tight leading-none">{stats.activeClasses}</h2>
             <div className="w-9 h-9 rounded-full border border-slate-200 flex items-center justify-center group-hover:bg-slate-100 transition-all shadow-2xs">

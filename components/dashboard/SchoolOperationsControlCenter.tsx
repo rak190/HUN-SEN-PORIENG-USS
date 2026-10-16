@@ -45,7 +45,7 @@ export function SchoolOperationsControlCenter({
         ? `មាន ${unsubmittedAttendanceClasses.length} ថ្នាក់មិនទាន់បានស្រង់វត្តមាននៅឡើយទេ (${unsubmittedAttendanceClasses.slice(0, 4).join(', ')}${unsubmittedAttendanceClasses.length > 4 ? '...' : ''})`
         : 'គ្រប់ថ្នាក់ទាំងអស់បានស្រង់ និងផ្ទៀងផ្ទាត់វត្តមានរួចរាល់ហើយ!',
       actionLabel: unsubmittedAttendanceClasses.length > 0 ? 'ពិនិត្យវត្តមាន' : 'មើលកំណត់ត្រា',
-      actionHref: '/admin/attendance'
+      actionHref: '/principal/classes'
     },
     {
       type: 'ews_dropout',
