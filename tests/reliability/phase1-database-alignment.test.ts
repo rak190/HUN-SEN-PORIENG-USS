@@ -45,12 +45,11 @@ test('Phase 1: Database Alignment Migration & Service Role RPC Suite', async (t)
       'Migration 070 must define sync_student_dob_columns function and trg_sync_student_dob_columns trigger'
     );
 
-    // 4. active_class_rosters view recreates with both dob and date_of_birth
+    // 4. active_class_rosters view recreates exposing student columns via s.*
     assert.ok(
       content.includes('CREATE OR REPLACE VIEW public.active_class_rosters') &&
-      content.includes('s.dob,') &&
-      content.includes('s.date_of_birth,'),
-      'Migration 070 must recreate active_class_rosters exposing both dob and date_of_birth'
+      content.includes('s.*'),
+      'Migration 070 must recreate active_class_rosters exposing student columns via s.*'
     );
   });
 
@@ -88,6 +87,10 @@ test('Phase 1: Database Alignment Migration & Service Role RPC Suite', async (t)
     assert.ok(
       content.includes('CREATE TABLE IF NOT EXISTS public.activity_logs ('),
       'Migration 070 must create activity_logs table'
+    );
+    assert.ok(
+      content.includes('school_id TEXT REFERENCES public.schools(id)'),
+      'activity_logs must reference schools(id) with TEXT type'
     );
     assert.ok(
       content.includes('ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;'),
