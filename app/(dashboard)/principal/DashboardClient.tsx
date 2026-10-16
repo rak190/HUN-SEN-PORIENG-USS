@@ -26,7 +26,6 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import Modal from '@/components/ui/Modal';
-import { SchoolOperationsControlCenter } from '@/components/dashboard/SchoolOperationsControlCenter';
 
 export interface PrincipalDashboardClientProps {
   stats: {
@@ -260,12 +259,35 @@ export default function PrincipalDashboardClient({
         </div>
       </Modal>
 
-      {/* ================= 3. SCHOOL OPERATIONS CONTROL CENTER ================= */}
-      <SchoolOperationsControlCenter
-        unsubmittedAttendanceClasses={unsubmittedAttendanceClasses}
-        atRiskCount={atRiskStudents.length}
-        pendingFollowUpsCount={pendingFollowUpsCount}
-      />
+      {/* ================= 3. DAILY ATTENDANCE ALERT BANNER (Conditional: only shown when attendance is pending) ================= */}
+      {unsubmittedAttendanceClasses.length > 0 && (
+        <div className="bg-amber-50/90 border border-amber-200/80 rounded-[22px] p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs transition-all animate-fadeIn">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-700 flex items-center justify-center shrink-0 shadow-2xs">
+              <Clock className="w-5 h-5 text-amber-600 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-0.5 bg-amber-200/70 text-amber-900 text-[10px] font-black rounded-full uppercase tracking-wider">
+                  កិច្ចការបន្ទាន់ថ្ងៃនេះ
+                </span>
+                <p className="text-sm font-extrabold text-amber-950">
+                  មាន {unsubmittedAttendanceClasses.length} ថ្នាក់មិនទាន់បានស្រង់វត្តមាននៅឡើយ ({unsubmittedAttendanceClasses.slice(0, 5).join(', ')}{unsubmittedAttendanceClasses.length > 5 ? '...' : ''})
+                </p>
+              </div>
+              <p className="text-xs text-amber-800/80 font-medium mt-1">
+                សូមពិនិត្យ ឬរំលឹកគ្រូបន្ទុកថ្នាក់ដើម្បីកត់ត្រាវត្តមានសិស្សឱ្យបានទាន់ពេលវេលាសម្រាប់ថ្ងៃនេះ
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/principal/classes"
+            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-xs shrink-0 flex items-center gap-1.5 self-end md:self-auto cursor-pointer"
+          >
+            ពិនិត្យថ្នាក់រៀន <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* ================= 4. TOP 4 STAT CARDS (Standard KruAI Palette & Alignment) ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">

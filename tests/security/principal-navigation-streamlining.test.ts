@@ -444,4 +444,42 @@ test('Principal Role Streamlining & School Classes Navigation Test Suite', async
       'DashboardClient must render school management quick actions in styled container'
     );
   });
+
+  // --------------------------------------------------------------------------
+  // Scenario 10: School Operations Widget Replacement with Conditional Alert Banner
+  // --------------------------------------------------------------------------
+  await t.test('Scenario 10: Bulky Operations Control Center is replaced with clean, conditional daily attendance banner', () => {
+    assert.ok(fs.existsSync(dashboardClientPath), 'DashboardClient.tsx must exist');
+    const clientContent = fs.readFileSync(dashboardClientPath, 'utf8');
+
+    // 1. Bulky SchoolOperationsControlCenter component is removed
+    assert.strictEqual(
+      clientContent.includes('<SchoolOperationsControlCenter'),
+      false,
+      'SchoolOperationsControlCenter widget must be completely removed from DashboardClient.tsx'
+    );
+    assert.strictEqual(
+      clientContent.includes("from '@/components/dashboard/SchoolOperationsControlCenter'"),
+      false,
+      'SchoolOperationsControlCenter import must be removed'
+    );
+
+    // 2. Conditional Alert Banner for unsubmitted classes is rendered
+    assert.ok(
+      clientContent.includes('unsubmittedAttendanceClasses.length > 0') &&
+      clientContent.includes('កិច្ចការបន្ទាន់ថ្ងៃនេះ') &&
+      clientContent.includes('ថ្នាក់មិនទាន់បានស្រង់វត្តមាននៅឡើយ') &&
+      clientContent.includes('href="/principal/classes"') &&
+      clientContent.includes('ពិនិត្យថ្នាក់រៀន'),
+      'DashboardClient must render a sleek conditional banner alerting to unsubmitted attendance'
+    );
+
+    // 3. EWS Alert remains in header
+    assert.ok(
+      clientContent.includes('atRiskStudents.length > 0') &&
+      clientContent.includes('setShowEwsModal(true)'),
+      'EWS alert must remain cleanly accessible via header notification bell/triangle'
+    );
+  });
 });
+
