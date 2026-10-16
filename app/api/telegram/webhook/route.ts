@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getCurriculumSchemaForClass } from '@/lib/curriculum';
+import { getCurriculumSchemaForClass, fetchClassExamStandards } from '@/lib/curriculum';
 import { calculateStudentMonthlyGrade } from '@/lib/domain/grading';
 import { resolvePeriodDateRange } from '@/lib/domain/periods';
 
@@ -374,10 +374,15 @@ async function handleScoreCheck(chatId: number) {
 
     const className = classData?.name || 'ទូទៅ';
 
-    // 4. Calculate MoEYS 10.00 standard average & mention
-    const schema = getCurriculumSchemaForClass(classData?.grade, classData?.track);
+    // 4. Calculate dynamic standards (coefficients and grading scale from /admin/exam-standards)
+    const { schema, gradingScales } = await fetchClassExamStandards(
+      supabase,
+      g.academic_year_id || activeYear?.id,
+      classData?.grade,
+      classData?.track
+    );
     const scores = (g.scores as Record<string, number>) || {};
-    const calculation = calculateStudentMonthlyGrade(scores, schema);
+    const calculation = calculateStudentMonthlyGrade(scores, schema, gradingScales);
 
     // 5. Calculate class rank strictly among published grades in the same academic year
     let rankStr = 'N/A';
@@ -413,14 +418,14 @@ async function handleScoreCheck(chatId: number) {
     const excused = (attendance || []).filter(a => a.status === 'permission').length;
     const unexcused = (attendance || []).filter(a => a.status === 'absent').length;
 
-    // 7. Compose Official Khmer Caption
+    // 7. Compose Official Khmer Caption with Scale 50 Average and Dynamic Divisor
     const caption = `🏫 <b>វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</b>\n` +
       `📜 <b>ព្រឹត្តិបត្រពិន្ទុ:</b> ${range.khmerLabel}\n` +
       `👤 <b>សិស្ស:</b> <b>${studentName}</b> | ថ្នាក់៖ ${className}\n` +
       `------------------------------\n` +
       `🥇 <b>ចំណាត់ថ្នាក់៖</b> ${rankStr}\n` +
       `📈 <b>ពិន្ទុសរុប៖</b> ${calculation.totalScore} / ${calculation.maxTotal}\n` +
-      `⭐️ <b>មធ្យមភាគ៖</b> ${calculation.averageScore.toFixed(2)} / 10 (និទ្ទេស៖ ${calculation.gradeMentionKh})\n` +
+      `⭐️ <b>មធ្យមភាគ៖</b> ${calculation.averageScore50.toFixed(2)} / 50 (មេគុណ៖ ${calculation.totalCoefficient}) | និទ្ទេស៖ ${calculation.gradeMentionKh}\n` +
       `📅 <b>អវត្តមាន៖</b> ច្បាប់ ${excused} ដង | ឥតច្បាប់ ${unexcused} ដង\n` +
       `------------------------------\n` +
       `<i>ភ្ជាប់ជូននូវសន្លឹកព្រឹត្តិបត្រពិន្ទុផ្លូវការ (រូបភាព)។</i>`;

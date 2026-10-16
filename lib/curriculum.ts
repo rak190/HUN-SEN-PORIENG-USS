@@ -167,6 +167,7 @@ export async function getDynamicCurriculumSchemaForClass(
       id: subjectId,
       label: row.subject_name,
       maxScore: parseFloat(row.max_score),
+      coefficient: row.coefficient !== undefined && row.coefficient !== null ? parseFloat(row.coefficient) : (parseFloat(row.max_score) / 50.0),
       subMetrics
     };
   });
@@ -176,6 +177,53 @@ export async function getDynamicCurriculumSchemaForClass(
     label: `Grade ${g} ${streamType} (Dynamic)`,
     subjects
   };
+}
+
+export interface ClassExamStandards {
+  schema: CurriculumSchema;
+  gradingScales: any[];
+  totalCoefficient: number;
+}
+
+/**
+ * Fetches both dynamic subject standards and dynamic grading scales for a class/academic year.
+ * Returns the resolved schema, grading scales, and the authoritative divisor (totalCoefficient).
+ */
+export async function fetchClassExamStandards(
+  supabaseClient: any,
+  academicYearId?: string | null,
+  grade?: string | number | null,
+  track?: string | null
+): Promise<ClassExamStandards> {
+  // 1. Fetch dynamic curriculum schema
+  let schema: CurriculumSchema;
+  if (academicYearId) {
+    schema = await getDynamicCurriculumSchemaForClass(grade || 12, track || '', academicYearId, supabaseClient);
+  } else {
+    schema = getCurriculumSchemaForClass(grade, track);
+  }
+
+  // 2. Fetch dynamic grading scales (exam_grading_scales)
+  let gradingScales: any[] = [];
+  if (academicYearId) {
+    const { data: scales } = await supabaseClient
+      .from('exam_grading_scales')
+      .select('grade_letter, min_percentage, max_percentage, gpa_point, description_khmer')
+      .eq('academic_year_id', academicYearId);
+    if (scales && scales.length > 0) {
+      gradingScales = scales;
+    }
+  }
+
+  // 3. Compute total coefficient divisor (ផលបូកមេគុណ / លេខដែលយកទៅចែក)
+  const coeffSum = schema.subjects.reduce((sum, s) => {
+    const c = s.coefficient !== undefined && s.coefficient !== null ? s.coefficient : (s.maxScore / 50);
+    return sum + c;
+  }, 0);
+  const maxTotal = schema.subjects.reduce((sum, s) => sum + s.maxScore, 0);
+  const totalCoefficient = coeffSum > 0 ? parseFloat(coeffSum.toFixed(2)) : (maxTotal > 0 ? parseFloat((maxTotal / 50).toFixed(2)) : 1);
+
+  return { schema, gradingScales, totalCoefficient };
 }
 
 /**

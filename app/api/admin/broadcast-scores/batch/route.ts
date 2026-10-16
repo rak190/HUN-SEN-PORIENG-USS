@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getCurriculumSchemaForClass } from '@/lib/curriculum';
+import { getCurriculumSchemaForClass, fetchClassExamStandards } from '@/lib/curriculum';
 import { calculateStudentMonthlyGrade } from '@/lib/domain/grading';
 import { resolvePeriodDateRange } from '@/lib/domain/periods';
 
@@ -176,7 +176,12 @@ export async function POST(req: NextRequest) {
 
         if (attError) throw new Error('Failed to fetch attendance');
 
-        const schema = getCurriculumSchemaForClass(classData.grade, classData.track);
+        const { schema, gradingScales, totalCoefficient } = await fetchClassExamStandards(
+          supabase,
+          classData.academic_year_id,
+          classData.grade,
+          classData.track
+        );
         let classHasErrors = false;
         let lastErrorMsg = '';
         
@@ -187,7 +192,7 @@ export async function POST(req: NextRequest) {
 
           const scoreData = rankedScores.find(s => s.student_id === sub.student_id);
           const studentScores = (scoreData?.scores as Record<string, number>) || {};
-          const calculation = calculateStudentMonthlyGrade(studentScores, schema);
+          const calculation = calculateStudentMonthlyGrade(studentScores, schema, gradingScales);
 
           const attData = attendance?.filter(a => a.student_id === sub.student_id) || [];
           const excused = attData.filter(a => a.status === 'permission').length;
@@ -200,7 +205,7 @@ export async function POST(req: NextRequest) {
 ------------------------------
 🥇 <b>ចំណាត់ថ្នាក់:</b> ${scoreData ? `${scoreData.rank} / ${scoreData.totalCount}` : 'N/A'}
 📈 <b>ពិន្ទុសរុប:</b> ${scoreData?.total_score || 0} / ${calculation.maxTotal}
-⭐️ <b>មធ្យមភាគ:</b> ${calculation.averageScore.toFixed(2)} / 10 (និទ្ទេស៖ ${calculation.gradeMentionKh})
+⭐️ <b>មធ្យមភាគ:</b> ${calculation.averageScore50.toFixed(2)} / 50 (មេគុណ: ${calculation.totalCoefficient}) | និទ្ទេស: ${calculation.gradeMentionKh}
 📅 <b>អវត្តមាន:</b> ច្បាប់ ${excused} ដង | ឥតច្បាប់ ${unexcused} ដង
 ------------------------------
 <i>ភ្ជាប់ជូននូវសន្លឹកព្រឹត្តិបត្រពិន្ទុផ្លូវការ (រូបភាព)។</i>

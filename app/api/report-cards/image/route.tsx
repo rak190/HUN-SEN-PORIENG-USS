@@ -3,7 +3,7 @@ import { ImageResponse } from 'next/og';
 import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
-import { getCurriculumSchemaForClass } from '@/lib/curriculum';
+import { getCurriculumSchemaForClass, fetchClassExamStandards } from '@/lib/curriculum';
 import { calculateStudentMonthlyGrade } from '@/lib/domain/grading';
 import { resolvePeriodDateRange } from '@/lib/domain/periods';
 
@@ -138,10 +138,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 6. Calculate MoEYS Standards
-    const schema = getCurriculumSchemaForClass(classInfo?.grade, classInfo?.track);
+    // 6. Dynamically resolve standards (coefficients, subjects, and grading scale from /admin/exam-standards)
+    const { schema, gradingScales } = await fetchClassExamStandards(
+      supabase,
+      yearId,
+      classInfo?.grade,
+      classInfo?.track
+    );
     const scores = (grade?.scores as Record<string, number>) || {};
-    const calculation = calculateStudentMonthlyGrade(scores, schema);
+    const calculation = calculateStudentMonthlyGrade(scores, schema, gradingScales);
 
     const className = classInfo?.name || 'ទូទៅ';
     const teacherName = classInfo?.profiles?.full_name || 'លោកគ្រូ/អ្នកគ្រូ';
@@ -346,9 +351,12 @@ export async function GET(req: NextRequest) {
                 borderRadius: '8px',
               }}
             >
-              <span style={{ fontSize: '11px', color: '#1e40af', fontWeight: 700 }}>មធ្យមភាគ (ពិន្ទុ ១០)</span>
+              <span style={{ fontSize: '11px', color: '#1e40af', fontWeight: 700 }}>មធ្យមភាគ (ពិន្ទុ ៥០)</span>
               <span style={{ fontSize: '20px', fontWeight: 800, color: '#1d4ed8', marginTop: '2px' }}>
-                {calculation.averageScore.toFixed(2)}
+                {calculation.averageScore50.toFixed(2)}
+              </span>
+              <span style={{ fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
+                មេគុណ: {calculation.totalCoefficient}
               </span>
             </div>
 
@@ -384,7 +392,7 @@ export async function GET(req: NextRequest) {
             >
               <span style={{ fontSize: '11px', color: '#166534', fontWeight: 700 }}>និទ្ទេស / លទ្ធផល</span>
               <span style={{ fontSize: '16px', fontWeight: 800, color: '#15803d', marginTop: '4px' }}>
-                {calculation.gradeLetter} ({calculation.isPassing ? 'ជាប់' : 'ធ្លាក់'})
+                {calculation.gradeLetter} ({calculation.gradeMentionKh.split(' ')[0] || (calculation.isPassing ? 'ជាប់' : 'ធ្លាក់')})
               </span>
             </div>
           </div>

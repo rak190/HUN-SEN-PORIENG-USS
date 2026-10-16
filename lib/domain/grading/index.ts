@@ -9,35 +9,72 @@ export interface SubjectScoreBreakdown {
   isPassing: boolean;
 }
 
+export interface ExamGradingScale {
+  id?: string;
+  grade_letter: string;
+  min_percentage: number;
+  max_percentage: number;
+  gpa_point?: number;
+  description_khmer?: string;
+}
+
 export interface StudentGradeCalculationResult {
   totalScore: number;
   maxTotal: number;
-  averageScore: number; // Scaled to 10.00
-  gradeLetter: 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
-  gradeMentionKh: string;
+  totalCoefficient: number; // The divisor / "មេគុណបែងចែក" (sum of coefficients or maxTotal / 50)
+  averageScore50: number;   // Average on Scale 50 (totalScore / totalCoefficient)
+  averageScore: number;     // Average on Scale 10 ((totalScore / maxTotal) * 10)
+  percentage: number;       // Percentage ((totalScore / maxTotal) * 100)
+  gradeLetter: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | string;
+  gradeMentionKh: string;   // Dynamic Khmer mention from exam_grading_scales
   isPassing: boolean;
   subjectBreakdowns: SubjectScoreBreakdown[];
   subjectCount: number;
 }
 
 /**
- * Maps average score (out of 10) to official MoEYS Letter Grade and Khmer Mention
+ * Maps percentage or 10-scale average to official MoEYS Letter Grade and Khmer Mention.
+ * Supports dynamic grading scales configured by Admin in exam_grading_scales.
  */
-export function calculateGradeLetter(averageScore: number): { letter: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'; mentionKh: string } {
-  if (averageScore >= 9.0) return { letter: 'A', mentionKh: 'ល្អប្រសើរ (Excellent)' };
-  if (averageScore >= 8.0) return { letter: 'B', mentionKh: 'ល្អណាស់ (Very Good)' };
-  if (averageScore >= 7.0) return { letter: 'C', mentionKh: 'ល្អ (Good)' };
-  if (averageScore >= 6.0) return { letter: 'D', mentionKh: 'ល្អបង្គួរ (Fairly Good)' };
-  if (averageScore >= 5.0) return { letter: 'E', mentionKh: 'មធ្យម (Pass)' };
+export function calculateGradeLetter(
+  scoreOrPercentage: number,
+  dynamicScales?: ExamGradingScale[]
+): { letter: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | string; mentionKh: string } {
+  // Normalize input: if <= 10.0, convert 10-scale score to percentage (e.g., 8.5 -> 85.0%)
+  const percentage = scoreOrPercentage <= 10.0 ? scoreOrPercentage * 10.0 : scoreOrPercentage;
+
+  // 1. If dynamic scales from exam_grading_scales are provided, match range
+  if (dynamicScales && dynamicScales.length > 0) {
+    const sortedScales = [...dynamicScales].sort((a, b) => Number(b.min_percentage ?? 0) - Number(a.min_percentage ?? 0));
+    for (const scale of sortedScales) {
+      const min = Number(scale.min_percentage ?? 0);
+      const max = Number(scale.max_percentage ?? 100);
+      if (percentage >= min && percentage <= max) {
+        return {
+          letter: scale.grade_letter,
+          mentionKh: scale.description_khmer || scale.grade_letter
+        };
+      }
+    }
+  }
+
+  // 2. Default national MoEYS standard percentage thresholds
+  if (percentage >= 90.0) return { letter: 'A', mentionKh: 'ល្អប្រសើរ (Excellent)' };
+  if (percentage >= 80.0) return { letter: 'B', mentionKh: 'ល្អណាស់ (Very Good)' };
+  if (percentage >= 70.0) return { letter: 'C', mentionKh: 'ល្អ (Good)' };
+  if (percentage >= 60.0) return { letter: 'D', mentionKh: 'ល្អបង្គួរ (Fairly Good)' };
+  if (percentage >= 50.0) return { letter: 'E', mentionKh: 'មធ្យម (Pass)' };
   return { letter: 'F', mentionKh: 'ធ្លាក់ (Fail)' };
 }
 
 /**
  * Calculates a single student's monthly grade from raw subject scores
+ * using curriculum schema (coefficients and max scores) and optional dynamic grading scales.
  */
 export function calculateStudentMonthlyGrade(
   scores: Record<string, number>,
-  schema: CurriculumSchema
+  schema: CurriculumSchema,
+  dynamicScales?: ExamGradingScale[]
 ): StudentGradeCalculationResult {
   let totalScore = 0;
   let subjectCount = 0;
@@ -70,16 +107,36 @@ export function calculateStudentMonthlyGrade(
   });
 
   const maxTotal = schema.subjects.reduce((sum, s) => sum + s.maxScore, 0);
+
+  // Compute total coefficient divisor (ផលបូកមេគុណ): sum of coefficients or maxTotal / 50
+  const coeffSum = schema.subjects.reduce((sum, s) => {
+    const c = s.coefficient !== undefined && s.coefficient !== null ? s.coefficient : (s.maxScore / 50);
+    return sum + c;
+  }, 0);
+  const totalCoefficient = coeffSum > 0 ? parseFloat(coeffSum.toFixed(2)) : (maxTotal > 0 ? parseFloat((maxTotal / 50).toFixed(2)) : 1);
+
+  // Scale 50 Average: totalScore / totalCoefficient (e.g. 420 / 14 = 30.00 / 50)
+  const averageScore50 = totalCoefficient > 0 ? parseFloat((totalScore / totalCoefficient).toFixed(2)) : 0;
+
+  // Scale 10 Average: (totalScore / maxTotal) * 10 (e.g. (420 / 700) * 10 = 6.00 / 10)
   const averageScore = maxTotal > 0 ? parseFloat(((totalScore / maxTotal) * 10).toFixed(2)) : 0;
-  const { letter, mentionKh } = calculateGradeLetter(averageScore);
+
+  // Percentage (0-100%)
+  const percentage = maxTotal > 0 ? parseFloat(((totalScore / maxTotal) * 100).toFixed(2)) : 0;
+
+  // Match dynamic grading letter & mention from admin exam_grading_scales
+  const { letter, mentionKh } = calculateGradeLetter(percentage, dynamicScales);
 
   return {
     totalScore: parseFloat(totalScore.toFixed(2)),
     maxTotal,
+    totalCoefficient,
+    averageScore50,
     averageScore,
+    percentage,
     gradeLetter: letter,
     gradeMentionKh: mentionKh,
-    isPassing: averageScore >= 5.0,
+    isPassing: averageScore50 >= 25.0,
     subjectBreakdowns: breakdowns,
     subjectCount
   };
@@ -92,7 +149,8 @@ export function calculateStudentMonthlyGrade(
 export function calculateStudentSemesterGrade(
   monthlyScoresList: Record<string, number>[], // Scores for month 1, 2, 3
   examScores: Record<string, number>,
-  schema: CurriculumSchema
+  schema: CurriculumSchema,
+  dynamicScales?: ExamGradingScale[]
 ): { calculatedScores: Record<string, number>; summary: StudentGradeCalculationResult } {
   const calculatedScores: Record<string, number> = {};
 
@@ -129,7 +187,7 @@ export function calculateStudentSemesterGrade(
     }
   });
 
-  const summary = calculateStudentMonthlyGrade(calculatedScores, schema);
+  const summary = calculateStudentMonthlyGrade(calculatedScores, schema, dynamicScales);
   return { calculatedScores, summary };
 }
 
@@ -140,7 +198,8 @@ export function calculateStudentSemesterGrade(
 export function calculateStudentAnnualGrade(
   sem1Scores: Record<string, number>,
   sem2Scores: Record<string, number>,
-  schema: CurriculumSchema
+  schema: CurriculumSchema,
+  dynamicScales?: ExamGradingScale[]
 ): { calculatedScores: Record<string, number>; summary: StudentGradeCalculationResult } {
   const calculatedScores: Record<string, number> = {};
 
@@ -167,7 +226,7 @@ export function calculateStudentAnnualGrade(
     }
   });
 
-  const summary = calculateStudentMonthlyGrade(calculatedScores, schema);
+  const summary = calculateStudentMonthlyGrade(calculatedScores, schema, dynamicScales);
   return { calculatedScores, summary };
 }
 
