@@ -17,8 +17,12 @@ import {
   UserCheck,
   Building,
   Clock,
-  Sparkles
+  Award,
+  Calendar,
+  Sparkles,
+  BarChart3
 } from 'lucide-react';
+import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
 
 export interface ClassItem {
   id: string;
@@ -42,8 +46,25 @@ export interface ClassItem {
   hasAttendanceToday: boolean;
 }
 
+export interface ClassGradeStats {
+  isPublished: boolean;
+  totalGraded: number;
+  averageScore50: number;
+  passingRate: number;
+  gradeDistribution: {
+    A: number;
+    B: number;
+    C: number;
+    D: number;
+    E: number;
+    F: number;
+  };
+}
+
 export interface PrincipalClassesClientProps {
   classes: ClassItem[];
+  classGradesByPeriod?: Record<string, Record<string, ClassGradeStats>>;
+  initialPeriod?: string;
   stats: {
     totalClasses: number;
     classesWithTeacher: number;
@@ -57,11 +78,14 @@ export interface PrincipalClassesClientProps {
 
 export default function PrincipalClassesClient({
   classes,
+  classGradesByPeriod = {},
+  initialPeriod = 'dec',
   stats,
   schoolCode
 }: PrincipalClassesClientProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('all');
+  const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod);
   const [attendanceFilter, setAttendanceFilter] = useState<'all' | 'submitted' | 'pending'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
@@ -73,6 +97,18 @@ export default function PrincipalClassesClient({
     });
     return Array.from(set).sort((a, b) => Number(b) - Number(a));
   }, [classes]);
+
+  // Current Period Label
+  const selectedPeriodObj = ACADEMIC_PERIODS.find(p => p.id === selectedPeriod);
+  const selectedPeriodLabel = selectedPeriodObj ? selectedPeriodObj.label : selectedPeriod;
+
+  // Count classes that have published scores in this period
+  const publishedClassesCount = useMemo(() => {
+    return classes.filter(c => {
+      const g = classGradesByPeriod[c.id]?.[selectedPeriod];
+      return g && g.isPublished;
+    }).length;
+  }, [classes, classGradesByPeriod, selectedPeriod]);
 
   // Filtered classes
   const filteredClasses = useMemo(() => {
@@ -112,6 +148,22 @@ export default function PrincipalClassesClient({
 
         {/* Filters and View Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Exam Period Selector (The user explicitly requested this!) */}
+          <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-full border border-slate-200/80 shadow-xs">
+            <Award className="w-4 h-4 text-[#155EEF] shrink-0" />
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+              className="bg-transparent text-xs font-extrabold text-slate-800 focus:outline-none cursor-pointer max-w-[150px] sm:max-w-none"
+            >
+              {ACADEMIC_PERIODS.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Grade Filter */}
           <div className="flex items-center gap-2 bg-white px-3.5 py-2.5 rounded-full border border-slate-200/80 shadow-xs">
             <Filter className="w-4 h-4 text-[#FFCF59] shrink-0" />
@@ -141,7 +193,7 @@ export default function PrincipalClassesClient({
           </div>
 
           {/* Search Bar */}
-          <div className="relative w-full sm:w-56">
+          <div className="relative w-full sm:w-52">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -198,32 +250,32 @@ export default function PrincipalClassesClient({
           <p className="text-sm font-bold text-yellow-950 mt-4">ថ្នាក់មានគ្រូបន្ទុក ({stats.totalClasses > 0 ? Math.round((stats.classesWithTeacher / stats.totalClasses) * 100) : 0}%)</p>
         </div>
 
-        {/* Total Students */}
+        {/* Attendance Submitted Today */}
         <div className="bg-white rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] border border-slate-200">
           <div className="flex justify-between items-start">
             <h2 className="text-4xl font-black text-slate-800 tracking-tight leading-none">
-              {stats.totalStudents}
+              {stats.attendanceSubmittedToday} / {stats.totalClasses}
             </h2>
-            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-[#155EEF] group-hover:text-white transition-all">
-              <GraduationCap className="w-5 h-5 text-slate-600 group-hover:text-white transition-colors" />
+            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all">
+              <CheckCircle2 className="w-5 h-5 text-slate-600 group-hover:text-white transition-colors" />
             </div>
           </div>
-          <p className="text-sm font-bold text-slate-500 mt-4">
-            សិស្សសរុប (ស្រី {stats.totalFemale} នាក់)
-          </p>
+          <p className="text-sm font-bold text-slate-500 mt-4">បានស្រង់វត្តមានថ្ងៃនេះ</p>
         </div>
 
-        {/* Attendance Submitted Today */}
+        {/* Exam Scores Published in Selected Period */}
         <div className="bg-gradient-to-br from-[#155EEF] to-blue-700 rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] border border-blue-400/30">
           <div className="flex justify-between items-start">
             <h2 className="text-4xl font-black text-white tracking-tight leading-none">
-              {stats.attendanceSubmittedToday} / {stats.totalClasses}
+              {publishedClassesCount} / {stats.totalClasses}
             </h2>
             <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all">
-              <CheckCircle2 className="w-5 h-5 text-white group-hover:text-[#155EEF] transition-colors" />
+              <Award className="w-5 h-5 text-white group-hover:text-[#155EEF] transition-colors" />
             </div>
           </div>
-          <p className="text-sm font-bold text-blue-100 mt-4">បានស្រង់វត្តមានថ្ងៃនេះ</p>
+          <p className="text-sm font-bold text-blue-100 mt-4 truncate" title={`ការបោះពុម្ពពិន្ទុ (${selectedPeriodLabel})`}>
+            បោះពុម្ពពិន្ទុ ({selectedPeriodLabel})
+          </p>
         </div>
       </div>
 
@@ -238,6 +290,9 @@ export default function PrincipalClassesClient({
         /* Grid View */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredClasses.map((cls) => {
+            const gradeStats = classGradesByPeriod[cls.id]?.[selectedPeriod];
+            const isPublished = Boolean(gradeStats && gradeStats.isPublished);
+
             return (
               <div
                 key={cls.id}
@@ -336,6 +391,73 @@ export default function PrincipalClassesClient({
                       <p className="text-base font-black text-pink-700">{cls.femaleStudents} នាក់</p>
                     </div>
                   </div>
+
+                  {/* Academic Performance & Grade Distribution Section */}
+                  <div className="py-3 border-t border-slate-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-extrabold text-[#64748B] uppercase tracking-wider flex items-center gap-1">
+                        <Award className="w-3.5 h-3.5 text-[#155EEF]" />
+                        <span>លទ្ធផលពិន្ទុ ({selectedPeriodLabel})</span>
+                      </span>
+
+                      {isPublished ? (
+                        <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          អត្រាជាប់ {gradeStats?.passingRate}%
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                          <span>ពិន្ទុមិនទាន់បោះពុម្ពផ្សាយ</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {isPublished && gradeStats ? (
+                      <div className="space-y-2">
+                        {/* Letter Grade Distribution Grid (A, B, C, D, E, F) */}
+                        <div className="grid grid-cols-6 gap-1 bg-slate-50 p-2 rounded-xl border border-slate-200/60 text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black text-emerald-700">A</span>
+                            <span className="text-xs font-black text-slate-800">{gradeStats.gradeDistribution.A}</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black text-blue-700">B</span>
+                            <span className="text-xs font-black text-slate-800">{gradeStats.gradeDistribution.B}</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black text-cyan-700">C</span>
+                            <span className="text-xs font-black text-slate-800">{gradeStats.gradeDistribution.C}</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black text-amber-700">D</span>
+                            <span className="text-xs font-black text-slate-800">{gradeStats.gradeDistribution.D}</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black text-orange-700">E</span>
+                            <span className="text-xs font-black text-slate-800">{gradeStats.gradeDistribution.E}</span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black text-rose-700">F</span>
+                            <span className="text-xs font-black text-slate-800">{gradeStats.gradeDistribution.F}</span>
+                          </div>
+                        </div>
+
+                        {/* Extra KPI: Average Score on Scale 50 */}
+                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 px-1">
+                          <span>សិស្សមានពិន្ទុ៖ {gradeStats.totalGraded} នាក់</span>
+                          {gradeStats.averageScore50 > 0 && (
+                            <span className="text-slate-700 font-extrabold">
+                              មធ្យមភាគ៖ {gradeStats.averageScore50} / 50
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-center text-slate-400 text-xs font-semibold">
+                        មិនទាន់មានកំណត់ត្រាពិន្ទុបោះពុម្ពផ្សាយសម្រាប់ខែនេះទេ
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Footer Action */}
@@ -360,10 +482,13 @@ export default function PrincipalClassesClient({
               <BookOpen className="w-5 h-5 text-[#155EEF]" />
               <span>តារាងព័ត៌មានថ្នាក់រៀនសរុប ({filteredClasses.length} ថ្នាក់)</span>
             </h3>
+            <span className="text-xs font-extrabold text-[#155EEF] bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+              ការប្រលង៖ {selectedPeriodLabel}
+            </span>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[750px]">
+            <table className="w-full text-left border-collapse min-w-[850px]">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-extrabold text-[#64748B] uppercase tracking-wider">
                   <th className="py-4 px-6 w-16 text-center">ល.រ</th>
@@ -373,68 +498,96 @@ export default function PrincipalClassesClient({
                   <th className="py-4 px-4">បន្ទប់ / វេន</th>
                   <th className="py-4 px-6 text-center">សិស្សសរុប</th>
                   <th className="py-4 px-6 text-center">វត្តមានថ្ងៃនេះ</th>
+                  <th className="py-4 px-6 text-center">និទ្ទេស (A-F)</th>
                   <th className="py-4 px-6 text-right">សកម្មភាព</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm font-semibold">
-                {filteredClasses.map((cls, idx) => (
-                  <tr key={cls.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-6 text-center text-slate-400 font-bold">{String(idx + 1).padStart(2, '0')}</td>
-                    <td className="py-3 px-6">
-                      <div className="font-black text-slate-800 text-base">
-                        ថ្នាក់ {cls.name}
-                      </div>
-                      <div className="text-[11px] text-slate-500 font-bold">{cls.track}</div>
-                    </td>
-                    <td className="py-3 px-6 text-center">
-                      <span className="px-2.5 py-1 rounded-full bg-blue-50 text-[#155EEF] font-black text-xs border border-blue-200">
-                        ថ្នាក់ទី {cls.grade}
-                      </span>
-                    </td>
-                    <td className="py-3 px-6">
-                      {cls.teacher ? (
-                        <div>
-                          <div className="font-extrabold text-slate-800">{cls.teacher.name}</div>
-                          <div className="text-xs text-slate-500 font-semibold">{cls.teacher.phone}</div>
+                {filteredClasses.map((cls, idx) => {
+                  const gradeStats = classGradesByPeriod[cls.id]?.[selectedPeriod];
+                  const isPublished = Boolean(gradeStats && gradeStats.isPublished);
+
+                  return (
+                    <tr key={cls.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-6 text-center text-slate-400 font-bold">{String(idx + 1).padStart(2, '0')}</td>
+                      <td className="py-3 px-6">
+                        <div className="font-black text-slate-800 text-base">
+                          ថ្នាក់ {cls.name}
                         </div>
-                      ) : (
-                        <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                          គ្មានគ្រូបន្ទុក
+                        <div className="text-[11px] text-slate-500 font-bold">{cls.track}</div>
+                      </td>
+                      <td className="py-3 px-6 text-center">
+                        <span className="px-2.5 py-1 rounded-full bg-blue-50 text-[#155EEF] font-black text-xs border border-blue-200">
+                          ថ្នាក់ទី {cls.grade}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-xs font-bold text-slate-600">
-                      <div>បន្ទប់៖ {cls.roomNumber}</div>
-                      <div className="text-slate-400">វេន៖ {cls.shift}</div>
-                    </td>
-                    <td className="py-3 px-6 text-center">
-                      <div className="font-black text-slate-800">{cls.totalStudents} នាក់</div>
-                      <div className="text-[11px] text-pink-600 font-bold">ស្រី {cls.femaleStudents}</div>
-                    </td>
-                    <td className="py-3 px-6 text-center">
-                      {cls.hasAttendanceToday ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-extrabold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          <span>ស្រង់រួច</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-extrabold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
-                          <span>មិនទាន់ស្រង់</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-6 text-right">
-                      <Link
-                        href={`/principal/students?filter=class:${cls.name}`}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-[#155EEF] hover:text-white text-slate-700 font-extrabold text-xs transition-all shadow-2xs"
-                      >
-                        <span>មើលសិស្ស</span>
-                        <ChevronRight className="w-3 h-3" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="py-3 px-6">
+                        {cls.teacher ? (
+                          <div>
+                            <div className="font-extrabold text-slate-800">{cls.teacher.name}</div>
+                            <div className="text-xs text-slate-500 font-semibold">{cls.teacher.phone}</div>
+                          </div>
+                        ) : (
+                          <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                            គ្មានគ្រូបន្ទុក
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-xs font-bold text-slate-600">
+                        <div>បន្ទប់៖ {cls.roomNumber}</div>
+                        <div className="text-slate-400">វេន៖ {cls.shift}</div>
+                      </td>
+                      <td className="py-3 px-6 text-center">
+                        <div className="font-black text-slate-800">{cls.totalStudents} នាក់</div>
+                        <div className="text-[11px] text-pink-600 font-bold">ស្រី {cls.femaleStudents}</div>
+                      </td>
+                      <td className="py-3 px-6 text-center">
+                        {cls.hasAttendanceToday ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-extrabold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <span>ស្រង់រួច</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-extrabold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                            <span>មិនទាន់ស្រង់</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-6 text-center">
+                        {isPublished && gradeStats ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="flex items-center gap-1 text-[11px] font-extrabold">
+                              <span className="text-emerald-700">A:{gradeStats.gradeDistribution.A}</span>
+                              <span className="text-blue-700">B:{gradeStats.gradeDistribution.B}</span>
+                              <span className="text-cyan-700">C:{gradeStats.gradeDistribution.C}</span>
+                              <span className="text-amber-700">D:{gradeStats.gradeDistribution.D}</span>
+                              <span className="text-orange-700">E:{gradeStats.gradeDistribution.E}</span>
+                              <span className="text-rose-700">F:{gradeStats.gradeDistribution.F}</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              ជាប់ {gradeStats.passingRate}%
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-extrabold">
+                            <span className="w-1 h-1 rounded-full bg-amber-500"></span>
+                            <span>មិនទាន់បោះពុម្ព</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-6 text-right">
+                        <Link
+                          href={`/principal/students?filter=class:${cls.name}`}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-[#155EEF] hover:text-white text-slate-700 font-extrabold text-xs transition-all shadow-2xs"
+                        >
+                          <span>មើលសិស្ស</span>
+                          <ChevronRight className="w-3 h-3" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

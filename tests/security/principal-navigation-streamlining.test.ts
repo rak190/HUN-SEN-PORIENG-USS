@@ -136,4 +136,47 @@ test('Principal Role Streamlining & School Classes Navigation Test Suite', async
       'ClassesClient must display attendance status per class'
     );
   });
+
+  // --------------------------------------------------------------------------
+  // Scenario 5: Principal Classes Academic Performance & A-F Grade Distribution
+  // --------------------------------------------------------------------------
+  await t.test('Scenario 5: Principal Classes displays detailed A-F letter grade distribution and pending publication badge', () => {
+    assert.ok(fs.existsSync(principalClassesPagePath), 'Principal classes page must exist');
+    assert.ok(fs.existsSync(principalClassesClientPath), 'ClassesClient.tsx must exist');
+
+    const pageContent = fs.readFileSync(principalClassesPagePath, 'utf8');
+    const clientContent = fs.readFileSync(principalClassesClientPath, 'utf8');
+
+    // Page must query published grades
+    assert.ok(
+      pageContent.includes(".from('grades')") &&
+      pageContent.includes(".eq('status', 'published')"),
+      'Principal classes page must query published grades'
+    );
+    assert.ok(
+      pageContent.includes('calculateGradeLetter'),
+      'Principal classes page must calculate official grade letters'
+    );
+
+    // Client must provide period dropdown selector
+    assert.ok(
+      clientContent.includes('ACADEMIC_PERIODS') &&
+      clientContent.includes('selectedPeriod'),
+      'ClassesClient must provide exam period dropdown filter'
+    );
+
+    // Client must render A-F distribution
+    assert.ok(
+      clientContent.includes('gradeStats.gradeDistribution.A') &&
+      clientContent.includes('gradeStats.gradeDistribution.B') &&
+      clientContent.includes('gradeStats.gradeDistribution.F'),
+      'ClassesClient must display A, B, C, D, E, F grade counts'
+    );
+
+    // Client must render pending publication badge
+    assert.ok(
+      clientContent.includes('ពិន្ទុមិនទាន់បោះពុម្ពផ្សាយ'),
+      'ClassesClient must render prominent "ពិន្ទុមិនទាន់បោះពុម្ពផ្សាយ" badge when scores are pending'
+    );
+  });
 });
