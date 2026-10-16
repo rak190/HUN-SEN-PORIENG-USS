@@ -29,9 +29,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវ (Incorrect password)' }, { status: 401 });
     }
   } else {
-    // In demo / fallback mode, check against configured sudo password
-    const adminSudo = process.env.ADMIN_SUDO_PASSWORD || 'Admin@2026';
-    if (password !== adminSudo && password !== 'Admin@2026' && password !== 'password123') {
+    // Check against explicitly configured sudo password in environment (fail closed if unset)
+    const adminSudo = process.env.ADMIN_SUDO_PASSWORD;
+    if (!adminSudo || password !== adminSudo) {
       return NextResponse.json({ success: false, message: 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវ (Incorrect password)' }, { status: 401 });
     }
   }

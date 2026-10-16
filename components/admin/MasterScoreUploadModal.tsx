@@ -143,10 +143,21 @@ export function MasterScoreUploadModal({ isOpen, onClose, selectedPeriod, academ
         .select('id, name, grade, track');
       if (classErr) throw classErr;
 
-      const { data: dbStudents, error: stdErr } = await supabase
-        .from('students')
-        .select('id, student_id_number, desk_number, class_id, full_name');
+      let rosterQuery = supabase
+        .from('active_class_rosters')
+        .select('id, student_id_number, desk_number, enrollment_class_id, full_name, class_name, academic_year_id');
+
+      if (academicYearId) {
+        rosterQuery = rosterQuery.eq('academic_year_id', academicYearId);
+      }
+
+      const { data: rawStudents, error: stdErr } = await rosterQuery;
       if (stdErr) throw stdErr;
+
+      const dbStudents = (rawStudents || []).map(s => ({
+        ...s,
+        class_id: s.enrollment_class_id
+      }));
 
       const { data: standardsData } = await supabase
         .from('exam_subject_standards')

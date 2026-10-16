@@ -11,9 +11,8 @@ export default async function HealthPage() {
   const { user, role, profile } = await getServerAuth();
 
   let studentsQuery = supabase
-    .from('students')
+    .from('active_class_rosters')
     .select('*')
-    .eq('is_active', true)
     .order('full_name', { ascending: true });
 
   // If teacher, only fetch students in classes assigned to this teacher
@@ -25,22 +24,12 @@ export default async function HealthPage() {
 
     const classIds = (teacherClasses || []).map(c => c.id);
     if (classIds.length > 0) {
-      studentsQuery = studentsQuery.in('class_id', classIds);
+      studentsQuery = studentsQuery.in('enrollment_class_id', classIds);
     } else {
-      studentsQuery = studentsQuery.in('class_id', ['00000000-0000-0000-0000-000000000000']);
+      studentsQuery = studentsQuery.in('enrollment_class_id', ['00000000-0000-0000-0000-000000000000']);
     }
   } else if (user && role === 'principal' && profile?.school_id) {
-    const { data: schoolClasses } = await supabase
-      .from('classes')
-      .select('id')
-      .eq('school_id', profile.school_id);
-
-    const classIds = (schoolClasses || []).map(c => c.id);
-    if (classIds.length > 0) {
-      studentsQuery = studentsQuery.in('class_id', classIds);
-    } else {
-      studentsQuery = studentsQuery.in('class_id', ['00000000-0000-0000-0000-000000000000']);
-    }
+    studentsQuery = studentsQuery.eq('school_id', profile.school_id);
   }
 
   // 1. Fetch Students

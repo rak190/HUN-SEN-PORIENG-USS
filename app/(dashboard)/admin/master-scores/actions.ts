@@ -2,15 +2,15 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getCurriculumSchemaForClass, getDynamicCurriculumSchemaForClass } from '@/lib/curriculum';
-import { getServerAuth } from '@/lib/auth-server';
+import { getServerAuth, requirePrincipal } from '@/lib/auth-server';
 import { computeSummaryGrades } from '@/lib/domain/grading';
 
 /**
  * Creates an automated backup snapshot before applying bulk grade updates
  */
 export async function createGradeSnapshot(period: string, academicYearId: string, classIds: string[], label: string) {
+  const { user, profile } = await requirePrincipal();
   const supabase = await createClient();
-  const { user, profile } = await getServerAuth();
 
   try {
     let query = supabase.from('grades').select('*').eq('period', period).eq('academic_year_id', academicYearId);
@@ -43,6 +43,7 @@ export async function createGradeSnapshot(period: string, academicYearId: string
  * Fetches recent snapshots for a given period or all periods
  */
 export async function getGradeSnapshots(period?: string) {
+  await requirePrincipal();
   const supabase = await createClient();
   try {
     let query = supabase
@@ -119,6 +120,7 @@ export async function calculateSummaryScores(period: string, academicYearId: str
 
   const allTargetPeriods = examPeriod ? [...targetMonths, examPeriod] : [...targetMonths];
 
+  await requirePrincipal();
   const supabase = await createClient();
 
   // 1. Fetch active students with class info for the specific academic year
@@ -231,6 +233,7 @@ export async function calculateSummaryScores(period: string, academicYearId: str
  * in the specified academic year. This protects the data integrity of monthly scores.
  */
 export async function validateMonthlyScoreDataIntegrity(period: string, academic_year_id: string, class_id?: string) {
+  await requirePrincipal();
   const supabase = await createClient();
   try {
     // 1. Fetch scores for the period
@@ -436,9 +439,11 @@ export async function uploadMasterScoresAction(payload: any[], period: string, a
 export async function publishScoresAction(period: string, academicYearId: string) {
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
-    await requirePrincipal();
+    const { user } = await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
+
+    if (!supabase) throw new Error('Database unavailable');
 
     // 1. Validation: count active enrolled students for the academic year
     const { count: enrolledCount, error: enrollError } = await supabase
@@ -465,14 +470,14 @@ export async function publishScoresAction(period: string, academicYearId: string
       return { success: false, error: `ការប្រកាសពិន្ទុត្រូវបានបដិសេធ៖ បាត់ពិន្ទុសិស្សចំនួន ${missing} នាក់។ សូមបញ្ចូលពិន្ទុឱ្យបានគ្រប់សិន។` };
     }
 
-    const { error } = await supabase
-      .from('grades')
-      .update({ status: 'published', updated_at: new Date().toISOString() })
-      .eq('period', period)
-      .eq('academic_year_id', academicYearId)
-      .eq('status', 'draft');
+    // 4. Atomic Database Transaction with Deliberate Caller Contract
+    const { data: rpcResult, error: rpcError } = await supabase.rpc('publish_scores_atomic', {
+      p_period: period,
+      p_academic_year_id: academicYearId,
+      p_caller_id: user.id
+    });
 
-    if (error) throw error;
+    if (rpcError) throw rpcError;
 
     const { revalidatePath } = await import('next/cache');
     revalidatePath('/admin/master-scores');
@@ -482,7 +487,11 @@ export async function publishScoresAction(period: string, academicYearId: string
     revalidatePath('/grades');
     revalidatePath('/classes');
 
-    return { success: true };
+    return { 
+      success: true, 
+      count: rpcResult?.published_count, 
+      message: rpcResult?.message 
+    };
   } catch (err: any) {
     console.error('publishScoresAction error:', err);
     return { success: false, error: err?.message || 'Unknown error occurred' };

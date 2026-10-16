@@ -82,10 +82,13 @@ export default function AdminBasicImportModal({ isOpen, onClose, onSuccess }: Ad
         // Fetch existing students to detect duplicates globally or within active year
         let existingStudentsInDb: any[] = [];
         const { data: existingData } = await supabase
-          .from('students')
-          .select('id, student_id_number, full_name, class_id');
+          .from('active_class_rosters')
+          .select('id, student_id_number, full_name, enrollment_class_id');
         if (existingData) {
-          existingStudentsInDb = existingData;
+          existingStudentsInDb = existingData.map(d => ({
+            ...d,
+            class_id: d.enrollment_class_id
+          }));
         }
         
         // Also fetch classes to map class names to class IDs safely

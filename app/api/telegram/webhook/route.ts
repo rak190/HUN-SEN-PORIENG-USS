@@ -46,8 +46,11 @@ async function answerCallbackQuery(callbackQueryId: string, text?: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const secret = req.headers.get('x-telegram-bot-api-secret-token');
-    if (process.env.TELEGRAM_WEBHOOK_SECRET && secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+    const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    const incomingSecret = req.headers.get('x-telegram-bot-api-secret-token');
+
+    // Fail closed: Webhook secret must be set and match exactly
+    if (!webhookSecret || incomingSecret !== webhookSecret) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 

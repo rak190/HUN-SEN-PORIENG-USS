@@ -30,10 +30,9 @@ export default function ClassInfoPage() {
       try {
         // 1. Fetch Students
         const { data: stdData } = await supabase
-          .from('students')
+          .from('active_class_rosters')
           .select('*')
-          .eq('class_id', activeClass.id)
-          .eq('is_active', true)
+          .eq('enrollment_class_id', activeClass.id)
           .order('full_name', { ascending: true });
 
         setStudents((stdData as Student[]) || []);

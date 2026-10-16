@@ -93,15 +93,17 @@ export default function StudentProfilePage({ params }: { params: Promise<{ id: s
 
       const { data, error } = await supabase
         .from('students')
-        .select('*, classes(name)')
+        .select('*, student_enrollments(class_id, enrollment_status, classes(name))')
         .eq('id', resolvedParams.id)
         .single();
 
       if (data && !error) {
-        // Map classes(name) to class_name since the join returns it nested
+        // Map active class name from student_enrollments
+        const enrollments = (data.student_enrollments as any[]) || [];
+        const activeEnrollment = enrollments.find(e => e.enrollment_status === 'active') || enrollments[0];
         const mappedData: StudentProfile = {
           ...data,
-          class_name: data.classes?.name || 'មិនស្គាល់ថ្នាក់',
+          class_name: activeEnrollment?.classes?.name || 'មិនស្គាល់ថ្នាក់',
           // Ensure arrays are parsed if they come back as null
           behavior_history: data.behavior_history || [],
           teacher_notes: data.teacher_notes || []

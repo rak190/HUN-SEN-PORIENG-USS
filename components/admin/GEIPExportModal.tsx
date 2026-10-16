@@ -22,13 +22,19 @@ export function GEIPExportModal({ isOpen, onClose, selectedPeriod }: GEIPExportM
     setError('');
     
     try {
-      // 1. Fetch Master Data
-      const { data: students, error: stdErr } = await supabase
-        .from('students')
-        .select('id, full_name, gender, student_id_number, class_id, is_active, enrollment_status')
+      // 1. Fetch Master Data from active_class_rosters
+      const { data: rosterData, error: stdErr } = await supabase
+        .from('active_class_rosters')
+        .select('id, full_name, gender, student_id_number, enrollment_class_id, is_active, current_enrollment_status')
         .order('full_name', { ascending: true });
         
       if (stdErr) throw stdErr;
+
+      const students = (rosterData || []).map(s => ({
+        ...s,
+        class_id: s.enrollment_class_id,
+        enrollment_status: s.current_enrollment_status
+      }));
 
       const { data: classes, error: classErr } = await supabase
         .from('classes')

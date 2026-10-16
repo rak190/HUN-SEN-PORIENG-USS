@@ -28,11 +28,11 @@ export default async function PrincipalStaffPage() {
     .from('classes')
     .select('id, name, teacher_id');
 
-  // 3. Fetch Student Counts
-  const { data: students } = await supabase
-    .from('students')
+  // 3. Fetch Student Counts from student_enrollments
+  const { data: enrollments } = await supabase
+    .from('student_enrollments')
     .select('class_id')
-    .eq('is_active', true);
+    .eq('enrollment_status', 'active');
 
   const mappedTeachers = (teachers || []).map(t => {
     // Find the class this teacher is assigned to
@@ -40,7 +40,7 @@ export default async function PrincipalStaffPage() {
     
     // Count students in that class
     const studentCount = assignedClass 
-      ? students?.filter(s => s.class_id === assignedClass.id).length 
+      ? (enrollments || []).filter(e => e.class_id === assignedClass.id).length 
       : 0;
 
     return {

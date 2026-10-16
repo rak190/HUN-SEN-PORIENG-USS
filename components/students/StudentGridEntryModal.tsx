@@ -160,7 +160,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
       }
 
       return {
-        class_id: activeClass?.id || 'demo-class',
+        class_id: activeClass?.id || '',
         status: 'new',
         gender: isFemale ? 'F' : 'M',
         student_id_number: s.student_id_number.trim() || `ID-${Math.floor(Math.random() * 10000)}`,
@@ -176,12 +176,18 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
       };
     });
 
-    if (isDemoMode || !activeClass) {
+    if (isDemoMode) {
       setTimeout(() => {
         onSuccess(payload.map((s, i) => ({ ...s, id: `grid-${Date.now()}-${i}` })));
         setLoading(false);
         onClose();
       }, 500);
+      return;
+    }
+
+    if (!activeClass) {
+      setErrorMsg('សូមជ្រើសរើសថ្នាក់រៀនជាមុនសិន');
+      setLoading(false);
       return;
     }
 

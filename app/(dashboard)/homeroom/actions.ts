@@ -36,7 +36,40 @@ export async function createActivityLog(data: {
 }
 
 export async function deleteActivityLog(id: string) {
+  const { user, role } = await getServerAuth();
+  if (!user || !role) {
+    throw new Error('Unauthorized');
+  }
+
   const supabase = await createClient();
+
+  // 1. Fetch target activity log
+  const { data: log, error: fetchError } = await supabase
+    .from('activity_logs')
+    .select('id, created_by, class_id')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (fetchError || !log) {
+    throw new Error('កំណត់ត្រាសកម្មភាពរកមិនឃើញ (Activity log not found)');
+  }
+
+  // 2. Authorization: admin, creator, or assigned class teacher
+  let isAuthorized = role === 'admin' || log.created_by === user.id;
+
+  if (!isAuthorized && log.class_id) {
+    try {
+      const { requireClassAccess } = await import('@/lib/auth-server');
+      await requireClassAccess(log.class_id);
+      isAuthorized = true;
+    } catch {
+      isAuthorized = false;
+    }
+  }
+
+  if (!isAuthorized) {
+    throw new Error('Forbidden: You are not authorized to delete this activity log');
+  }
 
   const { error } = await supabase.from('activity_logs').delete().eq('id', id);
 

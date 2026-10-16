@@ -208,12 +208,18 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
     
     setLoading(true);
 
-    if (isDemoMode || !activeClass) {
+    if (isDemoMode) {
       setTimeout(() => {
         onSuccess(validRows.map((r) => ({ ...r.data })));
         setLoading(false);
         onClose();
       }, 500);
+      return;
+    }
+
+    if (!activeClass) {
+      setErrorMsg('សូមជ្រើសរើសថ្នាក់រៀនជាមុនសិន');
+      setLoading(false);
       return;
     }
 

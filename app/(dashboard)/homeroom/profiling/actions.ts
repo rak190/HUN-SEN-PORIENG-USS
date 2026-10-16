@@ -18,10 +18,9 @@ export interface StudentCompletionStats {
 }
 
 export async function getProfileCompletionStats(classId: string, academicYearId: string) {
+  const { requireClassAccess } = await import('@/lib/auth-server');
+  await requireClassAccess(classId);
   const supabase = await createClient();
-  const { user } = await getServerAuth();
-
-  if (!user) throw new Error("Unauthorized");
 
   // 1. Fetch Class Roster
   const { data: students, error: stdErr } = await supabase

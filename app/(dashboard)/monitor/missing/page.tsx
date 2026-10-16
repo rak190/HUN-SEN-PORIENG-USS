@@ -17,12 +17,7 @@ export default function MissingDaysPage() {
     async function checkMissingDays() {
       setIsLoading(true);
       if (!activeClass?.id) {
-        // Mock data for UI testing
-        const mockPast = new Date();
-        mockPast.setDate(mockPast.getDate() - 2);
-        const mockPast2 = new Date();
-        mockPast2.setDate(mockPast2.getDate() - 3);
-        setMissingDays([mockPast.toISOString().split('T')[0], mockPast2.toISOString().split('T')[0]]);
+        setMissingDays([]);
         setIsLoading(false);
         return;
       }
@@ -79,7 +74,7 @@ export default function MissingDaysPage() {
             </div>
           </div>
           <div className="bg-slate-100 px-3 py-1.5 rounded-lg text-xs font-black text-slate-700 border border-slate-200 shadow-sm">
-            ថ្នាក់ {activeClass?.name || '12 ក'}
+            ថ្នាក់ {activeClass?.name || 'មិនទាន់ជ្រើសរើស'}
           </div>
         </div>
       </div>

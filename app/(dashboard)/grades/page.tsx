@@ -155,9 +155,9 @@ export default function GradesPage() {
     async function loadData() {
       setIsLoading(true);
       const { data: stdData } = await supabase
-        .from('students')
+        .from('active_class_rosters')
         .select('*')
-        .eq('class_id', activeClass?.id || '')
+        .eq('enrollment_class_id', activeClass?.id || '')
         .order('desk_number', { ascending: true, nullsFirst: false })
         .order('full_name', { ascending: true });
 
@@ -715,6 +715,7 @@ export default function GradesPage() {
         classId={activeClass?.id || ''}
         className={activeClass?.name || ''}
         period={selectedPeriod}
+        academicYearId={activeAcademicYear?.id || activeClass?.academic_year_id || ''}
         students={students}
         flatColumns={flatColumns}
       />

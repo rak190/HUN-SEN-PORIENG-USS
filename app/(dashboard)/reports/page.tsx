@@ -63,9 +63,9 @@ export default function ReportsPage() {
       
       // 1. Fetch Students
       const { data: students } = await supabase
-        .from('students')
+        .from('active_class_rosters')
         .select('id, full_name, gender')
-        .eq('class_id', activeClass?.id);
+        .eq('enrollment_class_id', activeClass?.id);
 
       const totalStudents = students ? students.length : 0;
       const totalGirls = students ? students.filter(s => s.gender === 'F' || s.gender === 'ស្រី').length : 0;

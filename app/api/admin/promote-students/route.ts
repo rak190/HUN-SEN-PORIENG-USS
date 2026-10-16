@@ -30,7 +30,8 @@ export async function POST(req: Request) {
     const { data, error } = await adminClient.rpc('promote_students', {
       p_source_class_id: sourceClassId,
       p_target_class_id: targetClassId,
-      p_eligible_student_ids: eligibleStudentIds || []
+      p_eligible_student_ids: eligibleStudentIds || [],
+      p_caller_id: user.id
     });
 
     if (error) throw error;

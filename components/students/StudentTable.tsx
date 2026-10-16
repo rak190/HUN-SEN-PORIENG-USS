@@ -160,7 +160,7 @@ export default function StudentTable({
                           const val = e.target.value.trim();
                           if (val !== (std.desk_number || '')) {
                             setStudents(students.map(s => s.id === std.id ? { ...s, desk_number: val } : s));
-                            await supabase.from('students').update({ desk_number: val || null }).eq('id', std.id);
+                            await supabase.from('student_enrollments').update({ desk_number: val || null }).eq('student_id', std.id);
                           }
                         }}
                         className="w-16 bg-transparent border border-transparent hover:border-slate-200 focus:border-[#155EEF] rounded-lg px-2 py-1 text-center text-xs font-bold font-mono outline-none transition-colors"
@@ -188,7 +188,7 @@ export default function StudentTable({
                           const val = e.target.value.trim();
                           if (val !== (std.room_number || '')) {
                             setStudents(students.map(s => s.id === std.id ? { ...s, room_number: val } : s));
-                            await supabase.from('students').update({ room_number: val || null }).eq('id', std.id);
+                            await supabase.from('student_enrollments').update({ room_number: val || null }).eq('student_id', std.id);
                           }
                         }}
                         className="w-20 bg-transparent border border-transparent hover:border-slate-200 focus:border-[#155EEF] rounded-lg px-2 py-1 text-center text-xs font-bold font-mono outline-none transition-colors"

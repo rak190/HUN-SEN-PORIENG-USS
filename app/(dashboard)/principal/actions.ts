@@ -1,22 +1,16 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { requirePrincipal } from '@/lib/auth-server';
 
 export async function fetchPrincipalDashboardData() {
   try {
-    const supabase = await createClient();
-
-    // 1. Get authenticated user profile to strictly scope by school_id
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData.user) throw authError || new Error('Not authenticated');
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('school_id')
-      .eq('id', authData.user.id)
-      .single();
+    // 1. Authoritative check: Require Principal or Admin role
+    const { profile } = await requirePrincipal();
 
     if (!profile?.school_id) throw new Error('School not found for user');
+
+    const supabase = await createClient();
     
     // 2. Fetch Active Academic Year
     const { data: activeYear } = await supabase

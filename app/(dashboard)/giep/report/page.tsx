@@ -34,11 +34,14 @@ export default async function GeipReportPage() {
     .select('id, name, grade');
   const classes = classesData || [];
 
-  // 3. Fetch Students
+  // 3. Fetch Students from active_class_rosters
   const { data: studentsData } = await supabase
-    .from('students')
-    .select('id, class_id, full_name, gender, is_active, dob');
-  const students = studentsData || [];
+    .from('active_class_rosters')
+    .select('id, enrollment_class_id, full_name, gender, is_active, dob');
+  const students = (studentsData || []).map(s => ({
+    ...s,
+    class_id: s.enrollment_class_id
+  }));
 
   // 4. Fetch Grades for test participation summary
   const { data: gradesData } = await supabase

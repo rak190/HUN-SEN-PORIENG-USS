@@ -17,6 +17,8 @@ import {
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
+import { submitMonitorAttendanceAction } from '@/app/(dashboard)/attendance/actions';
+
 type AttendanceStatus = 'present' | 'absent' | 'late' | 'permission';
 
 interface StudentRow {
@@ -95,31 +97,15 @@ export default function MonitorAttendancePage() {
     async function fetchAttendance() {
       setIsLoading(true);
       if (!activeClass?.id) {
-         setStudents([
-            { id: 'std-1', name: 'កែវ ច័ន្ទធីតា', gender: 'F', status: 'present' },
-            { id: 'std-2', name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', status: 'present' },
-            { id: 'std-3', name: 'ចាន់ ស្រីនាថ', gender: 'F', status: 'absent' },
-            { id: 'std-4', name: 'ជា លីហួ', gender: 'M', status: 'present' },
-            { id: 'std-5', name: 'ឌី សុខលីម', gender: 'F', status: 'permission' },
-            { id: 'std-6', name: 'តាំង ម៉េងហុង', gender: 'M', status: 'present' },
-            { id: 'std-7', name: 'ថៃ ស្រីពេជ្រ', gender: 'F', status: 'present' },
-            { id: 'std-8', name: 'នួន សុខសាន្ត', gender: 'M', status: 'present' },
-            { id: 'std-9', name: 'ប៊ុន ចាន់រិទ្ធ', gender: 'M', status: 'present' },
-            { id: 'std-10', name: 'ផន សុវណ្ណារី', gender: 'F', status: 'late' },
-            { id: 'std-11', name: 'យឹម វិចិត្រ', gender: 'M', status: 'present' },
-            { id: 'std-12', name: 'រស់ ចរិយា', gender: 'F', status: 'absent' },
-            { id: 'std-13', name: 'សៅ ឧត្តម', gender: 'M', status: 'present' },
-            { id: 'std-14', name: 'ហេង ស្រីពៅ', gender: 'F', status: 'permission' },
-            { id: 'std-15', name: 'ឡុង បញ្ញា', gender: 'M', status: 'present' }
-         ]);
+         setStudents([]);
          setIsLoading(false);
          return;
       }
       
       const { data: studentsData, error } = await supabase
-        .from('students')
+        .from('active_class_rosters')
         .select('id, full_name, gender')
-        .eq('class_id', activeClass.id)
+        .eq('enrollment_class_id', activeClass.id)
         .order('full_name', { ascending: true });
         
       if (studentsData && !error) {
@@ -131,33 +117,14 @@ export default function MonitorAttendancePage() {
           
         const attMap = new Map(attData?.map(a => [a.student_id, a.status]) || []);
         
-        if (studentsData.length < 15) {
-          // Force mock data for UI testing to ensure scrollability is visible
-          setStudents([
-            { id: 'std-1', name: 'កែវ ច័ន្ទធីតា', gender: 'F', status: 'present' },
-            { id: 'std-2', name: 'ខៀវ សុវណ្ណារាជ', gender: 'M', status: 'present' },
-            { id: 'std-3', name: 'ចាន់ ស្រីនាថ', gender: 'F', status: 'absent' },
-            { id: 'std-4', name: 'ជា លីហួ', gender: 'M', status: 'present' },
-            { id: 'std-5', name: 'ឌី សុខលីម', gender: 'F', status: 'permission' },
-            { id: 'std-6', name: 'តាំង ម៉េងហុង', gender: 'M', status: 'present' },
-            { id: 'std-7', name: 'ថៃ ស្រីពេជ្រ', gender: 'F', status: 'present' },
-            { id: 'std-8', name: 'នួន សុខសាន្ត', gender: 'M', status: 'present' },
-            { id: 'std-9', name: 'ប៊ុន ចាន់រិទ្ធ', gender: 'M', status: 'present' },
-            { id: 'std-10', name: 'ផន សុវណ្ណារី', gender: 'F', status: 'late' },
-            { id: 'std-11', name: 'យឹម វិចិត្រ', gender: 'M', status: 'present' },
-            { id: 'std-12', name: 'រស់ ចរិយា', gender: 'F', status: 'absent' },
-            { id: 'std-13', name: 'សៅ ឧត្តម', gender: 'M', status: 'present' },
-            { id: 'std-14', name: 'ហេង ស្រីពៅ', gender: 'F', status: 'permission' },
-            { id: 'std-15', name: 'ឡុង បញ្ញា', gender: 'M', status: 'present' }
-          ]);
-        } else {
-          setStudents(studentsData.map(s => ({
-            id: s.id,
-            name: s.full_name,
-            gender: (s.gender as 'M' | 'F') || 'F',
-            status: (attMap.get(s.id) as AttendanceStatus) || 'present'
-          })));
-        }
+        setStudents(studentsData.map(s => ({
+          id: s.id,
+          name: s.full_name,
+          gender: (s.gender as 'M' | 'F') || 'F',
+          status: (attMap.get(s.id) as AttendanceStatus) || 'present'
+        })));
+      } else {
+        setStudents([]);
       }
       setIsLoading(false);
     }
@@ -169,15 +136,11 @@ export default function MonitorAttendancePage() {
   useEffect(() => {
     async function checkMissingDays() {
       if (!activeClass?.id) {
-        // Mock missing days if no class is selected
-        const mockPast = new Date();
-        mockPast.setDate(mockPast.getDate() - 2);
-        setMissingDays([mockPast.toISOString().split('T')[0]]);
+        setMissingDays([]);
         return;
       }
       
       const today = new Date();
-      // Only care if today is past 4 PM maybe? We'll just look at strictly past days to be safe
       const pastDays: string[] = [];
       for (let i = 1; i <= 7; i++) {
         const d = new Date(today);
@@ -224,6 +187,11 @@ export default function MonitorAttendancePage() {
       return;
     }
 
+    if (students.length === 0) {
+      setToast({ message: 'មិនមានទិន្នន័យសិស្សដើម្បីបញ្ជូនវត្តមានទេ', type: 'error' });
+      return;
+    }
+
     setIsSaving(true);
     
     try {
@@ -241,30 +209,27 @@ export default function MonitorAttendancePage() {
         throw new Error('រកមិនឃើញឆ្នាំសិក្សាសកម្មសម្រាប់ថ្នាក់រៀននេះទេ');
       }
 
-      const upsertPayload = students.map(s => ({
+      // Authoritative Server-Side Monitor Attendance Action
+      // Matches authoritative constraint onConflict: 'student_id,date,academic_year_id' with academic_year_id: targetYearId
+      const result = await submitMonitorAttendanceAction({
         class_id: activeClass.id,
-        student_id: s.id,
-        academic_year_id: targetYearId,
         date: selectedDate,
-        status: s.status,
-        recorded_by: profile?.id || null,
-        updated_at: new Date().toISOString()
-      }));
+        records: students.map(s => ({
+          student_id: s.id,
+          status: s.status,
+        })),
+        academic_year_id: targetYearId,
+      });
 
-      const { error: dbError } = await supabase
-        .from('attendance_records')
-        .upsert(upsertPayload, { onConflict: 'student_id,date,academic_year_id' });
-
-      if (dbError) {
-        console.error('Supabase attendance error:', dbError);
-        throw new Error(dbError.message);
+      if (!result.success) {
+        throw new Error(result.error || 'បរាជ័យក្នុងការបញ្ជូនវត្តមាន');
       }
 
       setMissingDays(prev => prev.filter(d => d !== selectedDate));
       setToast({ message: 'បញ្ជូនវត្តមានប្រចាំថ្ងៃទៅកាន់គ្រូដោយជោគជ័យ!', type: 'success' });
       setTimeout(() => setToast(null), 3000);
     } catch (error: any) {
-      console.error('Failed to submit:', error);
+      console.error('Failed to submit monitor attendance:', error);
       setToast({ message: `មានកំហុសក្នុងការបញ្ជូនទិន្នន័យ៖ ${error?.message || 'សូមសាកល្បងម្តងទៀត'}`, type: 'error' });
       setTimeout(() => setToast(null), 4000);
     }
@@ -295,7 +260,7 @@ export default function MonitorAttendancePage() {
           <div>
           </div>
           <div className="bg-slate-100 px-3 py-1.5 rounded-lg text-xs font-black text-slate-700 border border-slate-200 shadow-sm">
-            ថ្នាក់ {activeClass?.name || '12 ក'}
+            ថ្នាក់ {activeClass?.name || 'មិនទាន់ជ្រើសរើស'}
           </div>
         </div>
         
@@ -368,6 +333,16 @@ export default function MonitorAttendancePage() {
                 </div>
               ))}
             </div>
+          </div>
+        ) : students.length === 0 ? (
+          <div className="bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/60 p-8 text-center flex flex-col items-center justify-center my-auto shadow-[0_4px_20px_rgb(0,0,0,0.02)]">
+            <AlertCircle className="w-10 h-10 text-slate-300 mb-3" />
+            <h3 className="font-extrabold text-slate-700 text-sm mb-1">
+              {!activeClass?.id ? 'សូមជ្រើសរើសថ្នាក់រៀនជាមុនសិន' : 'មិនទាន់មានទិន្នន័យសិស្សក្នុងថ្នាក់នេះនៅឡើយទេ'}
+            </h3>
+            <p className="text-xs text-slate-400 font-bold">
+              {!activeClass?.id ? 'សូមជ្រើសរើសថ្នាក់ដែលអ្នកទទួលបន្ទុក' : 'សូមទាក់ទងអ្នកគ្រប់គ្រងដើម្បីបញ្ចូលឈ្មោះសិស្ស'}
+            </p>
           </div>
         ) : (
           <div className="bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Camera, Plus, Save, Activity, Building2, FileText, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
+import { saveGiepNoteAction } from './actions';
 
 interface EvidenceItem {
   id: string;
@@ -43,19 +44,18 @@ export default function GiepEvidencePage() {
       setLoading(true);
       try {
         const { data, error } = await supabase
-          .from('documents')
+          .from('giep_notes')
           .select('*')
           .eq('class_id', activeClass.id)
-          .eq('category', 'geip')
-          .order('created_at', { ascending: false });
+          .order('activity_date', { ascending: false });
 
         if (data && data.length > 0) {
           setActivities(data.map(d => ({
             id: d.id,
-            date: d.created_at ? d.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10),
-            activity: d.title,
-            participants: d.size || '-',
-            evidence: d.file_url ? 'មានឯកសារភ្ជាប់' : 'គ្មានឯកសារ',
+            date: d.activity_date || (d.created_at ? d.created_at.slice(0, 10) : new Date().toISOString().slice(0, 10)),
+            activity: d.activity_name,
+            participants: d.participants || '-',
+            evidence: d.outcome || 'បានរក្សាទុក',
             status: d.status || 'Ready'
           })));
         } else {
@@ -77,35 +77,30 @@ export default function GiepEvidencePage() {
     if (!activeClass || !user) return alert('សូមជ្រើសរើសថ្នាក់ជាមុនសិន');
 
     try {
-      const { data, error } = await supabase.from('documents').insert({
+      const res = await saveGiepNoteAction({
         class_id: activeClass.id,
-        uploader_id: user.id,
-        title: form.name.trim(),
-        type: 'activity_log',
-        file_url: form.outcome.trim() || 'activity',
-        size: form.participants.trim() || 'សិស្សក្នុងថ្នាក់',
-        category: 'geip',
-        status: 'approved'
-      }).select().single();
+        activity_name: form.name.trim(),
+        activity_date: form.date,
+        participants: form.participants.trim() || undefined,
+        outcome: form.outcome.trim() || undefined,
+      });
 
-      if (error) {
-        console.error('Error saving GEIP evidence:', error);
-        alert(`មានបញ្ហាក្នុងការរក្សាទុក (Error): ${error.message}`);
+      if (!res.success || !res.note) {
+        alert(`មានបញ្ហាក្នុងការរក្សាទុក (Error): ${res.error || 'បរាជ័យ'}`);
         return;
       }
 
-      if (data) {
-        setActivities(prev => [{
-          id: data.id,
-          date: form.date,
-          activity: data.title,
-          participants: data.size,
-          evidence: 'បានរក្សាទុក',
-          status: 'Ready'
-        }, ...prev]);
-        setForm({ name: '', date: new Date().toISOString().slice(0, 10), participants: '', outcome: '' });
-        showToast('បានរក្សាទុកភស្តុតាងសកម្មភាព GEIP ដោយជោគជ័យ');
-      }
+      const note = res.note;
+      setActivities(prev => [{
+        id: note.id,
+        date: note.activity_date || form.date,
+        activity: note.activity_name,
+        participants: note.participants || '-',
+        evidence: note.outcome || 'បានរក្សាទុក',
+        status: note.status || 'Ready'
+      }, ...prev]);
+      setForm({ name: '', date: new Date().toISOString().slice(0, 10), participants: '', outcome: '' });
+      showToast('បានរក្សាទុកភស្តុតាងសកម្មភាព GEIP ដោយជោគជ័យ');
     } catch (e: any) {
       console.error(e);
       alert(`មានបញ្ហាក្នុងការរក្សាទុក: ${e?.message || 'Error'}`);

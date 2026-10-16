@@ -37,7 +37,7 @@ export async function GET(req: Request) {
   try {
     let query = adminClient
       .from('classes')
-      .select('*, profiles:teacher_id(id, full_name), students(id, gender, is_active)')
+      .select('*, profiles:teacher_id(id, full_name)')
       .order('name', { ascending: true })
       .limit(500);
 
@@ -53,19 +53,46 @@ export async function GET(req: Request) {
 
     if (error) throw error;
 
-    // Calculate live student enrollment counts per class
+    // Calculate live student enrollment counts per class via student_enrollments
+    const classIds = (classesData || []).map((c: any) => c.id);
+    const enrollmentMap = new Map<string, { total: number; female: number }>();
+
+    if (classIds.length > 0) {
+      let enrollQuery = adminClient
+        .from('student_enrollments')
+        .select('class_id, enrollment_status, students!inner(id, gender, is_active)')
+        .in('class_id', classIds)
+        .eq('enrollment_status', 'active');
+
+      if (academicYearId) {
+        enrollQuery = enrollQuery.eq('academic_year_id', academicYearId);
+      }
+
+      const { data: enrollmentsData, error: enrollError } = await enrollQuery;
+      if (!enrollError && enrollmentsData) {
+        for (const e of enrollmentsData) {
+          const std = e.students as any;
+          if (!std || std.is_active === false) continue;
+          const current = enrollmentMap.get(e.class_id) || { total: 0, female: 0 };
+          current.total++;
+          if (std.gender === 'F' || std.gender === 'ស្រី') {
+            current.female++;
+          }
+          enrollmentMap.set(e.class_id, current);
+        }
+      }
+    }
+
     const classes = (classesData || []).map((c: ClassData) => {
-      const activeStudents = (c.students || []).filter((s: StudentData) => s.is_active !== false);
-      const student_count = activeStudents.length;
-      const female_count = activeStudents.filter((s: StudentData) => s.gender === 'F' || s.gender === 'ស្រី').length;
+      const counts = enrollmentMap.get(c.id) || { total: 0, female: 0 };
       const { students: _, ...rest } = c;
       return {
         ...rest,
         shift: rest.shift || (['10', '11', '12'].includes(String(rest.grade)) ? 'ព្រឹក' : 'រសៀល'),
         room_number: rest.room_number || '',
         track: rest.track || 'ទូទៅ',
-        student_count,
-        female_count
+        student_count: counts.total,
+        female_count: counts.female
       };
     });
 

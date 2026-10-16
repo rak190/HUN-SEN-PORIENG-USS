@@ -29,7 +29,8 @@ export async function POST(req: Request) {
   try {
     const { data, error } = await adminClient.rpc('migrate_academic_year', {
       p_source_year_id: sourceYearId,
-      p_target_year_id: targetYearId
+      p_target_year_id: targetYearId,
+      p_caller_id: user.id
     });
 
     if (error) throw error;

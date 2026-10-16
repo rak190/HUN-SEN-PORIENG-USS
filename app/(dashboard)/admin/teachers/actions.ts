@@ -60,14 +60,72 @@ export async function deleteStaffPermanentlyAction(userId: string) {
   const supabase = createAdminClient();
   if (!supabase) throw new Error('Database unavailable');
 
-  // 1. Relational Pre-Check
-  const { count: classesCount } = await supabase.from('classes').select('*', { count: 'exact', head: true }).eq('teacher_id', userId);
-  const { count: attendanceCount } = await supabase.from('attendance_records').select('*', { count: 'exact', head: true }).eq('created_by', userId);
-  const { count: gradesCount } = await supabase.from('grades').select('*', { count: 'exact', head: true }).eq('created_by', userId);
+  // 1. Guard against deleting the last active administrator
+  const { data: targetProfile } = await supabase
+    .from('profiles')
+    .select('role, school_id')
+    .eq('id', userId)
+    .maybeSingle();
 
-  if ((classesCount && classesCount > 0) || 
-      (attendanceCount && attendanceCount > 0) || 
-      (gradesCount && gradesCount > 0)) {
+  if (targetProfile?.role === 'admin') {
+    let adminCountQuery = supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'admin')
+      .eq('is_active', true);
+
+    if (targetProfile.school_id) {
+      adminCountQuery = adminCountQuery.eq('school_id', targetProfile.school_id);
+    }
+    const { count: adminCount } = await adminCountQuery;
+    if ((adminCount || 0) <= 1) {
+      throw new Error('មិនអាចលុបអ្នកគ្រប់គ្រងចុងក្រោយបានទេ (Cannot delete the last active administrator).');
+    }
+  }
+
+  // 2. Relational Pre-Checks (Protect historical data integrity)
+  const { count: classesCount } = await supabase
+    .from('classes')
+    .select('*', { count: 'exact', head: true })
+    .eq('teacher_id', userId);
+
+  const { count: attendanceCount } = await supabase
+    .from('attendance_records')
+    .select('*', { count: 'exact', head: true })
+    .eq('recorded_by', userId);
+
+  const { data: teacherClasses } = await supabase
+    .from('classes')
+    .select('id')
+    .eq('teacher_id', userId);
+
+  const teacherClassIds = (teacherClasses || []).map(c => c.id);
+  let gradesCount = 0;
+  if (teacherClassIds.length > 0) {
+    const { count } = await supabase
+      .from('grades')
+      .select('*', { count: 'exact', head: true })
+      .in('class_id', teacherClassIds);
+    gradesCount = count || 0;
+  }
+
+  const { count: snapshotsCount } = await supabase
+    .from('grade_snapshots')
+    .select('*', { count: 'exact', head: true })
+    .eq('created_by', userId);
+
+  const { count: activityCount } = await supabase
+    .from('activity_logs')
+    .select('*', { count: 'exact', head: true })
+    .eq('created_by', userId);
+
+  if (
+    (classesCount && classesCount > 0) || 
+    (attendanceCount && attendanceCount > 0) || 
+    gradesCount > 0 ||
+    (snapshotsCount && snapshotsCount > 0) ||
+    (activityCount && activityCount > 0)
+  ) {
     throw new Error("មិនអាចលុបគណនីនេះជាអចិន្ត្រៃយ៍បានទេ ព្រោះលោកគ្រូ/អ្នកគ្រូមានប្រវត្តិបង្រៀន និងបញ្ចូលទិន្នន័យក្នុងប្រព័ន្ធរួចហើយ។ សូមប្រើមុខងារ 'បិទដំណើរការ (Deactivate)' ជំនួសវិញ ដើម្បីការពារទិន្នន័យប្រវត្តិសាស្ត្រ។");
   }
 

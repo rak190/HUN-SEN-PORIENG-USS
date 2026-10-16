@@ -50,13 +50,21 @@ export function ExamRoomPrintModal({ isOpen, onClose, selectedPeriod }: ExamRoom
 
       if (classErr) throw classErr;
 
-      // 2. Fetch all active students
-      const { data: dbStudents, error: stdErr } = await supabase
-        .from('students')
-        .select('id, student_id_number, desk_number, room_number, full_name, gender, dob, class_id, classes(id, name, grade, track)')
-        .eq('is_active', true);
+      // 2. Fetch all active students via active_class_rosters
+      const { data: rosterData, error: stdErr } = await supabase
+        .from('active_class_rosters')
+        .select('id, student_id_number, desk_number, room_number, full_name, gender, dob, enrollment_class_id, class_name, academic_year_id');
 
       if (stdErr) throw stdErr;
+
+      const dbStudents = (rosterData || []).map((s: any) => {
+        const cls = dbClasses?.find(c => c.id === s.enrollment_class_id);
+        return {
+          ...s,
+          class_id: s.enrollment_class_id,
+          classes: cls ? { id: cls.id, name: cls.name, grade: cls.grade, track: cls.track } : { id: s.enrollment_class_id, name: s.class_name, grade: '', track: '' }
+        };
+      });
 
       if (!dbStudents || dbStudents.length === 0) {
         throw new Error('មិនទាន់មានទិន្នន័យសិស្សក្នុងប្រព័ន្ធនៅឡើយទេ។');

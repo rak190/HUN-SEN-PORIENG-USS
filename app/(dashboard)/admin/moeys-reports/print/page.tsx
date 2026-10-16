@@ -28,7 +28,7 @@ export default function MoeysPrintLayout() {
       const [{ data: schoolData }, { data: yearData }, { data: students, error }] = await Promise.all([
         supabase.from('system_settings').select('value').eq('key', 'school_info').maybeSingle(),
         supabase.from('academic_years').select('name').eq('is_active', true).maybeSingle(),
-        supabase.from('students').select('gender, status, poor_id_status, is_orphan, classes(name)')
+        supabase.from('active_class_rosters').select('gender, status, poor_id_status, is_orphan, class_name')
       ]);
 
       if (schoolData?.value?.schoolName) {
@@ -45,7 +45,7 @@ export default function MoeysPrintLayout() {
 
       const classStats: Record<string, any> = {};
       (students || []).forEach((s: any) => {
-        const className = s.classes?.name || 'គ្មានថ្នាក់';
+        const className = s.class_name || 'គ្មានថ្នាក់';
         if (!classStats[className]) {
           classStats[className] = { className, total: 0, female: 0, new: 0, repeater: 0, poor: 0, orphan: 0 };
         }

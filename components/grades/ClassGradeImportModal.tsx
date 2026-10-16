@@ -22,11 +22,12 @@ interface ClassGradeImportModalProps {
   classId: string;
   className: string;
   period: string;
+  academicYearId?: string;
   students: Student[];
   flatColumns: { id: string; label: string; maxScore: number; isMain: boolean }[];
 }
 
-export function ClassGradeImportModal({ isOpen, onClose, onImportComplete, classId, className, period, students, flatColumns }: ClassGradeImportModalProps) {
+export function ClassGradeImportModal({ isOpen, onClose, onImportComplete, classId, className, period, academicYearId, students, flatColumns }: ClassGradeImportModalProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [parsedData, setParsedData] = useState<ParsedRow[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -203,13 +204,14 @@ export function ClassGradeImportModal({ isOpen, onClose, onImportComplete, class
         student_id: row.matchedStudentId,
         class_id: classId,
         period: period,
+        academic_year_id: academicYearId || null,
         scores: row.scores,
       }));
 
-      // Upsert grades (using the unique index on student_id and period)
+      // Upsert grades (using the unique index on student_id, period, academic_year_id)
       const { error } = await supabase
         .from('grades')
-        .upsert(inserts, { onConflict: 'student_id, period' });
+        .upsert(inserts, { onConflict: 'student_id,period,academic_year_id' });
 
       if (error) throw error;
 

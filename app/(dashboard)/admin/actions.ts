@@ -18,7 +18,14 @@ export async function fetchAdminDashboardData() {
   const yearId = activeYear?.id;
 
   // 2. Fetch basic counts and rates
-  const { count: totalStudents } = await supabase.from('active_students').select('*', { count: 'exact', head: true });
+  let totalStudentsQuery = supabase
+    .from('student_enrollments')
+    .select('id', { count: 'exact', head: true })
+    .eq('enrollment_status', 'active');
+  if (yearId) {
+    totalStudentsQuery = totalStudentsQuery.eq('academic_year_id', yearId);
+  }
+  const { count: totalStudents } = await totalStudentsQuery;
   
   const { data: monthAttendance } = await supabase.from('attendance_records').select('status').gte('date', startOfMonth.split('T')[0]);
   let attendanceRate = '0%';
@@ -27,12 +34,18 @@ export async function fetchAdminDashboardData() {
     attendanceRate = Math.round((present / monthAttendance.length) * 100) + '%';
   }
 
-  // Removed old scoresUploaded calculation in favor of fractional one below
+  // Completeness scoped to active roster in current academic year
+  let compQuery = supabase
+    .from('active_class_rosters')
+    .select('gender, dob, date_of_birth, poverty_status, id_poor');
+  if (yearId) {
+    compQuery = compQuery.eq('academic_year_id', yearId);
+  }
+  const { data: allStudents } = await compQuery;
 
-  const { data: allStudents } = await supabase.from('active_students').select('gender, dob, poor_id_status');
   let dataCompleteness = '0%';
   if (allStudents && allStudents.length > 0) {
-    const complete = allStudents.filter(s => s.gender && s.dob).length;
+    const complete = allStudents.filter(s => s.gender && (s.dob || s.date_of_birth)).length;
     dataCompleteness = Math.round((complete / allStudents.length) * 100) + '%';
   }
 
@@ -46,12 +59,16 @@ export async function fetchAdminDashboardData() {
   const principalsCount = profiles?.filter(p => p.role === 'principal').length || 0;
   const monitorsCount = profiles?.filter(p => p.role === 'monitor').length || 0;
 
-  // 4. At Risk Students
-  const { data: riskStudentsRaw } = await supabase
-    .from('active_students')
-    .select('id, full_name, class_id, poor_id_status, is_orphan, dropout_risk, classes(name)')
-    .or('dropout_risk.eq.true,poor_id_status.neq.none,is_orphan.eq.true')
+  // 4. At Risk Students (Scoped to active_class_rosters)
+  let riskQuery = supabase
+    .from('active_class_rosters')
+    .select('id, full_name, class_name, poverty_status, id_poor, is_orphan, dropout_risk')
+    .or('dropout_risk.eq.true,poverty_status.neq.none,id_poor.neq.none,is_orphan.eq.true')
     .limit(15);
+  if (yearId) {
+    riskQuery = riskQuery.eq('academic_year_id', yearId);
+  }
+  const { data: riskStudentsRaw } = await riskQuery;
 
   const atRiskStudents = [];
   if (riskStudentsRaw) {
@@ -63,12 +80,13 @@ export async function fetchAdminDashboardData() {
         reasons.push('ប្រឈមការបោះបង់ការសិក្សា');
         severity = 'high';
       }
-      if (s.poor_id_status && s.poor_id_status !== 'none') reasons.push('សិស្សក្រីក្រ (' + s.poor_id_status + ')');
+      const poorStatus = s.poverty_status || s.id_poor;
+      if (poorStatus && poorStatus !== 'none') reasons.push('សិស្សក្រីក្រ (' + poorStatus + ')');
       if (s.is_orphan) reasons.push('សិស្សកំព្រា');
       
       atRiskStudents.push({
         id: s.id,
-        name: `${s.full_name} (${(s.classes as any)?.name || 'គ្មានថ្នាក់'})`,
+        name: `${s.full_name} (${s.class_name || 'គ្មានថ្នាក់'})`,
         reasons: reasons.length > 0 ? reasons : ['ស្ថិតក្នុងការតាមដាន'],
         severity
       });

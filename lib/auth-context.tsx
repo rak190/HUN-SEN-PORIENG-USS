@@ -113,22 +113,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function refreshClassesForUser(userId: string, userRole?: string, userSchoolId?: string) {
     try {
-      // 1. Try to find classes assigned to this teacher
-      const { data: teacherClasses } = await supabase
+      // 1. Try to find classes assigned to this teacher or monitor
+      const { data: assignedClasses } = await supabase
         .from('classes')
         .select('*')
-        .eq('teacher_id', userId)
+        .or(`teacher_id.eq.${userId},monitor_id.eq.${userId}`)
         .order('name');
 
-      if (teacherClasses && teacherClasses.length > 0) {
-        setClasses(teacherClasses as Classroom[]);
-        setActiveClass(prev => (prev && teacherClasses.some(c => c.id === prev.id)) ? prev : teacherClasses[0] as Classroom);
+      if (assignedClasses && assignedClasses.length > 0) {
+        setClasses(assignedClasses as Classroom[]);
+        setActiveClass(prev => (prev && assignedClasses.some(c => c.id === prev.id)) ? prev : assignedClasses[0] as Classroom);
         return;
       }
 
       // If the user is explicitly a teacher, do not fallback to fetching all classes
       // This prevents unassigned teachers from seeing other teachers' classes
       if (userRole === 'teacher') {
+        setClasses([]);
+        setActiveClass(null);
+        return;
+      }
+
+      // If the user is explicitly a monitor, do not fallback to fetching all classes
+      // This prevents unassigned monitors from seeing other classes
+      if (userRole === 'monitor') {
         setClasses([]);
         setActiveClass(null);
         return;

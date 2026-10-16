@@ -157,6 +157,7 @@ test('Health Records Security & Server-Side Authorization Suite', async (t) => {
     const pageContent = fs.readFileSync(pagePath, 'utf8');
 
     assert.ok(
+      pageContent.includes("studentsQuery.in('enrollment_class_id', ['00000000-0000-0000-0000-000000000000'])") ||
       pageContent.includes("studentsQuery.in('class_id', ['00000000-0000-0000-0000-000000000000'])"),
       'HealthPage must filter unassigned teachers to an empty set to prevent student data leaks'
     );
