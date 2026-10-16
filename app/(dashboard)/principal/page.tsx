@@ -34,10 +34,14 @@ export default async function PrincipalDashboardPage() {
           yearlyAbsentRate: '0.0',
         }}
         trendData={[]}
+        demographics={{ girls: 0, boys: 0 }}
+        tableData={[]}
+        overallGpa="0.00"
         atRiskStudents={[]}
         activities={[]}
         unsubmittedAttendanceClasses={[]}
         pendingFollowUpsCount={0}
+        schoolName="មិនស្គាល់សាលា"
       />
     );
   }
@@ -67,10 +71,14 @@ export default async function PrincipalDashboardPage() {
           yearlyAbsentRate: '0.0',
         }}
         trendData={[]}
+        demographics={{ girls: 0, boys: 0 }}
+        tableData={[]}
+        overallGpa="0.00"
         atRiskStudents={[]}
         activities={[]}
         unsubmittedAttendanceClasses={[]}
         pendingFollowUpsCount={0}
+        schoolName={profile?.school_code || 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង'}
       />
     );
   }
@@ -155,10 +163,17 @@ export default async function PrincipalDashboardPage() {
         yearlyAbsentRate,
       }}
       trendData={dashboardData?.trendData || []}
+      demographics={{
+        girls: dashboardData?.girlsCount || 0,
+        boys: dashboardData?.boysCount || 0,
+      }}
+      tableData={dashboardData?.tableData || []}
+      overallGpa={dashboardData?.overallGpa || '0.00'}
       atRiskStudents={dashboardData?.atRiskList || []}
       activities={(activities as any) || []}
       unsubmittedAttendanceClasses={unsubmittedAttendanceClasses}
       pendingFollowUpsCount={pendingFollowUpsCount}
+      schoolName={profile?.school_code === 'Porieng-2026' ? 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង' : profile?.school_code || 'វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង'}
     />
   );
 }

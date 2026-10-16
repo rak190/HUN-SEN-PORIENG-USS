@@ -367,4 +367,81 @@ test('Principal Role Streamlining & School Classes Navigation Test Suite', async
       'DashboardClient must accurately render dynamic label and yearly absent rate subtitle'
     );
   });
+
+  // --------------------------------------------------------------------------
+  // Scenario 9: Principal Dashboard UI & Alignment Harmonization
+  // --------------------------------------------------------------------------
+  await t.test('Scenario 9: Principal Dashboard UI harmonizes with /admin and /homeroom standard layout & palette', () => {
+    const mainPagePath = path.join(rootDir, 'app', '(dashboard)', 'principal', 'page.tsx');
+    assert.ok(fs.existsSync(mainPagePath), 'page.tsx must exist');
+    assert.ok(fs.existsSync(dashboardClientPath), 'DashboardClient.tsx must exist');
+
+    const pageContent = fs.readFileSync(mainPagePath, 'utf8');
+    const clientContent = fs.readFileSync(dashboardClientPath, 'utf8');
+
+    // 1. Page passes demographics and tableData
+    assert.ok(
+      pageContent.includes('demographics={{') &&
+      pageContent.includes('tableData={dashboardData?.tableData || []}'),
+      'page.tsx must hydrate demographics and tableData to PrincipalDashboardClient'
+    );
+
+    // 2. Standard Top 4 Stat Cards Palette sequence
+    // Card 1: Students in #FFCF59 (Signature Gold)
+    assert.ok(
+      clientContent.includes('bg-[#FFCF59]') &&
+      clientContent.includes('href="/principal/students"') &&
+      clientContent.includes('stats.totalStudents'),
+      'Card 1 must be Total Students styled in signature KruAI gold #FFCF59'
+    );
+
+    // Card 2: Classes in white
+    assert.ok(
+      clientContent.includes('href="/principal/classes"') &&
+      clientContent.includes('stats.activeClasses'),
+      'Card 2 must be Active Classes styled in clean white'
+    );
+
+    // Card 3: Absence rate in emerald tint
+    assert.ok(
+      clientContent.includes('bg-emerald-50') &&
+      clientContent.includes('stats.absentRate'),
+      'Card 3 must be Absence Rate styled in soft emerald'
+    );
+
+    // Card 4: Teachers in #155EEF (Signature Royal Blue)
+    assert.ok(
+      clientContent.includes('bg-[#155EEF]') &&
+      clientContent.includes('href="/principal/staff"') &&
+      clientContent.includes('stats.teachers'),
+      'Card 4 must be Teachers & Staff styled in signature KruAI royal blue #155EEF'
+    );
+
+    // 3. Demographic Donut (4-cols) + Monthly Trends (8-cols)
+    assert.ok(
+      clientContent.includes('ស្ថិតិសិស្សតាមភេទ') &&
+      clientContent.includes('girlsPct') &&
+      clientContent.includes('boysPct'),
+      'DashboardClient must render school gender demographic donut chart'
+    );
+    assert.ok(
+      clientContent.includes('trendRange') &&
+      clientContent.includes('8 ខែចុងក្រោយ') &&
+      clientContent.includes('visibleTrendData'),
+      'DashboardClient must render monthly trend line chart with range dropdown filter'
+    );
+
+    // 4. Grade-Level Executive Overview Table (7-cols) + Management Actions (5-cols)
+    assert.ok(
+      clientContent.includes('តារាងសង្ខេបតាមកម្រិតថ្នាក់') &&
+      clientContent.includes('GPA មធ្យម:') &&
+      clientContent.includes('tableData.map'),
+      'DashboardClient must render grade-level leadership summary table'
+    );
+    assert.ok(
+      clientContent.includes('មុខងារគ្រប់គ្រងសាលា') &&
+      clientContent.includes('bg-[#F4F7FE]'),
+      'DashboardClient must render school management quick actions in styled container'
+    );
+  });
 });
