@@ -321,19 +321,25 @@ export async function batchRegisterBasicStudents(studentsData: any[], academicYe
       if (yearData) targetYearId = yearData.id;
     }
 
-    const cleanData = studentsData.map(s => ({
-      student_id_number: s.student_id_number || s.student_id,
-      full_name: s.full_name || s.name_khmer,
-      gender: s.gender,
-      date_of_birth: s.date_of_birth,
-      class_id: s.class_id || null,
-      room_number: s.room_number || null,
-      desk_number: s.desk_number || null
-    }));
+    const cleanData = studentsData.map(s => {
+      const rawDob = s.dob || s.date_of_birth || null;
+      const sanitizedDob = rawDob && typeof rawDob === 'string' && rawDob.trim() !== '' ? rawDob.trim() : null;
+      return {
+        student_id_number: String(s.student_id_number || s.student_id || '').trim(),
+        full_name: String(s.full_name || s.name_khmer || '').trim(),
+        gender: s.gender,
+        dob: sanitizedDob,
+        date_of_birth: sanitizedDob,
+        class_id: s.class_id || null,
+        room_number: s.room_number || null,
+        desk_number: s.desk_number || null
+      };
+    });
 
     const { data, error } = await supabase.rpc('batch_register_students_atomic', {
       p_students: cleanData,
-      p_academic_year_id: targetYearId
+      p_academic_year_id: targetYearId,
+      p_caller_id: user.id
     });
 
     if (error) {
