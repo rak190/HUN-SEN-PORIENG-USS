@@ -8,7 +8,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
-import { computeSummaryGrades } from '@/lib/domain/grading';
+import { computeSummaryGrades, calculateScale50Grade, assignGradeRanks } from '@/lib/domain/grading';
 import {
   Printer,
   ChevronLeft,
@@ -116,24 +116,13 @@ export default function ReportCardsPage() {
       const totalScore = activeSchema.subjects.reduce((sum, sub) => sum + (scores[sub.id] || 0), 0);
       const totalCoefficient = maxTotalScore / 50;
       const average = totalScore / totalCoefficient;
-      let grade = 'F';
-      if (average >= 42.5) grade = 'A';
-      else if (average >= 40.0) grade = 'B';
-      else if (average >= 35.0) grade = 'C';
-      else if (average >= 30.0) grade = 'D';
-      else if (average >= 25.0) grade = 'E';
+      const grade = calculateScale50Grade(average).letter;
 
       return { ...std, totalScore, percentage: average, grade };
-    }).sort((a, b) => b.totalScore - a.totalScore);
-    
-    // Assign 1, 1, 3 ranks
-    let currentRank = 1;
-    return sorted.map((std, idx) => {
-      if (idx > 0 && std.totalScore < sorted[idx - 1].totalScore) {
-        currentRank = idx + 1;
-      }
-      return { ...std, rank: currentRank };
     });
+    
+    // Assign 1, 1, 3 ranks using centralized domain function
+    return assignGradeRanks(sorted, (s: any) => s.totalScore);
   }, [students, matrixData, activeSchema, maxTotalScore]);
 
   // Calculate subject ranks (1, 1, 3 ranking)

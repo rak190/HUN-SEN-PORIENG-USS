@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
 import { CURRICULUM_SCHEMAS, SubjectSchema, getCurriculumSchemaForClass } from '@/lib/curriculum';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
-import { computeSummaryGrades } from '@/lib/domain/grading';
+import { computeSummaryGrades, calculateScale50Grade, assignGradeRanks } from '@/lib/domain/grading';
 import {
   ClipboardList,
   Search,
@@ -358,18 +358,13 @@ export default function GradesPage() {
         average = totalScore / totalCoefficient;
       }
 
-      let grade = 'F';
-      if (average >= 42.5) grade = 'A';
-      else if (average >= 40.0) grade = 'B';
-      else if (average >= 35.0) grade = 'C';
-      else if (average >= 30.0) grade = 'D';
-      else if (average >= 25.0) grade = 'E';
+      const grade = calculateScale50Grade(average).letter;
 
       return { ...std, totalScore, grade, percentage: average, breakdown };
-    }).sort((a, b) => b.totalScore - a.totalScore);
+    });
 
-    // Attach fixed rank based on total score
-    const withRank = computedList.map((std, idx) => ({ ...std, rank: idx + 1 }));
+    // Attach fixed rank based on standard MoEYS tie handling (1, 1, 3)
+    const withRank = assignGradeRanks(computedList, (s) => s.totalScore);
 
     if (sortState.field && sortState.direction) {
       const { field, direction } = sortState;

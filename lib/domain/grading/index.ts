@@ -231,14 +231,62 @@ export function calculateStudentAnnualGrade(
 }
 
 /**
- * Assigns ranks to a list of students with standard MoEYS tie handling (1, 1, 3)
+ * Maps Scale 50 Average (0.00 - 50.00) to official MoEYS Letter Grade and Khmer Mention.
+ * (e.g. 45.0/50 -> 90.0% -> 'A', 43.0/50 -> 86.0% -> 'B', 25.0/50 -> 50.0% -> 'E')
  */
-export function assignGradeRanks<T extends { average_score: number }>(records: T[]): (T & { rank: number })[] {
-  const sorted = [...records].sort((a, b) => b.average_score - a.average_score);
+export function calculateScale50Grade(
+  average50: number,
+  dynamicScales?: ExamGradingScale[]
+): { letter: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | string; mentionKh: string } {
+  const percentage = (Number(average50 || 0) / 50.0) * 100.0;
+  return calculateGradeLetter(percentage, dynamicScales);
+}
+
+/**
+ * Computes a single student's rank using standard MoEYS competition ranking (1, 1, 3).
+ * Rank = 1 + number of students with strictly higher score.
+ */
+export function computeStudentRank(
+  targetScore: number,
+  allScores: (number | null | undefined)[]
+): number {
+  const validTarget = Number(targetScore) || 0;
+  let strictlyHigherCount = 0;
+  for (const s of allScores) {
+    if (s !== undefined && s !== null && Number(s) > validTarget) {
+      strictlyHigherCount++;
+    }
+  }
+  return 1 + strictlyHigherCount;
+}
+
+/**
+ * Assigns ranks to a list of students with standard MoEYS tie handling (1, 1, 3).
+ * Supports custom score accessor or defaults to item.totalScore / item.total_score / item.average_score.
+ */
+export function assignGradeRanks<T>(
+  records: T[],
+  scoreAccessor?: ((item: T) => number) | keyof T
+): (T & { rank: number })[] {
+  const getScore = (item: any): number => {
+    if (typeof scoreAccessor === 'function') {
+      return Number(scoreAccessor(item)) || 0;
+    }
+    if (typeof scoreAccessor === 'string') {
+      return Number(item[scoreAccessor]) || 0;
+    }
+    if (item.totalScore !== undefined) return Number(item.totalScore) || 0;
+    if (item.total_score !== undefined) return Number(item.total_score) || 0;
+    if (item.average_score !== undefined) return Number(item.average_score) || 0;
+    if (item.averageScore50 !== undefined) return Number(item.averageScore50) || 0;
+    return 0;
+  };
+
+  const sorted = [...records].sort((a, b) => getScore(b) - getScore(a));
   let currentRank = 1;
 
   return sorted.map((item, index) => {
-    if (index > 0 && item.average_score < sorted[index - 1].average_score) {
+    if (index > 0 && getScore(item) < getScore(sorted[index - 1])) {
       currentRank = index + 1;
     }
     return {

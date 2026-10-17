@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Award, CheckCircle2, AlertCircle, X, Printer, UserCircle, FileText } from 'lucide-react';
 import { Student, Profile, AcademicYear } from '@/types';
 import { CurriculumSchema, SubjectSchema } from '@/lib/curriculum';
-import { computeSummaryGrades } from '@/lib/domain/grading';
+import { computeSummaryGrades, calculateScale50Grade, assignGradeRanks } from '@/lib/domain/grading';
 import Modal from '@/components/ui/Modal';
 import { createClient } from '@/lib/supabase/client';
 
@@ -127,13 +127,11 @@ export function HonorRollExportModal({
       const average = Number((total / totalCoefficient).toFixed(2));
       
       let grade = 'F';
-      let gradeKh = 'មធ្យម';
+      let gradeKh = 'ធ្លាក់';
       if (!isDropoutOrInactive) {
-        if (average >= 42.5) { grade = 'A'; gradeKh = 'ល្អប្រសើរ'; }
-        else if (average >= 40.0) { grade = 'B'; gradeKh = 'ល្អណាស់'; }
-        else if (average >= 35.0) { grade = 'C'; gradeKh = 'ល្អ'; }
-        else if (average >= 30.0) { grade = 'D'; gradeKh = 'ល្អបង្គួរ'; }
-        else if (average >= 25.0) { grade = 'E'; gradeKh = 'មធ្យម'; }
+        const gradeResult = calculateScale50Grade(average);
+        grade = gradeResult.letter;
+        gradeKh = gradeResult.mentionKh.split(' ')[0] || gradeResult.mentionKh;
       }
 
       return {
@@ -146,25 +144,8 @@ export function HonorRollExportModal({
       };
     }).filter(s => !s.isDropoutOrInactive);
 
-    // Sort by total score descending
-    computed.sort((a, b) => b.totalScore - a.totalScore);
-
-    // Assign Rank (handling ties)
-    let currentRank = 1;
-    let previousScore = -1;
-    let skipCount = 0;
-
-    const ranked = computed.map((s, idx) => {
-      if (s.totalScore === previousScore) {
-        skipCount++;
-      } else {
-        currentRank += skipCount;
-        if (idx === 0) currentRank = 1; // First element
-        skipCount = 1;
-        previousScore = s.totalScore;
-      }
-      return { ...s, rank: currentRank };
-    });
+    // Assign Rank (handling ties with standard MoEYS 1, 1, 3 ranking)
+    const ranked = assignGradeRanks(computed, (s) => s.totalScore);
 
     // Apply threshold filter
     if (threshold === 'top5') return ranked.filter(s => s.rank <= 5);

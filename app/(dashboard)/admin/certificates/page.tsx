@@ -9,8 +9,10 @@ import jsPDF from 'jspdf';
 import CertificateTemplate, { CertificateData } from './CertificateTemplate';
 import TemplateEditor from './TemplateEditor';
 import { CertificateTemplateConfig, DEFAULT_TEMPLATE } from './types';
+import { assignGradeRanks } from '@/lib/domain/grading';
 
 interface RankedStudent {
+  rank?: number;
   total_score: number;
   average?: number | null;
   period: string;
@@ -153,7 +155,8 @@ export default function CertificatesPage() {
           .limit(quota);
 
         if (data && data.length > 0) {
-          setRankedStudents(data as any as RankedStudent[]);
+          const ranked = assignGradeRanks(data as any as RankedStudent[], s => s.average ?? s.total_score ?? 0);
+          setRankedStudents(ranked);
         } else {
           setRankedStudents([]);
         }
@@ -269,7 +272,7 @@ export default function CertificatesPage() {
               gender: rank.student.gender === 'M' || rank.student.gender === 'ប្រុស' ? 'ប្រុស' : 'ស្រី',
               dob: rank.student.dob || 'មិនបញ្ជាក់',
               grade_class: rank.class.name,
-              grade_rank: idx + 1,
+              grade_rank: rank.rank ?? (idx + 1),
               grade_average: rank.average ?? rank.total_score,
               total_students: rankedStudents.length,
               academic_year: academicYearName,
@@ -442,14 +445,12 @@ export default function CertificatesPage() {
                       </tr>
                     )}
                     {rankedStudents.map((rank, idx) => {
-                      const isTie = idx > 0 && 
-                        rank.average === rankedStudents[idx - 1].average && 
-                        rank.total_score === rankedStudents[idx - 1].total_score;
+                      const isTie = idx > 0 && rank.rank === rankedStudents[idx - 1].rank;
                       return (
                         <tr key={idx} className="hover:bg-slate-50 transition-colors">
                           <td className="px-6 py-3 font-black text-xs">
                             <span className="inline-flex items-center gap-1.5">
-                              #{idx + 1}
+                              #{rank.rank ?? (idx + 1)}
                               {isTie && (
                                 <span className="text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded font-bold">
                                   ស្មើ

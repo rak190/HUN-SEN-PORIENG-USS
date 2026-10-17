@@ -2,6 +2,7 @@ import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { Student } from '@/types';
 import { CurriculumSchema, SubjectSchema } from '@/lib/curriculum';
+import { calculateScale50Grade } from '@/lib/domain/grading';
 
 export interface GeipExportParams {
   schoolName?: string;
@@ -126,11 +127,7 @@ export async function exportGeipAssessmentToExcel({
     
     let grade = 'F';
     if (!isDropoutOrInactive) {
-      if (average >= 42.5) grade = 'A';
-      else if (average >= 40.0) grade = 'B';
-      else if (average >= 35.0) grade = 'C';
-      else if (average >= 30.0) grade = 'D';
-      else if (average >= 25.0) grade = 'E';
+      grade = calculateScale50Grade(average).letter;
     }
 
     return {

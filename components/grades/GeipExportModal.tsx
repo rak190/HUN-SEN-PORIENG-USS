@@ -5,6 +5,7 @@ import { X, Download, Printer, FileSpreadsheet, FileText, CheckCircle2, AlertCir
 import { Student } from '@/types';
 import { CurriculumSchema, SubjectSchema } from '@/lib/curriculum';
 import { exportGeipAssessmentToExcel } from '@/lib/geip-export';
+import { calculateScale50Grade } from '@/lib/domain/grading';
 import Modal from '@/components/ui/Modal';
 
 interface GeipExportModalProps {
@@ -59,11 +60,7 @@ export function GeipExportModal({
       
       let grade = 'F';
       if (!isDropoutOrInactive) {
-        if (average >= 42.5) grade = 'A';
-        else if (average >= 40.0) grade = 'B';
-        else if (average >= 35.0) grade = 'C';
-        else if (average >= 30.0) grade = 'D';
-        else if (average >= 25.0) grade = 'E';
+        grade = calculateScale50Grade(average).letter;
       }
 
       return {

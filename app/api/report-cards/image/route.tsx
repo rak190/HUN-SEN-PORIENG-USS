@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
 import { getCurriculumSchemaForClass, fetchClassExamStandards } from '@/lib/curriculum';
-import { calculateStudentMonthlyGrade } from '@/lib/domain/grading';
+import { calculateStudentMonthlyGrade, computeStudentRank } from '@/lib/domain/grading';
 import { resolvePeriodDateRange } from '@/lib/domain/periods';
 
 export const runtime = 'nodejs';
@@ -129,11 +129,14 @@ export async function GET(req: NextRequest) {
 
       const { data: classGrades } = await rankQuery;
       if (classGrades && classGrades.length > 0) {
-        const sorted = [...classGrades].sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
-        classTotalCount = sorted.length;
-        const idx = sorted.findIndex(s => s.student_id === studentId);
-        if (idx !== -1) {
-          rankStr = `${idx + 1} / ${classTotalCount}`;
+        classTotalCount = classGrades.length;
+        const studentScore = grade?.total_score;
+        if (studentScore !== undefined && studentScore !== null) {
+          const rank = computeStudentRank(
+            studentScore,
+            classGrades.map(s => s.total_score || 0)
+          );
+          rankStr = `${rank} / ${classTotalCount}`;
         }
       }
     }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getCurriculumSchemaForClass, fetchClassExamStandards } from '@/lib/curriculum';
-import { calculateStudentMonthlyGrade } from '@/lib/domain/grading';
+import { calculateStudentMonthlyGrade, assignGradeRanks } from '@/lib/domain/grading';
 import { resolvePeriodDateRange } from '@/lib/domain/periods';
 
 const TELEGRAM_BOT_TOKEN = process.env.PARENT_TELEGRAM_BOT_TOKEN || '';
@@ -158,12 +158,13 @@ export async function POST(req: NextRequest) {
         const { data: masterScores, error: scoreError } = await scoreQuery;
         if (scoreError) throw new Error('Failed to fetch scores');
 
-        const sortedScores = (masterScores || []).sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
-        const rankedScores = sortedScores.map((s, index) => ({
-          ...s,
-          rank: index + 1,
-          totalCount: sortedScores.length
-        }));
+        const rankedScores = assignGradeRanks(
+          (masterScores || []).map(s => ({
+            ...s,
+            totalCount: (masterScores || []).length
+          })),
+          s => s.total_score || 0
+        );
 
         // 5. Query attendance using authoritative date range
         const range = resolvePeriodDateRange(month, academicYear);

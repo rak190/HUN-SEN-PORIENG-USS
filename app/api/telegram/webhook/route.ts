@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getCurriculumSchemaForClass, fetchClassExamStandards } from '@/lib/curriculum';
-import { calculateStudentMonthlyGrade } from '@/lib/domain/grading';
+import { calculateStudentMonthlyGrade, computeStudentRank } from '@/lib/domain/grading';
 import { resolvePeriodDateRange } from '@/lib/domain/periods';
 
 const TELEGRAM_BOT_TOKEN = process.env.PARENT_TELEGRAM_BOT_TOKEN || '';
@@ -411,10 +411,13 @@ async function handleScoreCheck(chatId: number) {
 
     const { data: classGrades } = await rankQuery;
     if (classGrades && classGrades.length > 0) {
-      const sorted = [...classGrades].sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
-      const idx = sorted.findIndex(s => s.student_id === sub.student_id);
-      if (idx !== -1) {
-        rankStr = `${idx + 1}/${sorted.length}`;
+      const studentScore = g.total_score;
+      if (studentScore !== undefined && studentScore !== null) {
+        const rank = computeStudentRank(
+          studentScore,
+          classGrades.map(s => s.total_score || 0)
+        );
+        rankStr = `${rank}/${classGrades.length}`;
       }
     }
 
