@@ -16,7 +16,7 @@ import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
 import { calculateSummaryScores, publishScoresAction } from './actions';
 import { RotateCcw, History, Printer } from 'lucide-react';
-import { BroadcastStatusModal } from '@/components/admin/BroadcastStatusModal';
+import { ProgressiveBroadcastModal } from '@/components/admin/ProgressiveBroadcastModal';
 
 export default function MasterScoresPage() {
   const [loading, setLoading] = useState(true);
@@ -144,9 +144,8 @@ export default function MasterScoresPage() {
     fetchStats();
   }, [selectedPeriod]);
 
-  const [broadcastSummary, setBroadcastSummary] = useState<any>(null);
-  const [isBroadcastingModalOpen, setIsBroadcastingModalOpen] = useState(false);
-  const [isRetryingBroadcast, setIsRetryingBroadcast] = useState(false);
+  const [isProgressiveBroadcastOpen, setIsProgressiveBroadcastOpen] = useState(false);
+  const [progressiveTargetClasses, setProgressiveTargetClasses] = useState<{ id: string; name: string }[]>([]);
 
   const handlePublishConfirm = async (shouldBroadcast: boolean) => {
     if (!activeYearId) {
@@ -154,77 +153,61 @@ export default function MasterScoresPage() {
        return;
     }
     
+    setIsPublishing(true);
     try {
       const result = await publishScoresAction(selectedPeriod, activeYearId);
       if (!result.success) throw new Error(result.error);
       
-      // trigger broadcast
+      const classesWithDrafts = classesStatus
+        .filter(c => c.status === 'draft')
+        .map(c => ({ id: c.id, name: c.name }));
+
+      // Trigger refetch
+      setSelectedPeriod(selectedPeriod + ' ');
+      setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
+
+      // Trigger progressive broadcast
       if (shouldBroadcast) {
-        const classesWithDrafts = classesStatus.filter(c => c.status === 'draft');
-        const classIds = classesWithDrafts.map(c => c.id);
-        
-        if (classIds.length > 0) {
-          const res = await fetch('/api/admin/broadcast-scores/batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ class_ids: classIds, month: selectedPeriod })
-          });
-          
-          const summary = await res.json();
-          setBroadcastSummary(summary);
-          
-          if (summary.isFullSuccess) {
-            alert('បានបោះពុម្ព និងផ្សាយពិន្ទុជោគជ័យគ្រប់ចំនួន!');
-          } else {
-            setIsBroadcastingModalOpen(true);
-          }
+        if (classesWithDrafts.length > 0) {
+          setProgressiveTargetClasses(classesWithDrafts);
+          setIsProgressiveBroadcastOpen(true);
         } else {
           alert('បានបោះពុម្ពផ្សាយពិន្ទុជោគជ័យ (គ្មានថ្នាក់ត្រូវផ្សាយបន្ត)!');
         }
       } else {
         alert('បានបោះពុម្ពផ្សាយពិន្ទុជោគជ័យ!');
       }
+    } catch (err: any) {
+      alert('កំហុសក្នុងការបោះពុម្ពផ្សាយ៖ ' + err.message);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handlePublishClass = async (classId: string, className: string) => {
+    if (!activeYearId) {
+      alert('រកមិនឃើញឆ្នាំសិក្សាសកម្មទេ');
+      return;
+    }
+    if (!confirm(`តើអ្នកពិតជាចង់ប្រកាសពិន្ទុសម្រាប់ថ្នាក់ "${className}" មែនទេ?`)) return;
+
+    setIsPublishing(true);
+    try {
+      const result = await publishScoresAction(selectedPeriod, activeYearId, classId);
+      if (!result.success) throw new Error(result.error);
 
       // Trigger refetch
       setSelectedPeriod(selectedPeriod + ' ');
       setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
-    } catch (err: any) {
-      alert('កំហុសក្នុងការបោះពុម្ពផ្សាយ៖ ' + err.message);
-    }
-  };
 
-  const handleRetryBroadcast = async (failedClassIds: string[]) => {
-    setIsRetryingBroadcast(true);
-    try {
-      const res = await fetch('/api/admin/broadcast-scores/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ class_ids: failedClassIds, month: selectedPeriod })
-      });
-      
-      const newSummary = await res.json();
-      
-      // Merge new summary with old summary
-      setBroadcastSummary((prev: any) => {
-        if (!prev) return newSummary;
-        
-        // Remove succeeded from failed list, add to succeeded list
-        const stillFailed = newSummary.failed;
-        const newlySucceeded = newSummary.succeeded;
-        
-        return {
-          total: prev.total,
-          succeeded: [...prev.succeeded, ...newlySucceeded],
-          failed: stillFailed,
-          isFullSuccess: stillFailed.length === 0 && prev.total > 0,
-          isPartialSuccess: stillFailed.length > 0
-        };
-      });
-      
+      const wantBroadcast = confirm(`បានប្រកាសពិន្ទុជោគជ័យសម្រាប់ថ្នាក់ "${className}"!\n\nតើអ្នកចង់ផ្សាយដំណឹងពិន្ទុទៅកាន់អាណាព្យាបាលតាម Telegram ឥឡូវនេះដែរឬទេ?`);
+      if (wantBroadcast) {
+        handleBroadcastClass(classId, className);
+      }
     } catch (err: any) {
-      alert('កំហុស៖ ' + err.message);
+      alert('កំហុសក្នុងការប្រកាសពិន្ទុ៖ ' + err.message);
     } finally {
-      setIsRetryingBroadcast(false);
+      setIsPublishing(false);
     }
   };
 
@@ -252,23 +235,9 @@ export default function MasterScoresPage() {
     }
   };
 
-  const handleBroadcastClass = async (classId: string, className: string) => {
-    if (!confirm(`តើអ្នកពិតជាចង់ផ្ញើលទ្ធផលពិន្ទុខែ ${selectedPeriod} ទៅកាន់អាណាព្យាបាលសិស្សថ្នាក់ ${className} តាមរយៈ Telegram មែនទេ?`)) return;
-    
-    try {
-      const res = await fetch('/api/admin/broadcast-scores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ class_id: classId, month: selectedPeriod })
-      });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to broadcast');
-      
-      alert(`ជោគជ័យ! បានផ្ញើសារចំនួន ${data.count} ទៅកាន់អាណាព្យាបាលសិស្សថ្នាក់ ${className}។`);
-    } catch (error: any) {
-      alert('កំហុស៖ ' + error.message);
-    }
+  const handleBroadcastClass = (classId: string, className: string) => {
+    setProgressiveTargetClasses([{ id: classId, name: className }]);
+    setIsProgressiveBroadcastOpen(true);
   };
 
   const filteredClasses = classesStatus.filter(c => {
@@ -354,6 +323,23 @@ export default function MasterScoresPage() {
                 <span className="px-1.5 py-0.5 text-xs bg-blue-800 rounded-full">{draftCount}</span>
               )}
             </button>
+
+            {publishedClassesCount > 0 && !isReadOnly && (
+              <button
+                onClick={() => {
+                  const publishedClasses = classesStatus
+                    .filter(c => c.status === 'published')
+                    .map(c => ({ id: c.id, name: c.name }));
+                  setProgressiveTargetClasses(publishedClasses);
+                  setIsProgressiveBroadcastOpen(true);
+                }}
+                className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold rounded-xl text-sm transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                title="ផ្សាយពិន្ទុទៅ Telegram សម្រាប់ថ្នាក់ដែលបានប្រកាសរួច"
+              >
+                <Send className="w-4 h-4 text-emerald-600" />
+                <span>ផ្សាយ Telegram ({publishedClassesCount})</span>
+              </button>
+            )}
           </div>
         )}
       </header>
@@ -497,6 +483,15 @@ export default function MasterScoresPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 text-right">
+                        {c.status === 'draft' && !isReadOnly && (
+                          <button 
+                            onClick={() => handlePublishClass(c.id, c.name)}
+                            disabled={isPublishing}
+                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm inline-flex cursor-pointer border border-emerald-200"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ប្រកាសពិន្ទុថ្នាក់នេះ
+                          </button>
+                        )}
                         {c.status === 'published' && (
                           <button 
                             onClick={() => handleBroadcastClass(c.id, c.name)}
@@ -726,12 +721,15 @@ export default function MasterScoresPage() {
         onConfirm={handlePublishConfirm}
       />
       
-      <BroadcastStatusModal
-        isOpen={isBroadcastingModalOpen}
-        onClose={() => setIsBroadcastingModalOpen(false)}
-        summary={broadcastSummary}
-        onRetry={handleRetryBroadcast}
-        isRetrying={isRetryingBroadcast}
+      <ProgressiveBroadcastModal
+        isOpen={isProgressiveBroadcastOpen}
+        onClose={() => {
+          setIsProgressiveBroadcastOpen(false);
+          setSelectedPeriod(selectedPeriod + ' ');
+          setTimeout(() => setSelectedPeriod(selectedPeriod.trim()), 100);
+        }}
+        classes={progressiveTargetClasses}
+        period={selectedPeriod}
       />
     </div>
   );

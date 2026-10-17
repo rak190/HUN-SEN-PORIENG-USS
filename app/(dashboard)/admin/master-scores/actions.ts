@@ -409,14 +409,15 @@ export async function generateLiveExamGoogleSheetAction(examMonth: string, acade
 export async function uploadMasterScoresAction(payload: any[], period: string, academicYearId: string) {
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
-    await requirePrincipal();
+    const { user } = await requirePrincipal();
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
     const { data, error } = await supabase.rpc('batch_upload_scores_atomic', {
       p_scores: payload,
       p_period: period,
-      p_academic_year_id: academicYearId
+      p_academic_year_id: academicYearId,
+      p_caller_id: user.id
     });
 
     if (error) throw error;
@@ -436,7 +437,7 @@ export async function uploadMasterScoresAction(payload: any[], period: string, a
   }
 }
 
-export async function publishScoresAction(period: string, academicYearId: string) {
+export async function publishScoresAction(period: string, academicYearId: string, classId?: string) {
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
     const { user } = await requirePrincipal();
@@ -445,39 +446,59 @@ export async function publishScoresAction(period: string, academicYearId: string
 
     if (!supabase) throw new Error('Database unavailable');
 
-    // 1. Validation: count active enrolled students for the academic year
-    const { count: enrolledCount, error: enrollError } = await supabase
-      .from('student_enrollments')
-      .select('*', { count: 'exact', head: true })
-      .eq('academic_year_id', academicYearId)
-      .eq('enrollment_status', 'active');
-
-    if (enrollError) throw enrollError;
-
-    // 2. Count students with valid draft scores
-    const { count: scoresCount, error: scoreError } = await supabase
+    // 1. Validation: count students with valid draft scores
+    let draftQuery = supabase
       .from('grades')
       .select('*', { count: 'exact', head: true })
       .eq('period', period)
       .eq('academic_year_id', academicYearId)
       .eq('status', 'draft');
 
-    if (scoreError) throw scoreError;
-
-    // 3. Identify discrepancies
-    if ((scoresCount || 0) < (enrolledCount || 0)) {
-      const missing = (enrolledCount || 0) - (scoresCount || 0);
-      return { success: false, error: `ការប្រកាសពិន្ទុត្រូវបានបដិសេធ៖ បាត់ពិន្ទុសិស្សចំនួន ${missing} នាក់។ សូមបញ្ចូលពិន្ទុឱ្យបានគ្រប់សិន។` };
+    if (classId) {
+      draftQuery = draftQuery.eq('class_id', classId);
     }
 
-    // 4. Atomic Database Transaction with Deliberate Caller Contract
-    const { data: rpcResult, error: rpcError } = await supabase.rpc('publish_scores_atomic', {
-      p_period: period,
-      p_academic_year_id: academicYearId,
-      p_caller_id: user.id
-    });
+    const { count: scoresCount, error: scoreError } = await draftQuery;
+    if (scoreError) throw scoreError;
 
-    if (rpcError) throw rpcError;
+    if (!scoresCount || scoresCount === 0) {
+      return { 
+        success: false, 
+        error: classId 
+          ? 'មិនមានពិន្ទុព្រាង (Draft) ក្នុងថ្នាក់នេះដើម្បីប្រកាសទេ។' 
+          : 'មិនមានពិន្ទុព្រាង (Draft) ក្នុងខែនេះដើម្បីប្រកាសទេ។' 
+      };
+    }
+
+    // 2. Atomic Database Transaction with Deliberate Caller Contract
+    let publishedCount = scoresCount;
+    if (classId) {
+      const { error: updateError } = await supabase
+        .from('grades')
+        .update({ status: 'published', updated_at: new Date().toISOString() })
+        .eq('period', period)
+        .eq('academic_year_id', academicYearId)
+        .eq('class_id', classId)
+        .eq('status', 'draft');
+
+      if (updateError) throw updateError;
+
+      // Audit log the class-level publication
+      await supabase.from('audit_logs').insert({
+        user_id: user.id,
+        action: 'publish_scores_class',
+        details: { period, academic_year_id: academicYearId, class_id: classId, count: scoresCount }
+      });
+    } else {
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('publish_scores_atomic', {
+        p_period: period,
+        p_academic_year_id: academicYearId,
+        p_caller_id: user.id
+      });
+
+      if (rpcError) throw rpcError;
+      publishedCount = rpcResult?.published_count || scoresCount;
+    }
 
     const { revalidatePath } = await import('next/cache');
     revalidatePath('/admin/master-scores');
@@ -489,8 +510,8 @@ export async function publishScoresAction(period: string, academicYearId: string
 
     return { 
       success: true, 
-      count: rpcResult?.published_count, 
-      message: rpcResult?.message 
+      count: publishedCount, 
+      message: `បានប្រកាសពិន្ទុជោគជ័យសម្រាប់សិស្សចំនួន ${publishedCount} នាក់` 
     };
   } catch (err: any) {
     console.error('publishScoresAction error:', err);

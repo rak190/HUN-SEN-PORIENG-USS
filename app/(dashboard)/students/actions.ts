@@ -80,6 +80,14 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
       !validatedPayload.id.startsWith('mock-')
     );
 
+    // CRITICAL SECURITY RULE: Homeroom teachers can NEVER create new students directly!
+    if (!isExistingId && role === 'teacher') {
+      return {
+        success: false,
+        error: 'សិទ្ធិមិនគ្រប់គ្រាន់៖ គ្រូបន្ទុកថ្នាក់មិនអាចបញ្ជូលសិស្សថ្មីដោយផ្ទាល់បានទេ។ សូមដាក់ពាក្យស្នើសុំផ្ទេរចូល ឬទាក់ទងរដ្ឋបាលសាលា (Admin)។',
+      };
+    }
+
     // Target student authorization check: verify caller owns or has authority over this student
     if (isExistingId && validatedPayload.id) {
       await requireStudentAccess(validatedPayload.id, validatedPayload.class_id);
@@ -304,8 +312,8 @@ export async function bulkQuickRegisterAction(payload: {
       }
     }
 
-    const { requireTeacher, requireClassAccess } = await import('@/lib/auth-server');
-    const { user } = await requireTeacher(); // allow teachers, principals, admins
+    const { requirePrincipal, requireClassAccess } = await import('@/lib/auth-server');
+    const { user } = await requirePrincipal(); // Only admins and principals can register new students
 
     // Security Guard: Verify access to all unique class_ids in the payload
     const uniqueClassIds = Array.from(new Set(payload.records.map((r) => r.class_id)));
@@ -464,4 +472,117 @@ export async function fetchStudentTransferHistoryAction(classId: string) {
     return { success: false, error: err?.message || 'Failed to fetch transfer history' };
   }
 }
+
+export async function submitStudentStatusRequestAction(payload: {
+  request_type: 'transfer_in' | 'transfer_out' | 'dropout';
+  class_id: string;
+  student_id?: string;
+  student_name?: string;
+  gender?: string;
+  date_of_birth?: string;
+  reason: string;
+  effective_date: string;
+  details?: Record<string, any>;
+}) {
+  try {
+    const { getServerAuth, requireClassAccess } = await import('@/lib/auth-server');
+    const { user, profile, role } = await getServerAuth();
+    if (!user || !profile || !role) {
+      return { success: false, error: 'Unauthorized: Authentication required.' };
+    }
+
+    if (!payload.class_id) {
+      return { success: false, error: 'Class ID is required.' };
+    }
+
+    await requireClassAccess(payload.class_id);
+
+    // Validate based on request_type
+    if (payload.request_type === 'transfer_in') {
+      if (!payload.student_name || !payload.student_name.trim()) {
+        return { success: false, error: 'សូមបញ្ចូលឈ្មោះសិស្សផ្ទេរចូល។' };
+      }
+    } else if (payload.request_type === 'transfer_out' || payload.request_type === 'dropout') {
+      if (!payload.student_id) {
+        return { success: false, error: 'សូមជ្រើសរើសសិស្សដែលត្រូវស្នើសុំ។' };
+      }
+    }
+
+    const supabase = createAdminClient();
+
+    // If transfer_out or dropout, fetch student name & gender from students table
+    let sName = payload.student_name || '';
+    let sGender = payload.gender || 'M';
+    let sDob = payload.date_of_birth || null;
+    if (payload.student_id) {
+      const { data: std } = await supabase
+        .from('students')
+        .select('full_name, gender, dob')
+        .eq('id', payload.student_id)
+        .maybeSingle();
+      if (std) {
+        sName = std.full_name || sName;
+        sGender = std.gender || sGender;
+        sDob = std.dob || sDob;
+      }
+    }
+
+    const { data: inserted, error: insertError } = await supabase
+      .from('student_requests')
+      .insert({
+        request_type: payload.request_type,
+        class_id: payload.class_id,
+        student_id: payload.student_id || null,
+        student_name: sName,
+        gender: sGender,
+        date_of_birth: sDob,
+        reason: payload.reason || '',
+        effective_date: payload.effective_date || new Date().toISOString().split('T')[0],
+        details: payload.details || {},
+        requested_by: user.id,
+        status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('submitStudentStatusRequestAction insert error:', insertError);
+      return { success: false, error: insertError.message };
+    }
+
+    revalidatePath('/students');
+    revalidatePath('/homeroom');
+    revalidatePath('/admin/students');
+
+    return { success: true, request: inserted };
+  } catch (err: any) {
+    console.error('submitStudentStatusRequestAction error:', err);
+    return { success: false, error: err?.message || 'Failed to submit student request.' };
+  }
+}
+
+export async function fetchClassStudentRequestsAction(classId: string) {
+  try {
+    const { getServerAuth, requireClassAccess } = await import('@/lib/auth-server');
+    await getServerAuth();
+    await requireClassAccess(classId);
+
+    const supabase = createAdminClient();
+    const { data: requests, error } = await supabase
+      .from('student_requests')
+      .select('id, request_type, student_name, gender, date_of_birth, status, reason, effective_date, admin_notes, created_at, reviewed_at, student_id, student:students(student_id_number, full_name)')
+      .eq('class_id', classId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, requests: requests || [] };
+  } catch (err: any) {
+    console.error('fetchClassStudentRequestsAction error:', err);
+    return { success: false, error: err?.message || 'Failed to fetch student requests' };
+  }
+}
+
 

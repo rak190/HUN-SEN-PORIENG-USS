@@ -45,15 +45,19 @@ export async function saveAttendanceBatchAction(payload: BatchAttendancePayload)
 
     const supabase = await createClient();
 
-    // Resolve class details (school_id, academic_year_id)
+    // Resolve class details (school_id, academic_year_id, monitor_id)
     const { data: classData, error: classError } = await supabase
       .from('classes')
-      .select('id, school_id, academic_year_id, teacher_id')
+      .select('id, school_id, academic_year_id, teacher_id, monitor_id')
       .eq('id', validated.class_id)
       .maybeSingle();
 
     if (classError || !classData) {
       return { success: false, error: 'Class not found or inaccessible.' };
+    }
+
+    if (role === 'monitor' && classData.monitor_id !== user.id) {
+      return { success: false, error: 'Forbidden: You are not authorized to record attendance for this class.' };
     }
 
     if (role === 'principal' && classData.school_id !== profile.school_id) {

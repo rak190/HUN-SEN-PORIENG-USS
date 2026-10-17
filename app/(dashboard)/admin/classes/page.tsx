@@ -182,6 +182,9 @@ export default function AdminClassesPage() {
               className="appearance-none pl-4 pr-10 py-2.5 bg-slate-50 border border-slate-200/60 rounded-full text-xs font-bold text-[#64748B] outline-none focus:ring-2 focus:ring-[#155EEF]/20 cursor-pointer w-full sm:w-48 transition-colors hover:bg-slate-100"
             >
               <option value="All Grades">គ្រប់កម្រិត (All Grades)</option>
+              <option value="ថ្នាក់ទី ៧">ថ្នាក់ទី ៧</option>
+              <option value="ថ្នាក់ទី ៨">ថ្នាក់ទី ៨</option>
+              <option value="ថ្នាក់ទី ៩">ថ្នាក់ទី ៩</option>
               <option value="ថ្នាក់ទី ១០">ថ្នាក់ទី ១០</option>
               <option value="ថ្នាក់ទី ១១">ថ្នាក់ទី ១១</option>
               <option value="ថ្នាក់ទី ១២">ថ្នាក់ទី ១២</option>

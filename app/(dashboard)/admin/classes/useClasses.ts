@@ -399,9 +399,12 @@ export function useClasses() {
                           teacherName.toLowerCase().includes(query);
     
     let matchesGrade = true;
-    if (filterGrade === 'ថ្នាក់ទី ១០') matchesGrade = c.grade === '10' || c.grade === '១០';
-    else if (filterGrade === 'ថ្នាក់ទី ១១') matchesGrade = c.grade === '11' || c.grade === '១១';
-    else if (filterGrade === 'ថ្នាក់ទី ១២') matchesGrade = c.grade === '12' || c.grade === '១២';
+    if (filterGrade !== 'All Grades') {
+      const khmerToLatin: Record<string, string> = { '០': '0', '១': '1', '២': '2', '៣': '3', '៤': '4', '៥': '5', '៦': '6', '៧': '7', '៨': '8', '៩': '9' };
+      const normalizedFilter = filterGrade.split('').map(ch => khmerToLatin[ch] || ch).join('').replace(/\D/g, '');
+      const normalizedClassGrade = String(c.grade || '').split('').map(ch => khmerToLatin[ch] || ch).join('').replace(/\D/g, '');
+      matchesGrade = normalizedFilter !== '' && normalizedClassGrade === normalizedFilter;
+    }
 
     return matchesSearch && matchesGrade;
   });

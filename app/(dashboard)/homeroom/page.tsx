@@ -23,15 +23,28 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     redirect('/monitor/attendance');
   }
 
-  // 1.5 Fetch homeroom teacher's class
+  // 1.5 Fetch active academic year
+  const { data: activeYear } = await supabase
+    .from('academic_years')
+    .select('id')
+    .eq('is_active', true)
+    .maybeSingle();
+
+  // 1.6 Fetch homeroom teacher's active class
   let teacherClassName = null;
   let teacherClassId: string | null = null;
   if (profile?.role === 'teacher') {
-    const { data: classroom } = await supabase
+    let teacherClassQuery = supabase
       .from('classes')
       .select('id, name')
       .eq('teacher_id', profile.id)
-      .maybeSingle();
+      .eq('is_archived', false);
+
+    if (activeYear?.id) {
+      teacherClassQuery = teacherClassQuery.eq('academic_year_id', activeYear.id);
+    }
+
+    const { data: classroom } = await teacherClassQuery.maybeSingle();
     if (classroom) {
       teacherClassName = classroom.name;
       teacherClassId = classroom.id;
@@ -46,20 +59,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   } else if (classId && classId !== 'all') {
     effectiveClassId = classId;
   }
-
-  // Fetch active academic year
-  const { data: activeYear } = await supabase
-    .from('academic_years')
-    .select('id')
-    .eq('is_active', true)
-    .single();
     
   let activeClassIds: string[] = [];
   if (!effectiveClassId && activeYear) {
     const { data: classes } = await supabase
       .from('classes')
       .select('id')
-      .eq('academic_year_id', activeYear.id);
+      .eq('academic_year_id', activeYear.id)
+      .eq('is_archived', false);
     activeClassIds = classes?.map(c => c.id) || [];
   }
 

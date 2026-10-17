@@ -4,6 +4,8 @@ import { getCurriculumSchemaForClass, fetchClassExamStandards } from '@/lib/curr
 import { calculateStudentMonthlyGrade } from '@/lib/domain/grading';
 import { resolvePeriodDateRange } from '@/lib/domain/periods';
 
+export const maxDuration = 300;
+
 const TELEGRAM_BOT_TOKEN = process.env.PARENT_TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const APP_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://hun-sen-porieng-uss.vercel.app';
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
   try {
     const { getServerAuth } = await import('@/lib/auth-server');
     const { user, profile, role } = await getServerAuth();
-    if (!user || (role !== 'admin' && role !== 'principal')) {
+    if (!user || (role !== 'admin' && role !== 'principal' && role !== 'teacher')) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
     }
 
@@ -63,10 +65,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'class_id and month are required' }, { status: 400 });
     }
 
-    // 1. Get class info including school, academic year, grade, and track
+    // 1. Get class info including school, academic year, grade, track, and teacher_id
     const { data: classData, error: classError } = await supabase
       .from('classes')
-      .select('id, name, school_id, academic_year_id, grade, track')
+      .select('id, name, school_id, academic_year_id, grade, track, teacher_id')
       .eq('id', class_id)
       .single();
 
@@ -74,8 +76,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 });
     }
 
-    if (role === 'principal' && classData.school_id !== profile?.school_id) {
+    if ((role === 'principal' || role === 'teacher') && classData.school_id !== profile?.school_id) {
       return NextResponse.json({ error: 'Forbidden: You cannot broadcast scores for a class outside your school.' }, { status: 403 });
+    }
+
+    if (role === 'teacher' && classData.teacher_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden: You can only broadcast scores for your assigned homeroom class.' }, { status: 403 });
     }
 
     // Fetch Academic Year details for period boundary resolution

@@ -92,7 +92,15 @@ export default function AdminBasicImportModal({ isOpen, onClose, onSuccess }: Ad
         }
         
         // Also fetch classes to map class names to class IDs safely
-        const { data: classesData } = await supabase.from('classes').select('id, name');
+        let classesQuery = supabase
+          .from('classes')
+          .select('id, name')
+          .eq('is_archived', false);
+        
+        if (activeAcademicYear?.id) {
+          classesQuery = classesQuery.eq('academic_year_id', activeAcademicYear.id);
+        }
+        const { data: classesData } = await classesQuery;
 
         const results: ParsedStudent[] = [];
 

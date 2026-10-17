@@ -16,7 +16,9 @@ import {
   FileSpreadsheet,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Send,
+  Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 import * as ExcelJS from 'exceljs';
@@ -51,8 +53,29 @@ export default function GradesPage() {
   const [isGeipModalOpen, setIsGeipModalOpen] = useState(false);
   const [isHonorRollModalOpen, setIsHonorRollModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
   
   const supabase = createClient();
+
+  const handleBroadcastTelegram = async () => {
+    if (!activeClass) return;
+    if (!confirm(`តើអ្នកពិតជាចង់ផ្ញើលទ្ធផលពិន្ទុខែ ${selectedPeriod} ទៅកាន់អាណាព្យាបាលសិស្សថ្នាក់ ${activeClass.name} តាមរយៈ Telegram មែនទេ?`)) return;
+    setIsBroadcasting(true);
+    try {
+      const res = await fetch('/api/admin/broadcast-scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class_id: activeClass.id, month: selectedPeriod })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to broadcast');
+      alert(`ជោគជ័យ! បានផ្ញើសារចំនួន ${data.count} ទៅកាន់អាណាព្យាបាលសិស្សថ្នាក់ ${activeClass.name}។`);
+    } catch (error: any) {
+      alert('កំហុសក្នុងការផ្ញើ៖ ' + error.message);
+    } finally {
+      setIsBroadcasting(false);
+    }
+  };
 
   const exportToExcel = async () => {
     if (!activeClass) return;
@@ -443,6 +466,20 @@ export default function GradesPage() {
             <Award className="w-4 h-4" />
             <span>បោះពុម្ពព្រឹត្តិបត្រពិន្ទុ</span>
           </Link>
+
+          <button
+            onClick={handleBroadcastTelegram}
+            disabled={isBroadcasting || !activeClass}
+            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md flex items-center gap-2 transition-all scale-[1.01] disabled:opacity-50 cursor-pointer"
+            title="ផ្ញើលទ្ធផលពិន្ទុទៅ Telegram អាណាព្យាបាល"
+          >
+            {isBroadcasting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+            <span>{isBroadcasting ? 'កំពុងផ្ញើ...' : 'ផ្ញើទៅ Telegram'}</span>
+          </button>
         </div>
       </div>
 

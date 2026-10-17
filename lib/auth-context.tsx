@@ -113,12 +113,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function refreshClassesForUser(userId: string, userRole?: string, userSchoolId?: string) {
     try {
+      // Resolve active academic year ID defensively if not already set
+      let yearId = activeAcademicYear?.id;
+      if (!yearId) {
+        const { data: actYear } = await supabase
+          .from('academic_years')
+          .select('id')
+          .eq('is_active', true)
+          .maybeSingle();
+        if (actYear) yearId = actYear.id;
+      }
+
       // 1. Try to find classes assigned to this teacher or monitor
-      const { data: assignedClasses } = await supabase
+      let assignedQuery = supabase
         .from('classes')
         .select('*')
         .or(`teacher_id.eq.${userId},monitor_id.eq.${userId}`)
+        .eq('is_archived', false)
         .order('name');
+
+      if (yearId) {
+        assignedQuery = assignedQuery.eq('academic_year_id', yearId);
+      }
+
+      const { data: assignedClasses } = await assignedQuery;
 
       if (assignedClasses && assignedClasses.length > 0) {
         setClasses(assignedClasses as Classroom[]);
@@ -142,11 +160,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // 2. If no classes assigned to this user (e.g. Admin or Principal), fetch classes scoped to school
+      // 2. If no classes assigned to this user (e.g. Admin or Principal), fetch classes scoped to school and active year
       let query = supabase
         .from('classes')
         .select('*')
+        .eq('is_archived', false)
         .order('name');
+
+      if (yearId) {
+        query = query.eq('academic_year_id', yearId);
+      }
 
       const targetSchool = userSchoolId || profile?.school_id;
       if (targetSchool) {

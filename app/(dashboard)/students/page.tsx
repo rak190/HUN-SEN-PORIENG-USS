@@ -10,10 +10,8 @@ import ExcelJS from 'exceljs';
 import {
   Users, Search, UserPlus, Download, Edit, MapPin, Heart, FileSpreadsheet, Table,
   Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp, AlertTriangle, LogOut, ChevronDown, Loader2, X, Check,
-  ArrowUpDown, ArrowUp, ArrowDown
+  ArrowUpDown, ArrowUp, ArrowDown, Plus, ArrowRightLeft
 } from 'lucide-react';
-import StudentImportModal from '@/components/students/StudentImportModal';
-import StudentGridEntryModal from '@/components/students/StudentGridEntryModal';
 import StudentTable from '@/components/students/StudentTable';
 import StudentProfileDrawer from '@/components/students/StudentProfileDrawer';
 import StudentFilters from '@/components/students/StudentFilters';
@@ -63,80 +61,108 @@ export default function StudentsPage() {
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [contactStudent, setContactStudent] = useState<MassiveProfilingStudent | null>(null);
 
-  // Status Change Modal State
+  // Request & Status Modal State
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [statusForm, setStatusForm] = useState({
     studentId: '',
     actionType: 'ផ្ទេរចេញ',
+    studentName: '',
+    gender: 'M',
+    dob: '',
+    prevSchool: '',
+    destinationSchool: '',
     actionDate: new Date().toISOString().split('T')[0],
     reason: ''
   });
   const [transferRecords, setTransferRecords] = useState<any[]>([]);
+  const [classRequests, setClassRequests] = useState<any[]>([]);
+
+  const loadRequestsAndHistory = async (cid: string) => {
+    try {
+      const { fetchStudentTransferHistoryAction, fetchClassStudentRequestsAction } = await import('./actions');
+      const [histRes, reqRes] = await Promise.all([
+        fetchStudentTransferHistoryAction(cid),
+        fetchClassStudentRequestsAction(cid)
+      ]);
+      if (histRes.success && histRes.history) {
+        setTransferRecords(histRes.history);
+      }
+      if (reqRes.success && reqRes.requests) {
+        setClassRequests(reqRes.requests);
+      }
+    } catch (e) {
+      console.error('Failed to load transfer history or requests:', e);
+    }
+  };
 
   useEffect(() => {
     const classId = activeClass?.id;
     if (!classId) return;
-    async function loadTransferHistory(cid: string) {
-      try {
-        const { fetchStudentTransferHistoryAction } = await import('./actions');
-        const res = await fetchStudentTransferHistoryAction(cid);
-        if (res.success && res.history) {
-          setTransferRecords(res.history);
-        }
-      } catch (e) {
-        console.error('Failed to load transfer history:', e);
-      }
-    }
-    loadTransferHistory(classId);
+    loadRequestsAndHistory(classId);
   }, [activeClass?.id]);
 
   const handleStatusSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!statusForm.studentId) return;
-    
-    setIsSaving(true);
-    const student = students.find(s => s.id === statusForm.studentId);
-    if (student) {
-      try {
-        const { updateStudentStatusAction } = await import('./actions');
-        const res = await updateStudentStatusAction({
-          student_id: student.id,
-          action_type: statusForm.actionType,
-          action_date: statusForm.actionDate,
-          reason: statusForm.reason,
-          class_id: activeClass?.id,
-        });
-
-        if (res.success) {
-          setStudents(students.filter(s => s.id !== student.id));
-          setTransferRecords(prev => [
-            {
-              id: Date.now().toString(),
-              student_id: student.id,
-              student_id_number: student.student_id_number || '-',
-              full_name: student.full_name,
-              status: statusForm.actionType,
-              date: statusForm.actionDate,
-              reason: statusForm.reason || '-'
-            },
-            ...prev
-          ]);
-        } else {
-          alert(`មានបញ្ហាក្នុងការកែប្រែស្ថានភាពសិស្ស៖ ${res.error || 'សូមព្យាយាមម្តងទៀត'}`);
-        }
-      } catch (err: any) {
-        alert(`មានបញ្ហាក្នុងការកែប្រែស្ថានភាពសិស្ស៖ ${err?.message || 'សូមព្យាយាមម្តងទៀត'}`);
-      }
+    if (!activeClass?.id) {
+      alert('សូមជ្រើសរើសថ្នាក់ជាមុនសិន!');
+      return;
     }
-    
-    setIsSaving(false);
-    setIsStatusModalOpen(false);
-    setStatusForm({
-      studentId: '',
-      actionType: 'ផ្ទេរចេញ',
-      actionDate: new Date().toISOString().split('T')[0],
-      reason: ''
-    });
+
+    if (statusForm.actionType === 'ផ្ទេរចូល' && !statusForm.studentName.trim()) {
+      alert('សូមបញ្ចូលឈ្មោះសិស្សផ្ទេរចូល!');
+      return;
+    }
+
+    if ((statusForm.actionType === 'ផ្ទេរចេញ' || statusForm.actionType === 'បោះបង់ការសិក្សា') && !statusForm.studentId) {
+      alert('សូមជ្រើសរើសសិស្សពីបញ្ជីឈ្មោះថ្នាក់!');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { submitStudentStatusRequestAction } = await import('./actions');
+      let reqType: 'transfer_in' | 'transfer_out' | 'dropout' = 'transfer_out';
+      if (statusForm.actionType === 'បោះបង់ការសិក្សា') reqType = 'dropout';
+      else if (statusForm.actionType === 'ផ្ទេរចូល') reqType = 'transfer_in';
+
+      const res = await submitStudentStatusRequestAction({
+        request_type: reqType,
+        class_id: activeClass.id,
+        student_id: statusForm.studentId || undefined,
+        student_name: statusForm.studentName,
+        gender: statusForm.gender,
+        date_of_birth: statusForm.dob,
+        reason: statusForm.reason,
+        effective_date: statusForm.actionDate,
+        details: {
+          prev_school: statusForm.prevSchool,
+          destination_school: statusForm.destinationSchool
+        }
+      });
+
+      if (res.success) {
+        alert('បានដាក់ពាក្យស្នើសុំដោយជោគជ័យ! សំណើត្រូវបានបញ្ជូនទៅរដ្ឋបាលសាលា (Admin) ដើម្បីត្រួតពិនិត្យ និងអនុម័ត។');
+        loadRequestsAndHistory(activeClass.id);
+        setIsStatusModalOpen(false);
+        setStatusForm({
+          studentId: '',
+          actionType: 'ផ្ទេរចេញ',
+          studentName: '',
+          gender: 'M',
+          dob: '',
+          prevSchool: '',
+          destinationSchool: '',
+          actionDate: new Date().toISOString().split('T')[0],
+          reason: ''
+        });
+      } else {
+        alert(`មានបញ្ហាក្នុងការដាក់ស្នើសុំ៖ ${res.error || 'សូមព្យាយាមម្តងទៀត'}`);
+      }
+    } catch (err: any) {
+      alert(`មានបញ្ហាក្នុងការដាក់ស្នើសុំ៖ ${err?.message || 'សូមព្យាយាមម្តងទៀត'}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
 
@@ -505,18 +531,9 @@ export default function StudentsPage() {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
-  const handleDeleteSelected = async () => {
-    if (!window.confirm(`តើអ្នកពិតជាចង់បោះបង់សិស្សចំនួន ${selectedIds.length} នាក់នេះមែនទេ? (សិស្សនឹងត្រូវប្តូរស្ថានភាពទៅជា បោះបង់)`)) return;
-    setIsSaving(true);
-    const { error } = await supabase.from('students').update({ enrollment_status: 'dropout', is_active: false }).in('id', selectedIds);
-    if (!error) {
-      setStudents(prev => prev.map(s => selectedIds.includes(s.id) ? { ...s, current_status: 'dropout' } : s));
-      setSelectedIds([]);
-    } else {
-      console.error(error);
-      alert('បរាជ័យក្នុងការបោះបង់សិស្ស');
-    }
-    setIsSaving(false);
+  const handleDeleteSelected = () => {
+    alert('ដើម្បីរក្សាភាពត្រឹមត្រូវនៃទិន្នន័យ គ្រូបន្ទុកថ្នាក់មិនអាចលុប ឬបោះបង់សិស្សដោយផ្ទាល់បានទេ។ សូមប្រើប្រាស់ផ្ទាំង «ផ្ទេរ / បោះបង់» ដើម្បីដាក់ពាក្យស្នើសុំផ្លូវការទៅកាន់ Admin។');
+    setSelectedIds([]);
   };
 
   const handleDownloadTemplate = async () => {
@@ -701,7 +718,17 @@ export default function StudentsPage() {
         setSelectedIds={setSelectedIds}
         openEditModal={openEditModal}
         openStatusModal={(std) => {
-          setStatusForm({ ...statusForm, studentId: std.id });
+          setStatusForm({
+            studentId: std.id,
+            actionType: 'ផ្ទេរចេញ',
+            studentName: std.full_name,
+            gender: std.gender === 'F' || std.gender === 'ស្រី' ? 'F' : 'M',
+            dob: std.date_of_birth || '',
+            prevSchool: '',
+            destinationSchool: '',
+            actionDate: new Date().toISOString().split('T')[0],
+            reason: '',
+          });
           setIsStatusModalOpen(true);
         }}
       />
@@ -774,16 +801,130 @@ export default function StudentsPage() {
       {/* Tab 5: Transfer / Dropout */}
       {mainTab === 'transfer' && (
          <div className="space-y-6 animate-fadeIn">
-            <div className="flex justify-end">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-white rounded-2xl border border-slate-200 shadow-2xs">
+              <div>
+                <h2 className="text-lg font-black text-slate-800">ការគ្រប់គ្រងការផ្ទេរ និងបោះបង់ការសិក្សា</h2>
+                <p className="text-xs font-semibold text-slate-500 mt-0.5">ដាក់ស្នើសុំជាផ្លូវការទៅកាន់ Admin សម្រាប់សិស្សផ្ទេរចូល ផ្ទេរចេញ ឬបោះបង់ការសិក្សា</p>
+              </div>
               <button 
-                onClick={() => setIsStatusModalOpen(true)}
-                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs shadow-md shadow-rose-500/20 flex items-center gap-2 transition-colors">
-                <LogOut className="w-4 h-4" /> ធ្វើការស្នើសុំផ្ទេរ/បោះបង់
+                onClick={() => {
+                  setStatusForm({
+                    studentId: '',
+                    actionType: 'ផ្ទេរចេញ',
+                    studentName: '',
+                    gender: 'M',
+                    dob: '',
+                    prevSchool: '',
+                    destinationSchool: '',
+                    actionDate: new Date().toISOString().split('T')[0],
+                    reason: ''
+                  });
+                  setIsStatusModalOpen(true);
+                }}
+                className="px-4 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-xl text-xs shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
+              >
+                <Plus className="w-4 h-4" /> ដាក់ពាក្យស្នើសុំ (ផ្ទេរចូល / ផ្ទេរចេញ / បោះបង់)
               </button>
             </div>
             
+            {/* Section 1: Pending & Reviewed Requests Table */}
             <div className="bg-white rounded-[24px] border border-slate-200 overflow-hidden shadow-2xs">
-               <div className="p-6 border-b border-slate-100"><h3 className="text-lg font-black text-slate-800">ប្រវត្តិសិស្សផ្ទេរ ឬបោះបង់ការសិក្សា</h3></div>
+               <div className="p-5 md:p-6 border-b border-slate-100 flex items-center justify-between">
+                 <div>
+                   <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                     <Clock className="w-5 h-5 text-amber-500" />
+                     <span>បញ្ជីសំណើដែលបានដាក់ស្នើទៅ Admin</span>
+                   </h3>
+                   <p className="text-xs font-semibold text-slate-500 mt-0.5">តាមដានស្ថានភាពសំណើដែលកំពុងរង់ចាំការពិនិត្យ ឬបានអនុម័តដោយនាយកសាលា/Admin</p>
+                 </div>
+                 <span className="text-xs font-bold px-3 py-1 bg-slate-100 text-slate-700 rounded-full">
+                   សរុប {classRequests.length} សំណើ
+                 </span>
+               </div>
+               <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="bg-slate-50 text-slate-600 font-black text-xs">
+                      <tr>
+                        <th className="px-6 py-4">ប្រភេទសំណើ</th>
+                        <th className="px-6 py-4">ឈ្មោះសិស្ស</th>
+                        <th className="px-6 py-4">ភេទ / ថ្ងៃកំណើត</th>
+                        <th className="px-6 py-4">កាលបរិច្ឆេទ</th>
+                        <th className="px-6 py-4">មូលហេតុ</th>
+                        <th className="px-6 py-4 text-center">ស្ថានភាព</th>
+                        <th className="px-6 py-4">កំណត់សម្គាល់ពី Admin</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+                       {classRequests.length === 0 ? (
+                         <tr><td colSpan={7} className="py-12 text-center text-slate-400">មិនទាន់មានសំណើត្រូវបានដាក់ស្នើនៅឡើយទេ</td></tr>
+                       ) : (
+                         classRequests.map(req => {
+                           const reqType = req.request_type || 'transfer_in';
+                           return (
+                             <tr key={req.id} className="hover:bg-slate-50">
+                               <td className="px-6 py-4">
+                                 {reqType === 'transfer_out' ? (
+                                   <span className="px-2.5 py-1 rounded-full text-xs font-black bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1 w-fit">
+                                     <ArrowRightLeft className="w-3 h-3" /> ផ្ទេរចេញ
+                                   </span>
+                                 ) : reqType === 'dropout' ? (
+                                   <span className="px-2.5 py-1 rounded-full text-xs font-black bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1 w-fit">
+                                     <LogOut className="w-3 h-3" /> បោះបង់ការសិក្សា
+                                   </span>
+                                 ) : (
+                                   <span className="px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1 w-fit">
+                                     <UserPlus className="w-3 h-3" /> ផ្ទេរចូល
+                                   </span>
+                                 )}
+                               </td>
+                               <td className="px-6 py-4">
+                                 <span className="text-slate-900 font-black">{req.student_name}</span>
+                                 {req.student?.student_id_number && (
+                                   <span className="ml-2 font-mono text-xs text-slate-400">({req.student.student_id_number})</span>
+                                 )}
+                               </td>
+                               <td className="px-6 py-4 text-xs">
+                                 {req.gender === 'F' || req.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស'} {req.date_of_birth ? `· ${req.date_of_birth}` : ''}
+                               </td>
+                               <td className="px-6 py-4 text-xs font-mono text-slate-500">
+                                 {req.effective_date || (req.created_at ? req.created_at.split('T')[0] : '-')}
+                               </td>
+                               <td className="px-6 py-4 max-w-xs truncate text-xs text-slate-600">
+                                 {req.reason || '-'}
+                               </td>
+                               <td className="px-6 py-4 text-center">
+                                 {req.status === 'approved' ? (
+                                   <span className="px-2.5 py-1 rounded-full text-[11px] font-black bg-emerald-100 text-emerald-800">
+                                     ✓ បានអនុម័ត
+                                   </span>
+                                 ) : req.status === 'rejected' ? (
+                                   <span className="px-2.5 py-1 rounded-full text-[11px] font-black bg-rose-100 text-rose-800">
+                                     ✕ បានបដិសេធ
+                                   </span>
+                                 ) : (
+                                   <span className="px-2.5 py-1 rounded-full text-[11px] font-black bg-amber-100 text-amber-800 animate-pulse">
+                                     ⏳ កំពុងរង់ចាំ
+                                   </span>
+                                 )}
+                               </td>
+                               <td className="px-6 py-4 text-xs text-slate-500 italic max-w-xs truncate">
+                                 {req.admin_notes || '-'}
+                               </td>
+                             </tr>
+                           );
+                         })
+                       )}
+                    </tbody>
+                  </table>
+               </div>
+            </div>
+
+            {/* Section 2: Official Historical Records */}
+            <div className="bg-white rounded-[24px] border border-slate-200 overflow-hidden shadow-2xs">
+               <div className="p-5 md:p-6 border-b border-slate-100">
+                 <h3 className="text-base font-black text-slate-800">ប្រវត្តិសិស្សផ្ទេរចេញ ឬបោះបង់ជាផ្លូវការ (Inactive Records)</h3>
+                 <p className="text-xs font-semibold text-slate-500 mt-0.5">បញ្ជីសិស្សដែលបានអនុម័តជាផ្លូវការរួចរាល់</p>
+               </div>
                <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left whitespace-nowrap">
                     <thead className="bg-slate-50 text-slate-600 font-black text-xs">
@@ -795,25 +936,25 @@ export default function StudentsPage() {
                         <th className="px-6 py-4">មូលហេតុ</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 font-bold text-slate-700 text-center">
+                    <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
                        {transferRecords.length === 0 ? (
-                         <tr><td colSpan={5} className="py-12 text-slate-400">មិនមានទិន្នន័យ</td></tr>
+                         <tr><td colSpan={5} className="py-12 text-center text-slate-400">មិនទាន់មានប្រវត្តិផ្លូវការទេ</td></tr>
                        ) : (
                          transferRecords.map(record => (
                            <tr key={record.id} className="hover:bg-slate-50 text-left">
-                             <td className="px-6 py-4">{record.student_id_number}</td>
+                             <td className="px-6 py-4 font-mono">{record.student_id_number}</td>
                              <td className="px-6 py-4">{record.full_name}</td>
                              <td className="px-6 py-4">
-                               <span className={`px-2 py-1 rounded-md text-[10px] ${
-                                  record.status === 'ផ្ទេរចេញ' ? 'bg-blue-100 text-blue-700' :
-                                  record.status === 'បោះបង់ការសិក្សា' ? 'bg-amber-100 text-amber-700' :
-                                  'bg-rose-100 text-rose-700'
+                               <span className={`px-2.5 py-1 rounded-full text-[11px] font-black ${
+                                  record.status === 'ផ្ទេរចេញ' ? 'bg-purple-100 text-purple-700' :
+                                  record.status === 'បោះបង់ការសិក្សា' ? 'bg-rose-100 text-rose-700' :
+                                  'bg-slate-100 text-slate-700'
                                }`}>
                                  {record.status}
                                </span>
                              </td>
-                             <td className="px-6 py-4">{record.date}</td>
-                             <td className="px-6 py-4 max-w-xs truncate text-slate-500">{record.reason || '-'}</td>
+                             <td className="px-6 py-4 text-xs font-mono">{record.date}</td>
+                             <td className="px-6 py-4 max-w-xs truncate text-slate-500 text-xs">{record.reason || '-'}</td>
                            </tr>
                          ))
                        )}
@@ -823,15 +964,6 @@ export default function StudentsPage() {
             </div>
          </div>
       )}
-
-
-
-      {/* Import Modal */}
-      <StudentImportModal 
-        isOpen={isImportModalOpen} 
-        onClose={() => setIsImportModalOpen(false)} 
-        onSuccess={handleBulkSuccess} 
-      />
 
       {/* Contact Modal */}
       {mounted && isContactModalOpen && contactStudent && createPortal(
@@ -913,7 +1045,7 @@ export default function StudentsPage() {
         document.body
       )}
 
-      {/* Status Change Modal */}
+      {/* Status / Transfer / Dropout Request Modal */}
       {mounted && isStatusModalOpen && createPortal(
         <div 
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fadeIn"
@@ -925,8 +1057,8 @@ export default function StudentsPage() {
           >
             <div className="px-6 pt-6 pb-4 flex justify-between items-start border-b border-slate-100 bg-slate-50/50">
               <div>
-                <h2 className="text-lg font-black text-slate-800">កត់ត្រាការផ្លាស់ប្តូរស្ថានភាព</h2>
-                <p className="text-xs font-bold text-slate-500 mt-1">រក្សាទុកក្នុងប្រវត្តិបញ្ជីឈ្មោះសិក្សា</p>
+                <h2 className="text-lg font-black text-slate-800">ដាក់ពាក្យស្នើសុំការផ្លាស់ប្តូរ</h2>
+                <p className="text-xs font-bold text-slate-500 mt-1">សំណើនឹងត្រូវបញ្ជូនទៅ Admin ដើម្បីពិនិត្យ និងអនុម័ត</p>
               </div>
               <button 
                 type="button"
@@ -938,36 +1070,114 @@ export default function StudentsPage() {
             </div>
             
             <form onSubmit={handleStatusSubmit} className="p-6 space-y-4">
-              <div className="relative">
-                <select 
-                  required
-                  value={statusForm.studentId}
-                  onChange={e => setStatusForm({...statusForm, studentId: e.target.value})}
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] appearance-none bg-slate-50"
-                >
-                  <option value="" disabled>ជ្រើសរើសសិស្ស...</option>
-                  {students.filter(s => s.current_status === 'active').map(s => (
-                    <option key={s.id} value={s.id}>{s.student_id_number} · {s.full_name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              {/* Type Switcher */}
+              <div>
+                <label className="block text-xs font-black text-slate-700 mb-1.5">ប្រភេទសំណើ</label>
                 <div className="relative">
                   <select 
                     value={statusForm.actionType}
                     onChange={e => setStatusForm({...statusForm, actionType: e.target.value})}
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] appearance-none bg-slate-50"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] appearance-none bg-slate-50 cursor-pointer"
                   >
-                    <option value="ផ្ទេរចេញ">ផ្ទេរចេញ</option>
-                    <option value="បោះបង់ការសិក្សា">បោះបង់ការសិក្សា</option>
-                    <option value="ដកបេក្ខភាព">ដកបេក្ខភាព</option>
-                    <option value="មរណភាព">មរណភាព</option>
+                    <option value="ផ្ទេរចេញ">ផ្ទេរចេញ (Transfer-Out)</option>
+                    <option value="ផ្ទេរចូល">ផ្ទេរចូល (Transfer-In)</option>
+                    <option value="បោះបង់ការសិក្សា">បោះបង់ការសិក្សា (Dropout)</option>
                   </select>
                   <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 </div>
+              </div>
 
+              {/* Conditional Inputs for Transfer-In */}
+              {statusForm.actionType === 'ផ្ទេរចូល' ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1.5">
+                      ឈ្មោះសិស្សផ្ទេរចូល <span className="text-rose-500">*</span>
+                    </label>
+                    <input 
+                      type="text"
+                      required
+                      placeholder="បញ្ចូលឈ្មោះសិស្ស..."
+                      value={statusForm.studentName}
+                      onChange={e => setStatusForm({...statusForm, studentName: e.target.value})}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] bg-slate-50"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-black text-slate-700 mb-1.5">ភេទ</label>
+                      <select 
+                        value={statusForm.gender}
+                        onChange={e => setStatusForm({...statusForm, gender: e.target.value})}
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] bg-slate-50 cursor-pointer"
+                      >
+                        <option value="M">ប្រុស (M)</option>
+                        <option value="F">ស្រី (F)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-black text-slate-700 mb-1.5">ថ្ងៃខែឆ្នាំកំណើត</label>
+                      <input 
+                        type="date"
+                        value={statusForm.dob}
+                        onChange={e => setStatusForm({...statusForm, dob: e.target.value})}
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] bg-slate-50"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1.5">សាលារៀនចាស់ (បើមាន)</label>
+                    <input 
+                      type="text"
+                      placeholder="ឈ្មោះសាលាពីមុន..."
+                      value={statusForm.prevSchool}
+                      onChange={e => setStatusForm({...statusForm, prevSchool: e.target.value})}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] bg-slate-50"
+                    />
+                  </div>
+                </>
+              ) : (
+                /* Conditional Inputs for Transfer-Out & Dropout */
+                <>
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 mb-1.5">
+                      ជ្រើសរើសសិស្សក្នុងថ្នាក់ <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <select 
+                        required
+                        value={statusForm.studentId}
+                        onChange={e => setStatusForm({...statusForm, studentId: e.target.value})}
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] appearance-none bg-slate-50 cursor-pointer"
+                      >
+                        <option value="" disabled>ជ្រើសរើសសិស្ស...</option>
+                        {students.filter(s => s.current_status === 'active').map(s => (
+                          <option key={s.id} value={s.id}>{s.student_id_number || '-'} · {s.full_name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {statusForm.actionType === 'ផ្ទេរចេញ' && (
+                    <div>
+                      <label className="block text-xs font-black text-slate-700 mb-1.5">សាលារៀនគោលដៅដែលត្រូវផ្ទេរទៅ</label>
+                      <input 
+                        type="text"
+                        placeholder="ឧ. វិទ្យាល័យ ហ៊ុន សែន ព្រៃវែង..."
+                        value={statusForm.destinationSchool}
+                        onChange={e => setStatusForm({...statusForm, destinationSchool: e.target.value})}
+                        className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] bg-slate-50"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div>
+                <label className="block text-xs font-black text-slate-700 mb-1.5">កាលបរិច្ឆេទមានប្រសិទ្ធភាព</label>
                 <input 
                   type="date"
                   value={statusForm.actionDate}
@@ -976,32 +1186,27 @@ export default function StudentsPage() {
                 />
               </div>
 
-              <textarea 
-                placeholder="មូលហេតុ..."
-                value={statusForm.reason}
-                onChange={e => setStatusForm({...statusForm, reason: e.target.value})}
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] min-h-[100px] resize-none bg-slate-50"
-              ></textarea>
+              <div>
+                <label className="block text-xs font-black text-slate-700 mb-1.5">មូលហេតុនៃការផ្លាស់ប្តូរ</label>
+                <textarea 
+                  placeholder="បញ្ជាក់មូលហេតុ (ឧ. ផ្លាស់ប្តូរទីលំនៅតាមឪពុកម្តាយ, ជួយការងារគ្រួសារ...)"
+                  value={statusForm.reason}
+                  onChange={e => setStatusForm({...statusForm, reason: e.target.value})}
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#155EEF] min-h-[90px] resize-none bg-slate-50"
+                ></textarea>
+              </div>
 
               <button 
                 type="submit"
-                className="w-full py-3.5 bg-[#E3163A] hover:bg-rose-700 text-white font-black rounded-2xl text-sm transition-colors shadow-md shadow-rose-500/20 cursor-pointer"
+                disabled={isSaving}
+                className="w-full py-3.5 bg-[#155EEF] hover:bg-blue-700 text-white font-black rounded-2xl text-sm transition-all shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50"
               >
-                រក្សាទុកការផ្លាស់ប្តូរ
+                {isSaving ? 'កំពុងបញ្ជូនសំណើ...' : 'ដាក់ស្នើសុំទៅអ្នកគ្រប់គ្រង (Admin)'}
               </button>
             </form>
           </div>
         </div>,
         document.body
-      )}
-
-      {/* Grid Entry Modal */}
-      {isGridModalOpen && (
-        <StudentGridEntryModal 
-          isOpen={isGridModalOpen} 
-          onClose={() => setIsGridModalOpen(false)} 
-          onSuccess={handleBulkSuccess} 
-        />
       )}
 
       {/* Student Profile Drawer */}

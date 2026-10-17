@@ -365,9 +365,11 @@ export async function getPendingStudentRequests() {
     const { data, error } = await supabase
       .from('student_requests')
       .select(`
-        id, student_name, gender, date_of_birth, status, created_at,
+        id, request_type, student_name, gender, date_of_birth, status, reason, effective_date, details, created_at,
+        student_id,
         class:classes(id, name),
-        requester:profiles!student_requests_requested_by_fkey(full_name)
+        requester:profiles!student_requests_requested_by_fkey(full_name),
+        student:students(id, student_id_number, full_name, gender)
       `)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
@@ -383,9 +385,9 @@ export async function getPendingStudentRequests() {
 
 export async function approveStudentRequest(
   requestId: string,
-  studentIdNumber: string,
-  classId: string,
-  academicYearId: string,
+  studentIdNumber?: string,
+  classId?: string,
+  academicYearId: string = 'fetch-active',
   adminNotes?: string
 ) {
   try {
@@ -406,8 +408,8 @@ export async function approveStudentRequest(
 
     const { data, error } = await supabase.rpc('approve_student_request', {
       p_request_id: requestId,
-      p_student_id_number: studentIdNumber,
-      p_class_id: classId,
+      p_student_id_number: studentIdNumber || null,
+      p_class_id: classId || null,
       p_admin_notes: adminNotes || '',
       p_academic_year_id: targetYearId,
       p_admin_user_id: user?.id

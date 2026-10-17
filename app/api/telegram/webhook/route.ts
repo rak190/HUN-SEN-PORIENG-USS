@@ -94,11 +94,23 @@ export async function POST(req: NextRequest) {
       const chatId = callbackQuery.message.chat.id;
 
       if (data === 'manual_select_start') {
-        const { data: classes } = await supabase
+        const { data: activeYear } = await supabase
+          .from('academic_years')
+          .select('id')
+          .eq('is_active', true)
+          .maybeSingle();
+
+        let classQuery = supabase
           .from('classes')
           .select('id, name')
           .eq('is_archived', false)
           .order('name');
+
+        if (activeYear?.id) {
+          classQuery = classQuery.eq('academic_year_id', activeYear.id);
+        }
+
+        const { data: classes } = await classQuery;
           
         if (classes) {
           const keyboard = [];
@@ -171,15 +183,15 @@ export async function POST(req: NextRequest) {
         let phone = update.message.contact.phone_number;
         if (phone.startsWith('+')) phone = phone.substring(1);
         
+        const last8 = phone.length >= 8 ? phone.substring(phone.length - 8) : phone;
+        
         const { data: students } = await supabase
           .from('students')
-          .select('id, full_name, guardian_phone, father_phone, mother_phone');
+          .select('id, full_name, guardian_phone, father_phone, mother_phone')
+          .eq('is_active', true)
+          .or(`guardian_phone.ilike.%${last8}%,father_phone.ilike.%${last8}%,mother_phone.ilike.%${last8}%`);
           
-        const matchedStudents = (students || []).filter(s => 
-          (s.guardian_phone && s.guardian_phone.replace(/\D/g, '').endsWith(phone.substring(phone.length - 8))) ||
-          (s.father_phone && s.father_phone.replace(/\D/g, '').endsWith(phone.substring(phone.length - 8))) ||
-          (s.mother_phone && s.mother_phone.replace(/\D/g, '').endsWith(phone.substring(phone.length - 8)))
-        );
+        const matchedStudents = students || [];
 
         if (matchedStudents.length === 0) {
           await sendMessage(chatId, '❌ មិនមានទិន្នន័យសិស្សដែលប្រើប្រាស់លេខទូរស័ព្ទនេះនៅក្នុងប្រព័ន្ធឡើយ។\n\nតើលោកអ្នកចង់ជ្រើសរើសឈ្មោះកូនដោយដៃផ្ទាល់ដែរឬទេ?', {
