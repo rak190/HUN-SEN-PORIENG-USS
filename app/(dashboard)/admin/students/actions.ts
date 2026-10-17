@@ -12,7 +12,20 @@ export async function fetchExportData(filters: { q?: string, class?: string, tea
 
   const supabase = await createClient();
 
+  // Scope to Active Academic Year as Single Source of Truth
+  const { data: activeYear } = await supabase
+    .from('academic_years')
+    .select('id')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   let query = supabase.from('active_class_rosters').select('*');
+
+  if (activeYear?.id) {
+    query = query.eq('academic_year_id', activeYear.id);
+  }
 
   // Principal institutional scoping
   if (role === 'principal' && profile.school_id) {

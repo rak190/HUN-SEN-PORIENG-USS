@@ -27,9 +27,28 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
 
   const supabase = await createClient();
 
-  // We need to figure out all unique classes and teachers for the dropdowns.
-  // Instead of querying everything, we'll fetch them separately to populate filters.
-  const { data: dbClasses } = await supabase.from('classes').select('id, name, teacher_id');
+  // 1. Fetch Active Academic Year as Single Source of Truth
+  const { data: activeYear } = await supabase
+    .from('academic_years')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const activeYearId = activeYear?.id || null;
+
+  // 2. Fetch Active Classes (Strictly scoped to active academic year and not archived)
+  let classesQuery = supabase
+    .from('classes')
+    .select('id, name, teacher_id')
+    .eq('is_archived', false);
+
+  if (activeYearId) {
+    classesQuery = classesQuery.eq('academic_year_id', activeYearId);
+  }
+
+  const { data: dbClasses } = await classesQuery.order('name', { ascending: true });
   const classOptions = dbClasses ? dbClasses.map(c => ({ id: c.id, name: c.name })) : [];
   const classNames = classOptions.map(c => c.name);
   
@@ -41,10 +60,14 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
   }
   const teacherNames = teacherProfiles.map(t => t.full_name);
 
-  // Main Query
+  // 3. Main Query (Strictly scoped to active academic year)
   let query = supabase
     .from('active_class_rosters')
     .select('*', { count: 'exact' });
+
+  if (activeYearId) {
+    query = query.eq('academic_year_id', activeYearId);
+  }
 
   // Apply filters
   if (q) {
@@ -109,9 +132,17 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
     });
   }
 
-  // Fetch Global Stats
-  const { count: femaleCount } = await supabase.from('active_class_rosters').select('*', { count: 'exact', head: true }).in('gender', ['F', 'ស្រី']);
-  const { count: maleCount } = await supabase.from('active_class_rosters').select('*', { count: 'exact', head: true }).in('gender', ['M', 'ប្រុស']);
+  // Fetch Global Stats (Scoped to active academic year)
+  let femaleQuery = supabase.from('active_class_rosters').select('*', { count: 'exact', head: true }).in('gender', ['F', 'ស្រី']);
+  let maleQuery = supabase.from('active_class_rosters').select('*', { count: 'exact', head: true }).in('gender', ['M', 'ប្រុស']);
+
+  if (activeYearId) {
+    femaleQuery = femaleQuery.eq('academic_year_id', activeYearId);
+    maleQuery = maleQuery.eq('academic_year_id', activeYearId);
+  }
+
+  const { count: femaleCount } = await femaleQuery;
+  const { count: maleCount } = await maleQuery;
 
   return (
     <MasterStudentsClient 
