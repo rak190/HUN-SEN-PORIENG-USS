@@ -166,8 +166,26 @@ export async function POST(req: NextRequest) {
           s => s.total_score || 0
         );
 
-        // 5. Query attendance using authoritative date range
+        // 5. Query attendance using dual-source resolution (Monthly Summaries + Daily Records with E/A codes)
         const range = resolvePeriodDateRange(month, academicYear);
+        const targetIsoMonth = range.startDate.substring(0, 7);
+
+        const { data: monthlySummaries } = await supabase
+          .from('monthly_attendance_summaries')
+          .select('student_id, permission_count, absent_count')
+          .eq('class_id', class_id)
+          .eq('month', targetIsoMonth);
+
+        const monthlySummaryMap = new Map<string, { excused: number; unexcused: number }>();
+        if (monthlySummaries) {
+          for (const ms of monthlySummaries) {
+            monthlySummaryMap.set(ms.student_id, {
+              excused: Number(ms.permission_count || 0),
+              unexcused: Number(ms.absent_count || 0)
+            });
+          }
+        }
+
         const { data: attendance, error: attError } = await supabase
           .from('attendance_records')
           .select('student_id, status')
@@ -195,9 +213,20 @@ export async function POST(req: NextRequest) {
           const studentScores = (scoreData?.scores as Record<string, number>) || {};
           const calculation = calculateStudentMonthlyGrade(studentScores, schema, gradingScales);
 
-          const attData = attendance?.filter(a => a.student_id === sub.student_id) || [];
-          const excused = attData.filter(a => a.status === 'permission').length;
-          const unexcused = attData.filter(a => a.status === 'absent').length;
+          let excused = 0;
+          let unexcused = 0;
+          const monthlySummary = monthlySummaryMap.get(sub.student_id);
+          if (monthlySummary) {
+            excused = monthlySummary.excused;
+            unexcused = monthlySummary.unexcused;
+          } else {
+            const attData = attendance?.filter(a => a.student_id === sub.student_id) || [];
+            for (const a of attData) {
+              const s = (a.status || '').toLowerCase();
+              if (s === 'permission' || s === 'e' || s === 'excused') excused++;
+              else if (s === 'absent' || s === 'a' || s === 'unexcused') unexcused++;
+            }
+          }
 
           const message = `
 🏫 <b>វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</b>

@@ -7,7 +7,20 @@ import { createClient } from '@/lib/supabase/client';
 import { useSearchParams } from 'next/navigation';
 import Modal from '@/components/ui/Modal';
 
-interface ContactRow { id: string; student_id: string; contact_type: string; contacted_at: string; outcome: string; agreement?: string | null; follow_up_at?: string | null; students?: { full_name: string; guardian_phone?: string | null; alternative_phone?: string | null } | null }
+interface ContactRow {
+  id: string;
+  student_id: string;
+  contact_type: string;
+  contacted_at: string;
+  outcome: string;
+  agreement?: string | null;
+  follow_up_at?: string | null;
+  students?: {
+    full_name: string;
+    parent_phone?: string | null;
+    phone?: string | null;
+  } | null;
+}
 
 export default function ParentsPage() {
   const { activeClass, user } = useAuth();
@@ -44,7 +57,7 @@ export default function ParentsPage() {
           const studentIds = stdData.map(s => s.id);
           const { data: cData } = await supabase
             .from('parent_contacts')
-            .select('*, students(full_name, parent_phone)')
+            .select('*, students(full_name, parent_phone, phone)')
             .in('student_id', studentIds)
             .order('created_at', { ascending: false });
           if (cData) contactsData = cData;
@@ -91,7 +104,7 @@ export default function ParentsPage() {
         agreement: form.agreement.trim() || null,
         follow_up_at: form.followUp || null,
         created_by: user.id
-      }).select('*, students(full_name, parent_phone, emergency_phone)').single();
+      }).select('*, students(full_name, parent_phone, phone)').single();
       
       if (error) {
         console.error('Error saving parent contact:', error);
@@ -167,7 +180,7 @@ export default function ParentsPage() {
                     <td className="p-5 text-slate-500">{new Date(contact.contacted_at).toLocaleDateString('km-KH')}</td>
                     <td className="p-5 text-slate-900 font-black">{contact.students?.full_name}</td>
                     <td className="p-5 text-slate-500">{contact.contact_type === 'call' ? 'ទូរស័ព្ទ' : contact.contact_type === 'message' ? 'សារ' : contact.contact_type === 'meeting' ? 'ប្រជុំ' : 'ចុះផ្ទះ'}</td>
-                    <td className="p-5 font-mono text-slate-500">{contact.students?.guardian_phone || contact.students?.alternative_phone || '-'}</td>
+                    <td className="p-5 font-mono text-slate-500">{contact.students?.parent_phone || contact.students?.phone || '-'}</td>
                     <td className="p-5 text-slate-500">{contact.outcome}</td>
                     <td className="p-5 text-center">
                       <span className="bg-blue-50 border border-blue-100 text-[#155EEF] px-3 py-1.5 rounded-lg text-xs font-black">

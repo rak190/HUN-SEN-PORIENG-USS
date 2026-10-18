@@ -100,17 +100,49 @@ export async function GET(req: NextRequest) {
 
     const { data: grade } = await gradeQuery.maybeSingle();
 
-    // 4. Resolve Date Range & Attendance
+    // 4. Resolve Date Range & Attendance (Dual-source: Monthly Summaries + Daily Records with E/A codes)
     const range = resolvePeriodDateRange(period, academicYear);
-    const { data: attendance } = await supabase
-      .from('attendance_records')
-      .select('status')
-      .eq('student_id', studentId)
-      .gte('date', range.startDate)
-      .lte('date', range.endDate);
+    const targetIsoMonth = range.startDate.substring(0, 7);
 
-    const excusedAbsences = (attendance || []).filter(a => a.status === 'permission').length;
-    const unexcusedAbsences = (attendance || []).filter(a => a.status === 'absent').length;
+    let excusedAbsences = 0;
+    let unexcusedAbsences = 0;
+    let foundMonthlySummary = false;
+
+    if (enrollment?.class_id) {
+      const { data: monthlySummary } = await supabase
+        .from('monthly_attendance_summaries')
+        .select('permission_count, absent_count')
+        .eq('student_id', studentId)
+        .eq('class_id', enrollment.class_id)
+        .eq('month', targetIsoMonth)
+        .maybeSingle();
+
+      if (monthlySummary) {
+        excusedAbsences = Number(monthlySummary.permission_count || 0);
+        unexcusedAbsences = Number(monthlySummary.absent_count || 0);
+        foundMonthlySummary = true;
+      }
+    }
+
+    if (!foundMonthlySummary) {
+      const { data: attendance } = await supabase
+        .from('attendance_records')
+        .select('status')
+        .eq('student_id', studentId)
+        .gte('date', range.startDate)
+        .lte('date', range.endDate);
+
+      if (attendance) {
+        for (const a of attendance) {
+          const s = (a.status || '').toLowerCase();
+          if (s === 'permission' || s === 'e' || s === 'excused') {
+            excusedAbsences++;
+          } else if (s === 'absent' || s === 'a' || s === 'unexcused') {
+            unexcusedAbsences++;
+          }
+        }
+      }
+    }
 
     // 5. Calculate Published Rank in Class
     let rankStr = 'N/A';
@@ -285,15 +317,15 @@ export async function GET(req: NextRequest) {
               <div style={{ width: '100px', textAlign: 'center' }}>លទ្ធផល</div>
             </div>
 
-            {/* Table Rows (Up to 11 subjects) */}
-            {calculation.subjectBreakdowns.slice(0, 11).map((sub, idx) => (
+            {/* Table Rows (All subjects in curriculum) */}
+            {calculation.subjectBreakdowns.map((sub, idx) => (
               <div
                 key={sub.subjectId}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  padding: '5px 12px',
-                  fontSize: '13px',
+                  padding: '4px 12px',
+                  fontSize: '12px',
                   borderBottom: idx === calculation.subjectBreakdowns.length - 1 ? 'none' : '1px solid #f1f5f9',
                   backgroundColor: idx % 2 === 0 ? '#ffffff' : '#fafafa',
                 }}
