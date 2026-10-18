@@ -19,7 +19,7 @@ import {
 import Link from 'next/link';
 
 export default function ReportCardsPage() {
-  const { activeClass } = useAuth();
+  const { activeClass, activeAcademicYear } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedPeriod, setSelectedPeriod] = useState('dec');
@@ -71,11 +71,19 @@ export default function ReportCardsPage() {
         targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary', 'may', 'jun', 'jul', 'sem2-exam', 'sem2-summary', 'annual'];
       }
 
-      const { data: gradeData } = await supabase
+      const targetYearId = activeAcademicYear?.id || (activeClass as any)?.academic_year_id;
+      let gradeQuery = supabase
         .from('grades')
         .select('student_id, period, scores')
         .eq('class_id', activeClass.id)
-        .in('period', targetPeriods);
+        .in('period', targetPeriods)
+        .eq('status', 'published'); // Strictly query published grades
+
+      if (targetYearId) {
+        gradeQuery = gradeQuery.eq('academic_year_id', targetYearId);
+      }
+
+      const { data: gradeData } = await gradeQuery;
         
       if (gradeData && stdData) {
         // Collect all subject IDs from the schema
@@ -89,16 +97,28 @@ export default function ReportCardsPage() {
         });
 
         const scoreMap: Record<string, Record<string, number>> = {};
+        let hasAnyScores = false;
         stdData.forEach(std => {
-          scoreMap[std.id] = computeSummaryGrades(gradeData, std.id, selectedPeriod, subjectIds, schema);
+          const studentScores = computeSummaryGrades(gradeData, std.id, selectedPeriod, subjectIds, schema);
+          if (Object.keys(studentScores).length > 0) {
+            hasAnyScores = true;
+          }
+          scoreMap[std.id] = studentScores;
         });
-        setDbScores(scoreMap);
+
+        if (hasAnyScores) {
+          setDbScores(scoreMap);
+        } else {
+          setDbScores({});
+        }
+      } else {
+        setDbScores({});
       }
       setIsLoadingData(false);
     };
     
     fetchData();
-  }, [activeClass?.id, activeClass?.grade, (activeClass as any)?.track, selectedPeriod]);
+  }, [activeClass?.id, activeClass?.grade, (activeClass as any)?.track, activeAcademicYear?.id, selectedPeriod]);
   
   const activeSchema = useMemo(() => {
     return getCurriculumSchemaForClass(activeClass?.grade, (activeClass as any)?.track);
@@ -111,11 +131,12 @@ export default function ReportCardsPage() {
 
   // Calculate ranks
   const rankedStudents = useMemo(() => {
+    if (!students || students.length === 0) return [];
     const sorted = [...students].map(std => {
       const scores = matrixData[std.id] || {};
       const totalScore = activeSchema.subjects.reduce((sum, sub) => sum + (scores[sub.id] || 0), 0);
       const totalCoefficient = maxTotalScore / 50;
-      const average = totalScore / totalCoefficient;
+      const average = totalCoefficient > 0 ? totalScore / totalCoefficient : 0;
       const grade = calculateScale50Grade(average).letter;
 
       return { ...std, totalScore, percentage: average, grade };
@@ -128,6 +149,7 @@ export default function ReportCardsPage() {
   // Calculate subject ranks (1, 1, 3 ranking)
   const subjectRanks = useMemo(() => {
     const ranksMap: Record<string, Record<string, number>> = {};
+    if (!students || students.length === 0) return ranksMap;
     
     // Initialize ranksMap
     students.forEach(std => {
@@ -157,13 +179,29 @@ export default function ReportCardsPage() {
     return ranksMap;
   }, [students, matrixData, activeSchema]);
 
-  const currentStudent = rankedStudents.find(s => s.id === students[currentIndex].id);
+  // Safe student resolution avoiding undefined property access
+  const safeStudentId = students[currentIndex]?.id;
+  const currentStudent = safeStudentId 
+    ? (rankedStudents.find(s => s.id === safeStudentId) || null)
+    : null;
+
+  // Reset index boundary if roster shrinks or class changes
+  useEffect(() => {
+    if (currentIndex >= students.length && students.length > 0) {
+      setCurrentIndex(0);
+    }
+  }, [students.length, currentIndex]);
 
   const handlePrint = () => {
     window.print();
   };
 
   const handleExportGEIP = async () => {
+    if (!rankedStudents || rankedStudents.length === 0) {
+      alert('មិនមានទិន្នន័យសិស្សសម្រាប់ទាញយកទេ');
+      return;
+    }
+
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('GEIP Data', {
       views: [
@@ -259,20 +297,66 @@ export default function ReportCardsPage() {
     if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
   };
 
-  if (isLoadingData) {
-    return <div className="p-12 text-center text-slate-500 font-bold animate-pulse">កំពុងផ្ទុកទិន្នន័យ...</div>;
-  }
-
-  if (students.length === 0 || Object.keys(dbScores).length === 0) {
+  if (!activeClass) {
     return (
       <div className="space-y-6 animate-fadeIn p-4 md:p-8 bg-slate-50 min-h-screen flex flex-col items-center justify-center">
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center max-w-md w-full">
           <Award className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-          <h2 className="text-xl font-black text-slate-800 mb-2">មិនទាន់មានទិន្នន័យ</h2>
+          <h2 className="text-xl font-black text-slate-800 mb-2">សូមជ្រើសរើសថ្នាក់រៀន</h2>
           <p className="text-sm font-semibold text-slate-500 mb-6">
-            មិនមានទិន្នន័យសិស្ស ឬពិន្ទុសម្រាប់ថ្នាក់នេះក្នុង {ACADEMIC_PERIODS.find(p => p.id === selectedPeriod)?.label} ទេ។
+            លោកគ្រូ-អ្នកគ្រូមិនទាន់បានជ្រើសរើសថ្នាក់រៀន ឬមិនទាន់ត្រូវបានចាត់តាំងជាគ្រូបន្ទុកថ្នាក់នៅឡើយទេ។
           </p>
-          <div className="flex items-center justify-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl shadow-sm border border-slate-200 w-fit mx-auto">
+          <Link
+            href="/classes"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#155EEF] hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
+          >
+            ទៅកាន់បញ្ជីថ្នាក់រៀន
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoadingData) {
+    return (
+      <div className="p-12 text-center text-slate-500 font-bold animate-pulse flex flex-col items-center justify-center gap-3">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <span>កំពុងផ្ទុកទិន្នន័យព្រឹត្តិបត្រពិន្ទុ...</span>
+      </div>
+    );
+  }
+
+  if (students.length === 0) {
+    return (
+      <div className="space-y-6 animate-fadeIn p-4 md:p-8 bg-slate-50 min-h-screen flex flex-col items-center justify-center">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center max-w-md w-full">
+          <Award className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <h2 className="text-xl font-black text-slate-800 mb-2">មិនទាន់មានសិស្សក្នុងថ្នាក់នេះទេ</h2>
+          <p className="text-sm font-semibold text-slate-500 mb-6">
+            ថ្នាក់ <span className="font-bold text-slate-800">{activeClass?.name}</span> មិនទាន់មានសិស្សចុះឈ្មោះក្នុងបញ្ជីសកម្មនៅឡើយទេ។
+          </p>
+          <Link
+            href="/classes/info"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#155EEF] hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
+          >
+            ពិនិត្យបញ្ជីឈ្មោះសិស្ស
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (Object.keys(dbScores).length === 0) {
+    const currentPeriodLabel = ACADEMIC_PERIODS.find(p => p.id === selectedPeriod)?.label || selectedPeriod;
+    return (
+      <div className="space-y-6 animate-fadeIn p-4 md:p-8 bg-slate-50 min-h-screen flex flex-col items-center justify-center">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 text-center max-w-md w-full">
+          <Award className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+          <h2 className="text-xl font-black text-slate-800 mb-2">មិនទាន់មានពិន្ទុដែលបានប្រកាសផ្សាយ</h2>
+          <p className="text-sm font-semibold text-slate-500 mb-4">
+            ពិន្ទុសម្រាប់ <span className="font-bold text-slate-800">{currentPeriodLabel}</span> មិនទាន់ត្រូវបានរដ្ឋបាលសាលាប្រកាសផ្សាយជាផ្លូវការនៅឡើយទេ (Pending Publication)។
+          </p>
+          <div className="flex items-center justify-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl shadow-sm border border-slate-200 w-fit mx-auto mb-4">
             <span className="text-xs font-bold text-slate-500">ជ្រើសរើសខែផ្សេង៖</span>
             <select 
               value={selectedPeriod}
@@ -284,12 +368,24 @@ export default function ReportCardsPage() {
               ))}
             </select>
           </div>
+          <Link
+            href="/grades"
+            className="inline-flex items-center gap-2 text-xs font-bold text-[#155EEF] hover:underline"
+          >
+            ← ត្រឡប់ទៅកាន់តារាងពិន្ទុរួម
+          </Link>
         </div>
       </div>
     );
   }
 
-  if (!currentStudent) return <div className="p-12 text-center text-slate-500 font-bold">កំពុងរៀបចំទិន្នន័យ...</div>;
+  if (!currentStudent) {
+    return (
+      <div className="p-12 text-center text-slate-500 font-bold">
+        កំពុងរៀបចំទិន្នន័យសិស្ស...
+      </div>
+    );
+  }
 
   // Reusable Report Card Component for Print Rendering
   const StudentReportCard = ({ studentInfo }: { studentInfo: any }) => {
@@ -307,7 +403,7 @@ export default function ReportCardsPage() {
           <div className="space-y-1">
             <p className="text-sm font-bold text-slate-800">មន្ទីរអប់រំ យុវជន និងកីឡាខេត្តព្រៃវែង</p>
             <p className="text-sm font-bold text-slate-800">សាលា៖ <span className="font-black text-[#155EEF]">វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង</span></p>
-            <p className="text-sm font-bold text-slate-800">ឆ្នាំសិក្សា៖ <span className="font-black">២០២៥-២០២៦</span></p>
+            <p className="text-sm font-bold text-slate-800">ឆ្នាំសិក្សា៖ <span className="font-black">{activeAcademicYear?.name || '២០២៥-២០២៦'}</span></p>
           </div>
           <div className="text-right space-y-1">
             <h1 className="text-2xl font-black text-[#155EEF] uppercase tracking-wide">ព្រឹត្តិបត្រពិន្ទុ</h1>
@@ -623,7 +719,7 @@ export default function ReportCardsPage() {
               <ChevronLeft className="w-5 h-5 text-slate-600" />
             </button>
             <div className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black text-slate-700 w-48 text-center truncate">
-              {currentIndex + 1} / {students.length}: {currentStudent.full_name}
+              {currentIndex + 1} / {students.length}: {currentStudent?.full_name || ''}
             </div>
             <button 
               onClick={nextStudent}

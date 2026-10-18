@@ -630,7 +630,7 @@ export default function GradesPage() {
                           rowIndex === 1 ? 'bg-slate-300 text-slate-800' :
                           rowIndex === 2 ? 'bg-amber-600 text-white' : 'text-slate-600'
                         }`}>
-                          {rowIndex + 1}
+                          {std.rank ?? (rowIndex + 1)}
                         </span>
                       </td>
                       <td className="py-3 px-2 text-center bg-blue-50/40 border-r border-slate-100">
@@ -692,7 +692,7 @@ export default function GradesPage() {
                           rowIndex === 1 ? 'bg-slate-300 text-slate-800' :
                           rowIndex === 2 ? 'bg-amber-600 text-white' : 'text-slate-600'
                         }`}>
-                          {rowIndex + 1}
+                          {std.rank ?? (rowIndex + 1)}
                         </span>
                       </td>
                     </>
@@ -723,7 +723,7 @@ export default function GradesPage() {
                           rowIndex === 1 ? 'bg-slate-300 text-slate-800' :
                           rowIndex === 2 ? 'bg-amber-600 text-white' : 'text-slate-600'
                         }`}>
-                          {rowIndex + 1}
+                          {std.rank ?? (rowIndex + 1)}
                         </span>
                       </td>
                     </>
