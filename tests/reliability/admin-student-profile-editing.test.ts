@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AdminUpdateStudentSchema } from '@/app/(dashboard)/admin/students/actions';
+import { AdminUpdateStudentSchema } from '@/app/(dashboard)/admin/students/student-edit-schema';
 
 describe('Admin Student Profile Editing Suite', () => {
   const rootDir = process.cwd();

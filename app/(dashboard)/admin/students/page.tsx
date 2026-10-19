@@ -13,8 +13,8 @@ export default async function AdminStudentsPage({ searchParams }: { searchParams
   if (role === 'principal') redirect('/principal/students');
   if (role !== 'admin') redirect('/homeroom');
 
-  const resolvedParams = await searchParams;
-  const page = parseInt(resolvedParams.page as string) || 1;
+  const resolvedParams = (await searchParams) || {};
+  const page = parseInt((resolvedParams.page as string) || '1') || 1;
   const pageSize = 50;
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;

@@ -8,6 +8,7 @@ import {
   CheckCircle2, UserCog, Heart, Shield, Sparkles
 } from 'lucide-react';
 import { updateAdminStudentProfileAction } from '../actions';
+import type { AdminUpdateStudentPayload } from '../student-edit-schema';
 
 interface AdminEditStudentModalProps {
   isOpen: boolean;
@@ -250,7 +251,7 @@ export default function AdminEditStudentModal({
       }
 
       // 2. Call Server Action to Update Student Profile
-      const payload = {
+      const payload: AdminUpdateStudentPayload = {
         studentId: student.id,
         full_name: fullName.trim(),
         student_id_number: studentIdNumber.trim(),
@@ -308,7 +309,12 @@ export default function AdminEditStudentModal({
       }, 600);
     } catch (err: any) {
       console.error('Submit edit student error:', err);
-      setErrorMsg(err?.message || 'មានបញ្ហាមិនរំពឹងទុក');
+      const rawMsg = err?.message || '';
+      if (rawMsg.includes('#441') || rawMsg.includes('Server Components render') || rawMsg.includes('Minified React error')) {
+        setErrorMsg('មានបញ្ហាក្នុងការតភ្ជាប់ជាមួយម៉ាស៊ីនបម្រើ (Server Error)។ សូមព្យាយាមម្តងទៀត ឬពិនិត្យការតភ្ជាប់អ៊ីនធឺណិត។');
+      } else {
+        setErrorMsg(rawMsg || 'មានបញ្ហាមិនរំពឹងទុក');
+      }
       setIsSubmitting(false);
     }
   };
