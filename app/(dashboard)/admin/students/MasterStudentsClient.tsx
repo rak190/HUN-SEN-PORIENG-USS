@@ -1017,6 +1017,14 @@ export default function MasterStudentsClient({
         isOpen={!!selectedProfileStudent}
         onClose={() => {
           setSelectedProfileStudent(null);
+        }}
+        onUpdate={(updatedStudent) => {
+          setStudents((prev) =>
+            prev.map((s) => (s.id === updatedStudent.id ? { ...s, ...updatedStudent } : s))
+          );
+          setSelectedProfileStudent((prev: any) =>
+            prev && prev.id === updatedStudent.id ? { ...prev, ...updatedStudent } : prev
+          );
           router.refresh();
         }}
       />

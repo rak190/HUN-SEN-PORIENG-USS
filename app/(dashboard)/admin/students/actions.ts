@@ -2,6 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getServerAuth, requireRole } from '@/lib/auth-server';
+import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
 
 export async function fetchExportData(filters: { q?: string, class?: string, teacher?: string, gender?: string, desk?: string }) {
   const { user, profile, role } = await getServerAuth();
@@ -668,5 +670,240 @@ export async function bulkUpdateStudentStatus(studentIds: string[], status: stri
   } catch (err: any) {
     console.error('Bulk update status error:', err);
     return { success: false, error: err?.message || 'Unknown error occurred' };
+  }
+}
+
+// ============================================================================
+// ADMIN STUDENT PROFILE EDITING ACTION
+// ============================================================================
+
+export const AdminUpdateStudentSchema = z.object({
+  studentId: z.string().uuid({ message: 'លេខសម្គាល់សិស្សមិនត្រឹមត្រូវ (Invalid Student UUID)' }),
+  full_name: z.string().trim().min(2, { message: 'សូមបញ្ចូលគោត្តនាម និងនាមសិស្សយ៉ាងហោចណាស់ ២ តួអក្សរ' }).max(100),
+  student_id_number: z.string().trim().min(1, { message: 'សូមបញ្ចូលអត្តលេខសិស្ស' }).max(50),
+  english_name: z.string().trim().max(100).optional().nullable(),
+  gender: z.enum(['M', 'F', 'ប្រុស', 'ស្រី'], { message: 'ភេទត្រូវតែជា ប្រុស ឬ ស្រី (M or F)' }),
+  dob: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'ទម្រង់ថ្ងៃខែឆ្នាំកំណើតត្រូវតែជា ឆ្នាំ-ខែ-ថ្ងៃ (YYYY-MM-DD)' }),
+  photo_url: z.string().trim().optional().nullable().or(z.literal('')),
+  parent_phone: z.string().trim().max(30).optional().nullable(),
+  emergency_contact_phone: z.string().trim().max(30).optional().nullable(),
+  father_name: z.string().trim().max(100).optional().nullable(),
+  father_job: z.string().trim().max(100).optional().nullable(),
+  father_phone: z.string().trim().max(30).optional().nullable(),
+  mother_name: z.string().trim().max(100).optional().nullable(),
+  mother_job: z.string().trim().max(100).optional().nullable(),
+  mother_phone: z.string().trim().max(30).optional().nullable(),
+  guardian_name: z.string().trim().max(100).optional().nullable(),
+  guardian_job: z.string().trim().max(100).optional().nullable(),
+  guardian_phone: z.string().trim().max(30).optional().nullable(),
+  current_address: z.string().trim().max(255).optional().nullable(),
+  status: z.enum(['new', 'repeater', 'transfer']).optional().nullable(),
+  scholarship: z.enum(['yes', 'no']).optional().nullable(),
+  id_poor: z.enum(['none', 'level_1', 'level_2']).optional().nullable(),
+  orphan: z.enum(['yes', 'no']).optional().nullable(),
+  distance_km: z.coerce.number().min(0).max(100).optional().nullable(),
+  disability: z.enum(['none', 'mild', 'severe']).optional().nullable(),
+  special_needs_status: z.string().trim().max(255).optional().nullable(),
+  desk_number: z.string().trim().max(20).optional().nullable(),
+  room_number: z.string().trim().max(20).optional().nullable(),
+  academic_year_id: z.string().uuid().optional().nullable(),
+});
+
+export type AdminUpdateStudentPayload = z.infer<typeof AdminUpdateStudentSchema>;
+
+export async function updateAdminStudentProfileAction(payload: AdminUpdateStudentPayload) {
+  try {
+    // 1. Authoritative Role Verification (Admin Only)
+    const { user, profile, role } = await getServerAuth();
+    if (!user || !profile || role !== 'admin') {
+      return { success: false, error: 'Unauthorized: Admin privileges required.' };
+    }
+
+    // 2. Strict Payload Validation
+    const validationResult = AdminUpdateStudentSchema.safeParse(payload);
+    if (!validationResult.success) {
+      const firstIssue = validationResult.error.issues[0];
+      return {
+        success: false,
+        error: firstIssue ? `${firstIssue.message}` : 'ទិន្នន័យមិនត្រឹមត្រូវ (Invalid input data)',
+      };
+    }
+
+    const validated = validationResult.data;
+    const cleanIdNumber = validated.student_id_number.trim();
+    const cleanFullName = validated.full_name.trim();
+    const normalizedGender = (validated.gender === 'ស្រី' || validated.gender === 'F') ? 'F' : 'M';
+
+    const supabase = await createClient();
+
+    // 3. Verify Target Student Exists
+    const { data: currentStudent, error: findError } = await supabase
+      .from('students')
+      .select('id, student_id_number, full_name, photo_url')
+      .eq('id', validated.studentId)
+      .maybeSingle();
+
+    if (findError || !currentStudent) {
+      return { success: false, error: 'រកមិនឃើញទិន្នន័យសិស្សនៅក្នុងប្រព័ន្ធទេ (Student not found).' };
+    }
+
+    // 4. Duplicate Check: Ensure student_id_number is not assigned to another student
+    const { data: conflictStudent, error: conflictErr } = await supabase
+      .from('students')
+      .select('id, full_name')
+      .eq('student_id_number', cleanIdNumber)
+      .neq('id', validated.studentId)
+      .maybeSingle();
+
+    if (conflictErr) {
+      console.error('Duplicate student_id_number check error:', conflictErr);
+    }
+
+    if (conflictStudent) {
+      return {
+        success: false,
+        error: `អត្តលេខសិស្ស "${cleanIdNumber}" ត្រូវបានប្រើប្រាស់រួចហើយដោយសិស្ស ${conflictStudent.full_name}។ សូមពិនិត្យម្តងទៀត។`,
+      };
+    }
+
+    // 5. Build Explicit Column Allowlist for public.students
+    const studentUpdates: Record<string, any> = {
+      full_name: cleanFullName,
+      student_id_number: cleanIdNumber,
+      english_name: validated.english_name ? validated.english_name.trim() : null,
+      gender: normalizedGender,
+      dob: validated.dob.trim(),
+      date_of_birth: validated.dob.trim(),
+      photo_url: validated.photo_url && validated.photo_url.trim().length > 0 ? validated.photo_url.trim() : null,
+      parent_phone: validated.parent_phone ? validated.parent_phone.trim() : null,
+      emergency_contact_phone: validated.emergency_contact_phone ? validated.emergency_contact_phone.trim() : null,
+      father_name: validated.father_name ? validated.father_name.trim() : null,
+      father_job: validated.father_job ? validated.father_job.trim() : null,
+      father_phone: validated.father_phone ? validated.father_phone.trim() : null,
+      mother_name: validated.mother_name ? validated.mother_name.trim() : null,
+      mother_job: validated.mother_job ? validated.mother_job.trim() : null,
+      mother_phone: validated.mother_phone ? validated.mother_phone.trim() : null,
+      guardian_name: validated.guardian_name ? validated.guardian_name.trim() : null,
+      guardian_job: validated.guardian_job ? validated.guardian_job.trim() : null,
+      guardian_phone: validated.guardian_phone ? validated.guardian_phone.trim() : null,
+      current_address: validated.current_address ? validated.current_address.trim() : null,
+      address: validated.current_address ? validated.current_address.trim() : null,
+      status: validated.status || null,
+      scholarship: validated.scholarship || null,
+      id_poor: validated.id_poor || null,
+      orphan: validated.orphan || null,
+      distance_km: validated.distance_km !== undefined && validated.distance_km !== null ? Number(validated.distance_km) : null,
+      disability: validated.disability || null,
+      special_needs_status: validated.special_needs_status ? validated.special_needs_status.trim() : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    // 6. Execute Canonical Update on public.students
+    const { data: updatedStudent, error: updateError } = await supabase
+      .from('students')
+      .update(studentUpdates)
+      .eq('id', validated.studentId)
+      .select()
+      .single();
+
+    if (updateError) {
+      if (updateError.code === '23505') {
+        return {
+          success: false,
+          error: `អត្តលេខសិស្ស "${cleanIdNumber}" មានភាពជាន់គ្នាជាមួយសិស្សផ្សេងទៀតក្នុងប្រព័ន្ធ។`,
+        };
+      }
+      return {
+        success: false,
+        error: `បរាជ័យក្នុងការកែប្រែទិន្នន័យ៖ ${updateError.message}`,
+      };
+    }
+
+    // 7. Update Enrollment-Specific Seating (desk_number, room_number) for Active Academic Year
+    let targetYearId = validated.academic_year_id;
+    if (!targetYearId) {
+      const { data: activeYear } = await supabase
+        .from('academic_years')
+        .select('id')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      targetYearId = activeYear?.id;
+    }
+
+    let enrollmentUpdated = false;
+    if (targetYearId && (validated.desk_number !== undefined || validated.room_number !== undefined)) {
+      const enrollmentUpdates: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (validated.desk_number !== undefined) {
+        enrollmentUpdates.desk_number = validated.desk_number ? validated.desk_number.trim() : null;
+      }
+      if (validated.room_number !== undefined) {
+        enrollmentUpdates.room_number = validated.room_number ? validated.room_number.trim() : null;
+      }
+
+      const { error: enrollErr } = await supabase
+        .from('student_enrollments')
+        .update(enrollmentUpdates)
+        .eq('student_id', validated.studentId)
+        .eq('academic_year_id', targetYearId);
+
+      if (!enrollErr) {
+        enrollmentUpdated = true;
+      } else {
+        console.warn('Enrollment seating update warning:', enrollErr.message);
+      }
+    }
+
+    // 8. Structured Audit Logging
+    const changedFieldKeys = Object.keys(studentUpdates).filter((k) => k !== 'updated_at');
+    if (enrollmentUpdated) {
+      if (validated.desk_number !== undefined) changedFieldKeys.push('desk_number');
+      if (validated.room_number !== undefined) changedFieldKeys.push('room_number');
+    }
+
+    try {
+      await supabase.from('audit_logs').insert([{
+        action: `បានកែសម្រួលព័ត៌មានផ្ទាល់ខ្លួនរបស់សិស្ស៖ ${cleanFullName} (${cleanIdNumber})`,
+        type: 'info',
+        user_id: user.id,
+        school_id: profile.school_id,
+        target_table: 'students',
+        record_id: validated.studentId,
+        details: {
+          student_id: validated.studentId,
+          student_name: cleanFullName,
+          student_id_number: cleanIdNumber,
+          updated_fields: changedFieldKeys,
+        },
+        status: 'success',
+      }]);
+    } catch (auditErr) {
+      console.warn('Audit logging warning:', auditErr);
+    }
+
+    // 9. Revalidate Server Pages & Scoped Client Cache
+    revalidatePath('/admin/students');
+    revalidatePath('/students');
+    revalidatePath('/homeroom');
+    revalidatePath('/classes/info');
+
+    return {
+      success: true,
+      student: {
+        ...updatedStudent,
+        latin_name: updatedStudent.english_name || null,
+        desk_number: validated.desk_number ?? null,
+        room_number: validated.room_number ?? null,
+      },
+    };
+  } catch (err: any) {
+    console.error('updateAdminStudentProfileAction error:', err);
+    return {
+      success: false,
+      error: err?.message || 'មានបញ្ហាមិនរំពឹងទុកក្នុងការកែប្រែព័ត៌មានសិស្ស',
+    };
   }
 }
