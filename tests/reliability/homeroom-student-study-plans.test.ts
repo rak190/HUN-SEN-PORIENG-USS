@@ -95,6 +95,22 @@ describe('Homeroom Student Study Plan Generator Suite', () => {
       'Page must filter out archived classes'
     );
 
+    // Schema column verification (must use canonical room_number, never invalid room column)
+    assert.ok(
+      pageContent.includes('room_number'),
+      'Page must select canonical room_number column from classes'
+    );
+    assert.ok(
+      !pageContent.includes("room,") && !pageContent.includes("'room'"),
+      'Page must NOT query invalid non-existent column room from classes'
+    );
+
+    // Multi-class teacher support & ordered resolution
+    assert.ok(
+      pageContent.includes(".order('name', { ascending: true })"),
+      'Page must order classes by name to support deterministic multi-class resolution'
+    );
+
     // Graceful unassigned teacher handling
     assert.ok(
       pageContent.includes('មិនមានថ្នាក់រៀនដែលត្រូវបានចាត់តាំងទេ'),

@@ -52,24 +52,51 @@ export default async function StudentStudyPlansPage({ searchParams }: PageProps)
   let availableClasses: Classroom[] = [];
 
   if (role === 'teacher') {
-    // Teachers are strictly restricted to their assigned class
-    const { data: teacherClass } = await supabase
+    // Teachers are strictly restricted to their assigned class(es)
+    const { data: teacherClasses, error: teacherClassesError } = await supabase
       .from('classes')
-      .select('id, name, grade, track, room, teacher_id, school_id, academic_year_id')
+      .select('id, name, grade, track, room_number, teacher_id, school_id, academic_year_id')
       .eq('teacher_id', profile.id)
       .eq('academic_year_id', activeYear.id)
       .eq('is_archived', false)
-      .maybeSingle();
+      .order('name', { ascending: true });
 
-    if (teacherClass) {
-      effectiveClassId = teacherClass.id;
-      classroom = teacherClass as unknown as Classroom;
+    if (teacherClassesError) {
+      console.error('Error fetching teacher classes in /homeroom/student-study-plans:', teacherClassesError);
+    }
+
+    availableClasses = (teacherClasses as unknown as Classroom[]) || [];
+
+    // Resilient Fallback: If no class has matching academic_year_id, check if assigned class has null academic_year_id
+    if (availableClasses.length === 0) {
+      const { data: fallbackClasses, error: fallbackError } = await supabase
+        .from('classes')
+        .select('id, name, grade, track, room_number, teacher_id, school_id, academic_year_id')
+        .eq('teacher_id', profile.id)
+        .is('academic_year_id', null)
+        .eq('is_archived', false)
+        .order('name', { ascending: true });
+
+      if (fallbackError) {
+        console.error('Error in teacher class fallback:', fallbackError);
+      }
+      if (fallbackClasses && fallbackClasses.length > 0) {
+        availableClasses = fallbackClasses as unknown as Classroom[];
+      }
+    }
+
+    if (classId && availableClasses.some((c) => c.id === classId)) {
+      effectiveClassId = classId;
+      classroom = availableClasses.find((c) => c.id === classId) || null;
+    } else if (availableClasses.length > 0) {
+      effectiveClassId = availableClasses[0].id;
+      classroom = availableClasses[0];
     }
   } else if (role === 'admin' || role === 'principal') {
     // Admin & Principal can view all classes in their school
     let classesQuery = supabase
       .from('classes')
-      .select('id, name, grade, track, room, teacher_id, school_id, academic_year_id')
+      .select('id, name, grade, track, room_number, teacher_id, school_id, academic_year_id')
       .eq('academic_year_id', activeYear.id)
       .eq('is_archived', false)
       .order('name', { ascending: true });
@@ -78,7 +105,10 @@ export default async function StudentStudyPlansPage({ searchParams }: PageProps)
       classesQuery = classesQuery.eq('school_id', profile.school_id);
     }
 
-    const { data: allSchoolClasses } = await classesQuery;
+    const { data: allSchoolClasses, error: schoolClassesError } = await classesQuery;
+    if (schoolClassesError) {
+      console.error('Error fetching school classes for admin/principal:', schoolClassesError);
+    }
     availableClasses = (allSchoolClasses as unknown as Classroom[]) || [];
 
     if (classId && availableClasses.some((c) => c.id === classId)) {
@@ -153,11 +183,13 @@ export default async function StudentStudyPlansPage({ searchParams }: PageProps)
 
   return (
     <div className="space-y-4">
-      {/* Admin / Principal Class Selector Switcher */}
-      {(role === 'admin' || role === 'principal') && availableClasses.length > 1 && (
+      {/* Class Selector Switcher (for Admin, Principal, or Teacher with multiple classes) */}
+      {availableClasses.length > 1 && (
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between gap-4 print:hidden">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-extrabold text-slate-600">ជ្រើសរើសថ្នាក់រៀន (Admin/Principal Switcher)៖</span>
+            <span className="text-xs font-extrabold text-slate-600">
+              {role === 'teacher' ? 'ជ្រើសរើសថ្នាក់រៀន៖' : 'ជ្រើសរើសថ្នាក់រៀន (Admin/Principal Switcher)៖'}
+            </span>
             <div className="flex flex-wrap gap-1.5">
               {availableClasses.map((cls) => (
                 <Link
