@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
@@ -21,8 +21,8 @@ import {
   Loader2
 } from 'lucide-react';
 import Link from 'next/link';
-import * as ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { buildCacheKey, getOrFetchScoped, invalidateClassGrades } from '@/lib/cache/client-cache';
 import { ClassGradeImportModal } from '@/components/grades/ClassGradeImportModal';
 import { GeipExportModal } from '@/components/grades/GeipExportModal';
 import { HonorRollExportModal } from '@/components/grades/HonorRollExportModal';
@@ -86,6 +86,7 @@ export default function GradesPage() {
       const arrayBuffer = await response.arrayBuffer();
       
       // 2. Load into exceljs
+      const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(arrayBuffer);
       
@@ -168,60 +169,80 @@ export default function GradesPage() {
     return cols;
   }, [activeSchema]);
 
-  useEffect(() => {
-    if (!activeClass) {
+  const loadData = useCallback(async () => {
+    if (!activeClass?.id) {
       setStudents([]);
       setMatrixData({});
       return;
     }
+    setIsLoading(true);
 
-    async function loadData() {
-      setIsLoading(true);
-      const { data: stdData } = await supabase
-        .from('active_class_rosters')
-        .select('*')
-        .eq('enrollment_class_id', activeClass?.id || '')
-        .order('desk_number', { ascending: true, nullsFirst: false })
-        .order('full_name', { ascending: true });
-
-      if (stdData && stdData.length > 0) {
-        setStudents(stdData as Student[]);
-        
-        // Load grades
-        let targetPeriods = [selectedPeriod];
-        if (selectedPeriod === 'sem1-summary') {
-          targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary'];
-        } else if (selectedPeriod === 'sem2-summary') {
-          targetPeriods = ['may', 'jun', 'jul', 'sem2-exam', 'sem2-summary'];
-        } else if (selectedPeriod === 'annual') {
-          targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary', 'may', 'jun', 'jul', 'sem2-exam', 'sem2-summary', 'annual'];
-        }
-
-        const { data: gradesData } = await supabase
-          .from('grades')
-          .select('student_id, period, scores')
-          .eq('class_id', activeClass?.id || '')
-          .in('period', targetPeriods)
-          .eq('status', 'published'); // Filter to only show scores published by the Admin
-
-        const newMap: Record<string, Record<string, number>> = {};
-        if (gradesData) {
-          setRawGradesData(gradesData);
-          const subjectIds = flatColumns.map(c => c.id);
-          stdData.forEach(s => {
-            newMap[s.id] = computeSummaryGrades(gradesData, s.id, selectedPeriod, subjectIds, activeSchema);
-          });
-        }
-        setMatrixData(newMap);
-      } else {
-        setStudents([]);
-        setMatrixData({});
-      }
-      setIsLoading(false);
+    let targetPeriods = [selectedPeriod];
+    if (selectedPeriod === 'sem1-summary') {
+      targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary'];
+    } else if (selectedPeriod === 'sem2-summary') {
+      targetPeriods = ['may', 'jun', 'jul', 'sem2-exam', 'sem2-summary'];
+    } else if (selectedPeriod === 'annual') {
+      targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary', 'may', 'jun', 'jul', 'sem2-exam', 'sem2-summary', 'annual'];
     }
 
+    const rosterKey = buildCacheKey({
+      userId: profile?.id,
+      role: profile?.role,
+      schoolId: profile?.school_id,
+      academicYearId: activeAcademicYear?.id || activeClass?.academic_year_id,
+      classId: activeClass.id,
+      resource: 'roster',
+    });
+
+    try {
+      const [rosterRes, gradesRes] = await Promise.all([
+        getOrFetchScoped<Student[]>(
+          rosterKey,
+          async () => {
+            const { data, error } = await supabase
+              .from('active_class_rosters')
+              .select('id, full_name, student_id_number, gender, desk_number')
+              .eq('enrollment_class_id', activeClass?.id || '')
+              .order('desk_number', { ascending: true, nullsFirst: false })
+              .order('full_name', { ascending: true });
+            if (error) throw error;
+            return (data as unknown as Student[]) || [];
+          },
+          { ttlMs: 120_000, allowStale: true }
+        ),
+        supabase
+          .from('grades')
+          .select('student_id, period, scores')
+          .eq('class_id', activeClass.id)
+          .in('period', targetPeriods)
+          .eq('status', 'published'),
+      ]);
+
+      const stdData = rosterRes.data || [];
+      setStudents(stdData);
+
+      const gradesData = gradesRes.data || [];
+      setRawGradesData(gradesData);
+
+      const newMap: Record<string, Record<string, number>> = {};
+      if (gradesData.length > 0 && stdData.length > 0) {
+        const subjectIds = flatColumns.map(c => c.id);
+        stdData.forEach(s => {
+          newMap[s.id] = computeSummaryGrades(gradesData, s.id, selectedPeriod, subjectIds, activeSchema);
+        });
+      }
+      setMatrixData(newMap);
+    } catch (err) {
+      console.error('[GradesPage] Failed to load data:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeClass?.id, activeClass?.academic_year_id, profile?.id, profile?.role, profile?.school_id, activeAcademicYear?.id, selectedPeriod, flatColumns, activeSchema, supabase]);
+
+  useEffect(() => {
     loadData();
-  }, [activeClass, curriculumType, selectedPeriod, isDemoMode, flatColumns]);
+  }, [loadData]);
 
   function handleScoreChange(studentId: string, colId: string, value: string, maxScore: number) {
     // Read-only, no longer allow manual changes here.
@@ -741,8 +762,10 @@ export default function GradesPage() {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onImportComplete={() => {
-           // Reload page or re-fetch data to reflect imported grades
-           window.location.reload();
+           if (activeClass?.id) {
+             invalidateClassGrades(activeClass.id, selectedPeriod);
+           }
+           loadData();
         }}
         classId={activeClass?.id || ''}
         className={activeClass?.name || ''}

@@ -4,9 +4,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { Student } from '@/types';
 import { CURRICULUM_SCHEMAS, getCurriculumSchemaForClass } from '@/lib/curriculum';
-import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { createClient } from '@/lib/supabase/client';
+import { buildCacheKey, getOrFetchScoped } from '@/lib/cache/client-cache';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
 import { computeSummaryGrades, calculateScale50Grade, assignGradeRanks } from '@/lib/domain/grading';
 import {
@@ -34,34 +34,7 @@ export default function ReportCardsPage() {
         const fetchData = async () => {
       setIsLoadingData(true);
       
-      // Fetch teacher info
-      const { data: classData } = await supabase
-        .from('classes')
-        .select('name, teacher_id, profiles:teacher_id(full_name)')
-        .eq('id', activeClass.id)
-        .single();
-      
-      if (classData) {
-        setTeacherName((classData.profiles as any)?.full_name || '');
-      }
-
-      // Fetch students for this class
-      const { data: stdData } = await supabase
-        .from('active_class_rosters')
-        .select('*')
-        .eq('enrollment_class_id', activeClass.id)
-        .order('full_name', { ascending: true });
-        
-      if (stdData && stdData.length > 0) {
-        setStudents(stdData);
-      } else {
-        setStudents([]);
-        setDbScores({});
-        setIsLoadingData(false);
-        return;
-      }
-      
-      // Define which periods we need to fetch based on selected period
+      const targetYearId = activeAcademicYear?.id || (activeClass as any)?.academic_year_id;
       let targetPeriods = [selectedPeriod];
       if (selectedPeriod === 'sem1-summary') {
         targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary'];
@@ -71,7 +44,6 @@ export default function ReportCardsPage() {
         targetPeriods = ['dec', 'jan', 'feb', 'sem1-exam', 'sem1-summary', 'may', 'jun', 'jul', 'sem2-exam', 'sem2-summary', 'annual'];
       }
 
-      const targetYearId = activeAcademicYear?.id || (activeClass as any)?.academic_year_id;
       let gradeQuery = supabase
         .from('grades')
         .select('student_id, period, scores')
@@ -83,7 +55,48 @@ export default function ReportCardsPage() {
         gradeQuery = gradeQuery.eq('academic_year_id', targetYearId);
       }
 
-      const { data: gradeData } = await gradeQuery;
+      const rosterKey = buildCacheKey({
+        academicYearId: targetYearId,
+        classId: activeClass.id,
+        resource: 'roster',
+      });
+
+      const [classRes, rosterRes, gradeRes] = await Promise.all([
+        supabase
+          .from('classes')
+          .select('name, teacher_id, profiles:teacher_id(full_name)')
+          .eq('id', activeClass.id)
+          .single(),
+        getOrFetchScoped<Student[]>(
+          rosterKey,
+          async () => {
+            const { data, error } = await supabase
+              .from('active_class_rosters')
+              .select('id, full_name, student_id_number, gender, desk_number, dob')
+              .eq('enrollment_class_id', activeClass.id)
+              .order('full_name', { ascending: true });
+            if (error) throw error;
+            return (data as unknown as Student[]) || [];
+          },
+          { ttlMs: 120_000, allowStale: true }
+        ),
+        gradeQuery,
+      ]);
+
+      const classData = classRes.data;
+      if (classData) {
+        setTeacherName((classData.profiles as any)?.full_name || '');
+      }
+
+      const stdData = rosterRes.data || [];
+      setStudents(stdData);
+      if (stdData.length === 0) {
+        setDbScores({});
+        setIsLoadingData(false);
+        return;
+      }
+
+      const gradeData = gradeRes.data;
         
       if (gradeData && stdData) {
         // Collect all subject IDs from the schema
@@ -202,6 +215,7 @@ export default function ReportCardsPage() {
       return;
     }
 
+    const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('GEIP Data', {
       views: [

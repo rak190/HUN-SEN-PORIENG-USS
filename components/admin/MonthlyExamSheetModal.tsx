@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { FileSpreadsheet, Download, CheckCircle2, AlertCircle, Loader2, Sparkles, Send, ExternalLink, ShieldCheck, Copy } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import Modal from '@/components/ui/Modal';
 import { createClient } from '@/lib/supabase/client';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
@@ -174,6 +173,7 @@ export function MonthlyExamSheetModal({ isOpen, onClose, selectedPeriod }: Month
 
       // 4. Trigger download
       const fileName = `តារាងពិន្ទុប្រឡង${currentPeriodObj.label}_វិទ្យាល័យហ៊ុនសែនពោធិ៍រៀង_${academicYear}.xlsx`;
+      const XLSX = await import('xlsx');
       XLSX.writeFile(wb, fileName);
 
       setIsSuccess(true);

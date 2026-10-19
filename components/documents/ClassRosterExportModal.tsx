@@ -4,7 +4,6 @@ import React from 'react';
 import { FileText, Printer } from 'lucide-react';
 import { Student, AcademicYear } from '@/types';
 import Modal from '@/components/ui/Modal';
-import * as XLSX from 'xlsx';
 
 interface ClassRosterExportModalProps {
   isOpen: boolean;

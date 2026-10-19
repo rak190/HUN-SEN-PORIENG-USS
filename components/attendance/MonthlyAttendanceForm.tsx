@@ -24,7 +24,7 @@ import {
   Download
 } from 'lucide-react';
 import Link from 'next/link';
-import * as XLSX from 'xlsx';
+import { buildCacheKey, getOrFetchScoped, invalidateClassAttendance } from '@/lib/cache/client-cache';
 
 const ROOT_CAUSE_OPTIONS: { value: RootCauseAbsence; label: string }[] = [
   { value: 'farming', label: '🌾 ជួយការងារស្រែចម្ការ' },
@@ -36,7 +36,7 @@ const ROOT_CAUSE_OPTIONS: { value: RootCauseAbsence; label: string }[] = [
 ];
 
 export default function MonthlyAttendanceForm() {
-  const { activeClass, user } = useAuth();
+  const { activeClass, user, profile, activeAcademicYear } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   
   // Format current month to YYYY-MM
@@ -395,35 +395,52 @@ export default function MonthlyAttendanceForm() {
     async function loadData() {
       setLoading(true);
       try {
-        const { data: stdData } = await supabase
-          .from('active_class_rosters')
-          .select('*')
-          .eq('enrollment_class_id', activeClass?.id || '')
-          .order('full_name', { ascending: true });
-
-        if (stdData && stdData.length > 0) {
-          setStudents(stdData as Student[]);
-        } else {
-          setStudents([]);
-        }
-
-        const { data: summaryData } = await supabase
-          .from('monthly_attendance_summaries')
-          .select('*')
-          .eq('class_id', activeClass?.id || '')
-          .eq('month', selectedMonth);
-
         const startDate = `${selectedMonth}-01`;
         const endDate = `${selectedMonth}-31`;
 
-        const { data: dailyRecords } = await supabase
-          .from('attendance_records')
-          .select('*')
-          .eq('class_id', activeClass?.id || '')
-          .gte('date', startDate)
-          .lte('date', endDate);
+        const rosterKey = buildCacheKey({
+          userId: user?.id,
+          role: profile?.role,
+          schoolId: profile?.school_id,
+          academicYearId: activeAcademicYear?.id || activeClass?.academic_year_id,
+          classId: activeClass?.id,
+          resource: 'roster',
+        });
 
-        const allStudents = stdData && stdData.length > 0 ? stdData : [];
+        const [rosterRes, summaryRes, dailyRes] = await Promise.all([
+          getOrFetchScoped<Student[]>(
+            rosterKey,
+            async () => {
+              const { data, error } = await supabase
+                .from('active_class_rosters')
+                .select('id, full_name, student_id_number, gender')
+                .eq('enrollment_class_id', activeClass?.id || '')
+                .order('full_name', { ascending: true });
+              if (error) throw error;
+              return (data as Student[]) || [];
+            },
+            { ttlMs: 120_000, allowStale: true }
+          ),
+          supabase
+            .from('monthly_attendance_summaries')
+            .select('id, class_id, student_id, month, absent_count, permission_count, late_count, root_cause, needs_home_visit')
+            .eq('class_id', activeClass?.id || '')
+            .eq('month', selectedMonth),
+          supabase
+            .from('attendance_records')
+            .select('id, class_id, student_id, date, status, notes')
+            .eq('class_id', activeClass?.id || '')
+            .gte('date', startDate)
+            .lte('date', endDate),
+        ]);
+
+        const stdData = rosterRes.data || [];
+        setStudents(stdData);
+
+        const summaryData = summaryRes.data || [];
+        const dailyRecords = dailyRes.data || [];
+
+        const allStudents = stdData;
         const newMap: Record<string, any> = {};
         
         const daysSubmitted = new Set<string>();
@@ -437,7 +454,7 @@ export default function MonthlyAttendanceForm() {
         });
 
         if (dailyRecords) {
-          setRawDailyRecords(dailyRecords as AttendanceRecord[]);
+          setRawDailyRecords((dailyRecords as unknown) as AttendanceRecord[]);
           dailyRecords.forEach(rec => {
             daysSubmitted.add(rec.date);
             if (!autoSums[rec.student_id]) autoSums[rec.student_id] = { absent_count: 0, permission_count: 0, late_count: 0 };
@@ -550,6 +567,7 @@ export default function MonthlyAttendanceForm() {
         .upsert(upsertPayload, { onConflict: 'class_id,student_id,month' });
 
       if (error) throw error;
+      invalidateClassAttendance(activeClass.id, selectedMonth);
       setSyncStatus('synced');
       setHasUnsavedChanges(false);
     } catch (e) {

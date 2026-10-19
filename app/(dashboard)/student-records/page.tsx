@@ -6,9 +6,10 @@ import { Printer, User as UserIcon, ChevronLeft, ChevronRight, Download } from '
 import StudentRecordBook from './StudentRecordBook';
 import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
+import { buildCacheKey, getOrFetchScoped } from '@/lib/cache/client-cache';
 
 export default function StudentRecordsPage() {
-  const { activeClass } = useAuth();
+  const { activeClass, profile } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [gradesData, setGradesData] = useState<any[]>([]);
   const [teacherName, setTeacherName] = useState<string>('..................................');
@@ -22,10 +23,34 @@ export default function StudentRecordsPage() {
     const fetchClassData = async () => {
       setIsLoading(true);
       try {
+        const rosterKey = buildCacheKey({
+          userId: profile?.id,
+          role: profile?.role,
+          schoolId: profile?.school_id,
+          academicYearId: activeClass.academic_year_id,
+          classId: activeClass.id,
+          resource: 'roster',
+        });
+
         // Fetch all required class data concurrently
-        const [studentsRes, gradesRes] = await Promise.all([
-          supabase.from('active_class_rosters').select('*').eq('enrollment_class_id', activeClass.id).order('full_name', { ascending: true }),
-          supabase.from('grades').select('*').eq('class_id', activeClass.id)
+        const [studentsRes, gradesRes, teacherRes] = await Promise.all([
+          getOrFetchScoped<Student[]>(
+            rosterKey,
+            async () => {
+              const { data, error } = await supabase
+                .from('active_class_rosters')
+                .select('id, full_name, student_id_number, gender')
+                .eq('enrollment_class_id', activeClass.id)
+                .order('full_name', { ascending: true });
+              if (error) throw error;
+              return (data as Student[]) || [];
+            },
+            { ttlMs: 120_000, allowStale: true }
+          ),
+          supabase.from('grades').select('student_id, period, scores').eq('class_id', activeClass.id),
+          activeClass.teacher_id
+            ? supabase.from('profiles').select('full_name').eq('id', activeClass.teacher_id).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
         ]);
         
         const fetchedStudents = studentsRes.data || [];
@@ -40,16 +65,9 @@ export default function StudentRecordsPage() {
           setGradesData(gradesRes.data);
         }
 
-        // Fetch homeroom teacher name
-        if (activeClass.teacher_id) {
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', activeClass.teacher_id)
-            .single();
-          if (profileData && profileData.full_name) {
-            setTeacherName(profileData.full_name);
-          }
+        const profileData = teacherRes.data;
+        if (profileData && profileData.full_name) {
+          setTeacherName(profileData.full_name);
         }
       } catch (err) {
         console.warn("Failed to load students:", err);

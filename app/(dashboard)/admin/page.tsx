@@ -7,10 +7,11 @@ import { redirect } from 'next/navigation';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminDashboardPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+  const reqStart = performance.now();
   const { month } = await searchParams;
   const supabase = await createClient();
 
-  // 1. Verify User and Role
+  // 1. Authoritative Server-Side User and Role Verification (deduplicated via React.cache)
   const { user, profile, role } = await getServerAuth();
   if (!user || !profile) redirect('/login');
 
@@ -25,87 +26,7 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
   const userSchoolId = profile.school_id || null;
   const dbErrors: string[] = [];
 
-  // 2. Fetch Active Academic Year for Scope
-  let yearQuery = supabase
-    .from('academic_years')
-    .select('id, name, status')
-    .eq('is_active', true);
-
-  if (userSchoolId) {
-    yearQuery = yearQuery.eq('school_id', userSchoolId);
-  }
-
-  const { data: activeYearData, error: yearError } = await yearQuery
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (yearError) {
-    dbErrors.push('Failed to load active academic year');
-  }
-  const activeYearId = activeYearData?.id || null;
-
-  // 3. Fetch Active Classes (Scoped to School and Active Academic Year)
-  let classesQuery = supabase
-    .from('classes')
-    .select('id, name', { count: 'exact' });
-
-  if (userSchoolId) {
-    classesQuery = classesQuery.eq('school_id', userSchoolId);
-  }
-  if (activeYearId) {
-    classesQuery = classesQuery.eq('academic_year_id', activeYearId);
-  }
-
-  const { count: activeClassesCount, data: clsRows, error: clsError } = await classesQuery;
-  if (clsError) {
-    dbErrors.push('Failed to load classes');
-  }
-
-  const activeClasses = activeClassesCount ?? clsRows?.length ?? 0;
-  const schoolClassIds = clsRows?.map(c => c.id) || [];
-
-  // 4. Fetch Enrolled Active Students Count (Scoped to School / Active Classes)
-  let totalStudents = 0;
-  if (schoolClassIds.length > 0) {
-    const { count: enrolledCount, error: stdError } = await supabase
-      .from('student_enrollments')
-      .select('student_id', { count: 'exact', head: true })
-      .in('class_id', schoolClassIds)
-      .eq('enrollment_status', 'active');
-
-    if (stdError) {
-      dbErrors.push('Failed to load student enrollments');
-    } else {
-      totalStudents = enrolledCount ?? 0;
-    }
-  } else if (!userSchoolId && role === 'admin') {
-    // Unrestricted super-admin with no school assigned
-    const { count: allActiveStudents, error: stdError } = await supabase
-      .from('students')
-      .select('id', { count: 'exact', head: true })
-      .eq('is_active', true);
-    if (!stdError) totalStudents = allActiveStudents ?? 0;
-  }
-
-  // 5. Fetch Teachers Count (Scoped to School)
-  let teachersQuery = supabase
-    .from('profiles')
-    .select('id', { count: 'exact', head: true })
-    .eq('role', 'teacher')
-    .eq('is_active', true);
-
-  if (userSchoolId) {
-    teachersQuery = teachersQuery.eq('school_id', userSchoolId);
-  }
-
-  const { count: teachersCount, error: tchError } = await teachersQuery;
-  if (tchError) {
-    dbErrors.push('Failed to load teachers');
-  }
-  const teachers = teachersCount ?? 0;
-
-  // 6. Date Calculations (Cambodia Asia/Phnom_Penh UTC+7 Semantics)
+  // Date Calculations (Cambodia Asia/Phnom_Penh UTC+7 Semantics)
   const now = new Date();
   const cambodiaFormatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Phnom_Penh',
@@ -128,29 +49,205 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
 
   const startMonthStr = `${currentMonthStr}-01`;
   const endMonthStr = `${currentMonthStr}-${String(daysInMonth).padStart(2, '0')}`;
-  // Avoid counting future dates if querying the current month
   const effectiveEndMonthStr = currentMonthStr === defaultMonthStr && todayStrPH < endMonthStr ? todayStrPH : endMonthStr;
 
-  // 7. Fetch Attendance Records for Pie Chart (This Month)
+  // ==========================================
+  // STAGE 1: Parallel Independent Queries
+  // ==========================================
+  const s1Start = performance.now();
+
+  let yearQuery = supabase
+    .from('academic_years')
+    .select('id, name, status')
+    .eq('is_active', true);
+  if (userSchoolId) {
+    yearQuery = yearQuery.eq('school_id', userSchoolId);
+  }
+  const yearPromise = yearQuery
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let teachersQuery = supabase
+    .from('profiles')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'teacher')
+    .eq('is_active', true);
+  if (userSchoolId) {
+    teachersQuery = teachersQuery.eq('school_id', userSchoolId);
+  }
+  const teachersPromise = teachersQuery;
+
+  const activityPromise = supabase
+    .from('audit_logs')
+    .select('id, action, created_at, profiles(full_name, school_id)')
+    .order('created_at', { ascending: false })
+    .limit(8);
+
+  let correctionsQuery = supabase
+    .from('correction_requests')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending');
+  if (userSchoolId) {
+    correctionsQuery = correctionsQuery.eq('school_id', userSchoolId);
+  }
+  const correctionsPromise = correctionsQuery;
+
+  const [
+    { data: activeYearData, error: yearError },
+    { count: teachersCount, error: tchError },
+    { data: activitiesData },
+    { count: correctionsCount }
+  ] = await Promise.all([
+    yearPromise,
+    teachersPromise,
+    activityPromise,
+    correctionsPromise
+  ]);
+
+  const s1Duration = performance.now() - s1Start;
+
+  if (yearError) {
+    dbErrors.push('Failed to load active academic year');
+  }
+  if (tchError) {
+    dbErrors.push('Failed to load teachers');
+  }
+
+  const activeYearId = activeYearData?.id || null;
+  const teachers = teachersCount ?? 0;
+  const pendingCorrections = correctionsCount ?? 0;
+
+  const activities = (activitiesData || []).filter(log => {
+    if (!userSchoolId || role === 'admin') return true;
+    const logSchoolId = (log.profiles as any)?.school_id;
+    return !logSchoolId || logSchoolId === userSchoolId;
+  });
+
+  // ==========================================
+  // STAGE 2: Class Resolution
+  // (Requires activeYearId resolved in Stage 1)
+  // ==========================================
+  const s2Start = performance.now();
+
+  let classesQuery = supabase
+    .from('classes')
+    .select('id, name', { count: 'exact' });
+
+  if (userSchoolId) {
+    classesQuery = classesQuery.eq('school_id', userSchoolId);
+  }
+  if (activeYearId) {
+    classesQuery = classesQuery.eq('academic_year_id', activeYearId);
+  }
+
+  const { count: activeClassesCount, data: clsRows, error: clsError } = await classesQuery;
+  const s2Duration = performance.now() - s2Start;
+
+  if (clsError) {
+    dbErrors.push('Failed to load classes');
+  }
+
+  const activeClasses = activeClassesCount ?? clsRows?.length ?? 0;
+  const schoolClassIds = clsRows?.map(c => c.id) || [];
+
+  // ==========================================
+  // STAGE 3: Parallel Class-Dependent Queries
+  // (Requires schoolClassIds resolved in Stage 2)
+  // ==========================================
+  const s3Start = performance.now();
+
+  let totalStudents = 0;
   let present = 0;
   let absent = 0;
   let permission = 0;
+  let todayAbsent = 0;
+  let todayRecorded = 0;
+  let missingIdCount = 0;
+  const atRiskStudents: any[] = [];
 
-  if (schoolClassIds.length > 0 || (!userSchoolId && role === 'admin')) {
+  if (schoolClassIds.length > 0) {
+    // 1. Enrolled students
+    const enrollmentsPromise = supabase
+      .from('student_enrollments')
+      .select('student_id', { count: 'exact', head: true })
+      .in('class_id', schoolClassIds)
+      .eq('enrollment_status', 'active');
+
+    // 2. Monthly attendance records
     let monthAttQuery = supabase
       .from('attendance_records')
       .select('status')
       .gte('date', startMonthStr)
-      .lte('date', effectiveEndMonthStr);
-
-    if (schoolClassIds.length > 0) {
-      monthAttQuery = monthAttQuery.in('class_id', schoolClassIds);
-    }
+      .lte('date', effectiveEndMonthStr)
+      .in('class_id', schoolClassIds);
     if (activeYearId) {
       monthAttQuery = monthAttQuery.eq('academic_year_id', activeYearId);
     }
+    const monthAttPromise = monthAttQuery;
 
-    const { data: monthAttendance, error: attError } = await monthAttQuery;
+    // 3. Today attendance live counts
+    let todayAbsentQuery = supabase
+      .from('attendance_records')
+      .select('student_id', { count: 'exact', head: true })
+      .eq('date', todayStrPH)
+      .in('status', ['absent', 'unexcused', 'excused', 'A'])
+      .in('class_id', schoolClassIds);
+    if (activeYearId) {
+      todayAbsentQuery = todayAbsentQuery.eq('academic_year_id', activeYearId);
+    }
+
+    let todayRecordedQuery = supabase
+      .from('attendance_records')
+      .select('student_id', { count: 'exact', head: true })
+      .eq('date', todayStrPH)
+      .in('class_id', schoolClassIds);
+    if (activeYearId) {
+      todayRecordedQuery = todayRecordedQuery.eq('academic_year_id', activeYearId);
+    }
+
+    // 4. Full At-Risk Absences (Zero Truncation: Scans ALL unexcused absences in active classes)
+    let recentAbsQuery = supabase
+      .from('attendance_records')
+      .select('student_id, students(full_name)')
+      .gte('date', startMonthStr)
+      .lte('date', effectiveEndMonthStr)
+      .in('status', ['absent', 'A', 'unexcused'])
+      .in('class_id', schoolClassIds);
+    if (activeYearId) {
+      recentAbsQuery = recentAbsQuery.eq('academic_year_id', activeYearId);
+    }
+    const recentAbsPromise = recentAbsQuery;
+
+    // 5. Data Quality: missing student IDs in active classes
+    const missingIdPromise = supabase
+      .from('active_class_rosters')
+      .select('id', { count: 'exact', head: true })
+      .in('enrollment_class_id', schoolClassIds)
+      .or('student_id_number.is.null,student_id_number.eq.""');
+
+    const [
+      { count: enrolledCount, error: stdError },
+      { data: monthAttendance, error: attError },
+      { count: absentTodayCount },
+      { count: recordedTodayCount },
+      { data: recentAbsences },
+      { count: missingCount }
+    ] = await Promise.all([
+      enrollmentsPromise,
+      monthAttPromise,
+      todayAbsentQuery,
+      todayRecordedQuery,
+      recentAbsPromise,
+      missingIdPromise
+    ]);
+
+    if (stdError) {
+      dbErrors.push('Failed to load student enrollments');
+    } else {
+      totalStudents = enrolledCount ?? 0;
+    }
+
     if (attError) {
       dbErrors.push('Failed to load monthly attendance');
     } else if (monthAttendance) {
@@ -161,76 +258,12 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         else if (s === 'permission' || s === 'L' || s === 'excused') permission++;
       });
     }
-  }
-
-  // 8. Fetch Live Attendance for Today
-  let todayAbsent = 0;
-  let todayRecorded = 0;
-
-  if (schoolClassIds.length > 0 || (!userSchoolId && role === 'admin')) {
-    let todayAbsentQuery = supabase
-      .from('attendance_records')
-      .select('student_id', { count: 'exact', head: true })
-      .eq('date', todayStrPH)
-      .in('status', ['absent', 'unexcused', 'excused', 'A']);
-
-    let todayRecordedQuery = supabase
-      .from('attendance_records')
-      .select('student_id', { count: 'exact', head: true })
-      .eq('date', todayStrPH);
-
-    if (schoolClassIds.length > 0) {
-      todayAbsentQuery = todayAbsentQuery.in('class_id', schoolClassIds);
-      todayRecordedQuery = todayRecordedQuery.in('class_id', schoolClassIds);
-    }
-    if (activeYearId) {
-      todayAbsentQuery = todayAbsentQuery.eq('academic_year_id', activeYearId);
-      todayRecordedQuery = todayRecordedQuery.eq('academic_year_id', activeYearId);
-    }
-
-    const [{ count: absentTodayCount }, { count: recordedTodayCount }] = await Promise.all([
-      todayAbsentQuery,
-      todayRecordedQuery,
-    ]);
 
     todayAbsent = absentTodayCount || 0;
     todayRecorded = recordedTodayCount || 0;
-  }
+    missingIdCount = missingCount ?? 0;
 
-  const todayTotal = totalStudents;
-  const totalMonthly = present + absent + permission;
-  const absentRate = totalMonthly === 0 ? '0' : ((absent / totalMonthly) * 100).toFixed(1);
-
-  // 9. Fetch Activity Logs (Scoped to School if not superadmin)
-  let activityQuery = supabase
-    .from('audit_logs')
-    .select('id, action, created_at, profiles(full_name, school_id)')
-    .order('created_at', { ascending: false })
-    .limit(8);
-
-  const { data: activitiesData } = await activityQuery;
-  const activities = (activitiesData || [])
-    .filter(log => {
-      if (!userSchoolId || role === 'admin') return true;
-      const logSchoolId = (log.profiles as any)?.school_id;
-      return !logSchoolId || logSchoolId === userSchoolId;
-    });
-
-  // 10. Calculate At-Risk Students (Simple EWS, Scoped to Active Classes)
-  const atRiskStudents: any[] = [];
-  if (schoolClassIds.length > 0 || (!userSchoolId && role === 'admin')) {
-    let recentAbsQuery = supabase
-      .from('attendance_records')
-      .select('student_id, students(full_name)')
-      .gte('date', startMonthStr)
-      .lte('date', effectiveEndMonthStr)
-      .in('status', ['absent', 'A', 'unexcused']);
-
-    if (schoolClassIds.length > 0) {
-      recentAbsQuery = recentAbsQuery.in('class_id', schoolClassIds);
-    }
-
-    const { data: recentAbsences } = await recentAbsQuery;
+    // Compute complete EWS at-risk student list
     if (recentAbsences) {
       const absenceCounts: Record<string, { name: string, count: number }> = {};
       recentAbsences.forEach(r => {
@@ -255,33 +288,27 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
         }
       }
     }
+  } else if (!userSchoolId && role === 'admin') {
+    // Super-admin without a school assigned
+    const { count: allActiveStudents, error: stdError } = await supabase
+      .from('students')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_active', true);
+    if (!stdError) totalStudents = allActiveStudents ?? 0;
+  }
+
+  const s3Duration = performance.now() - s3Start;
+  const totalDuration = performance.now() - reqStart;
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[Perf:Server] AdminDashboard total: ${totalDuration.toFixed(1)}ms (S1: ${s1Duration.toFixed(1)}ms, S2: ${s2Duration.toFixed(1)}ms, S3: ${s3Duration.toFixed(1)}ms)`);
   }
 
   atRiskStudents.sort((a, b) => (a.severity === 'high' ? -1 : 1));
 
-  // 11. Data Quality Metrics (Scoped)
-  let missingIdCount = 0;
-  if (schoolClassIds.length > 0) {
-    const { count: missingCount } = await supabase
-      .from('active_class_rosters')
-      .select('id', { count: 'exact', head: true })
-      .in('enrollment_class_id', schoolClassIds)
-      .or('student_id_number.is.null,student_id_number.eq.""');
-    missingIdCount = missingCount ?? 0;
-  }
-
-  let pendingCorrections = 0;
-  let correctionsQuery = supabase
-    .from('correction_requests')
-    .select('id', { count: 'exact', head: true })
-    .eq('status', 'pending');
-
-  if (userSchoolId) {
-    correctionsQuery = correctionsQuery.eq('school_id', userSchoolId);
-  }
-
-  const { count: correctionsCount } = await correctionsQuery;
-  pendingCorrections = correctionsCount ?? 0;
+  const todayTotal = totalStudents;
+  const totalMonthly = present + absent + permission;
+  const absentRate = totalMonthly === 0 ? '0' : ((absent / totalMonthly) * 100).toFixed(1);
 
   return (
     <AdminDashboardClient

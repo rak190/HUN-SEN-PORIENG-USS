@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth-context';
 import { Upload, FileSpreadsheet, Check, AlertTriangle, X, Loader2, Info } from 'lucide-react';
 import { applySchema } from '@/lib/import/schema';
@@ -51,6 +50,7 @@ export default function AdminBasicImportModal({ isOpen, onClose, onSuccess }: Ad
     reader.onload = async (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const XLSX = await import('xlsx');
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];

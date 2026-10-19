@@ -5,8 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
-import * as XLSX from 'xlsx';
-import ExcelJS from 'exceljs';
+import { invalidateClassRoster } from '@/lib/cache/client-cache';
 import {
   Users, Search, UserPlus, Download, Edit, MapPin, Heart, FileSpreadsheet, Table,
   Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp, AlertTriangle, LogOut, ChevronDown, Loader2, X, Check,
@@ -505,6 +504,9 @@ export default function StudentsPage() {
         } else {
           setStudents(prev => [savedStudent, ...prev]);
         }
+        if (activeClass?.id) {
+          invalidateClassRoster(activeClass.id);
+        }
         setProfileDrawerData(null);
       } else {
         alert(res?.error ? `មិនអាចរក្សាទុកសិស្សបានទេ៖ ${res.error}` : 'មិនអាចរក្សាទុកសិស្សបានទេ។ សូមព្យាយាមម្តងទៀត។');
@@ -520,6 +522,9 @@ export default function StudentsPage() {
   const handleBulkSuccess = (newStudents: any[]) => {
     // Add new students to the list.
     setStudents(prev => [...prev, ...newStudents]);
+    if (activeClass?.id) {
+      invalidateClassRoster(activeClass.id);
+    }
   };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -538,6 +543,7 @@ export default function StudentsPage() {
 
   const handleDownloadTemplate = async () => {
     try {
+      const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet('បញ្ជីឈ្មោះសិស្ស', { views: [{ showGridLines: false }] });
 

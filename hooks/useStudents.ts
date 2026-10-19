@@ -1,8 +1,14 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { MassiveProfilingStudent, DEFAULT_FORM } from '@/app/(dashboard)/students/types';
+import { useAuth } from '@/lib/auth-context';
+import { buildCacheKey, getOrFetchScoped, subscribe } from '@/lib/cache/client-cache';
+
+export const STUDENT_ROSTER_FIELDS = 
+  'id, student_id_number, desk_number, room_number, full_name, english_name, photo_url, gender, dob, current_address, enrollment_status, scholarship, id_poor, orphan, indigenous, distance_km, weight_kg, height_m, disability, health_issues, father_name, father_job, father_phone, mother_name, mother_job, mother_phone, guardian_name, guardian_job, guardian_phone, siblings_count, migrant_status, domestic_violence, housing, income, risk_level, attendance_rate';
 
 export function useStudents(activeClassId: string | undefined) {
+  const { user, profile, activeAcademicYear } = useAuth();
   const [students, setStudents] = useState<MassiveProfilingStudent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -11,31 +17,80 @@ export function useStudents(activeClassId: string | undefined) {
     direction: null,
   });
 
+  const classSeqRef = useRef(0);
   const supabase = createClient();
 
-  useEffect(() => {
-    const fetchStudents = async () => {
-      if (!activeClassId) return;
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from('active_class_rosters')
-        .select('*')
-        .eq('enrollment_class_id', activeClassId)
-        .order('student_id_number', { ascending: true });
-
-      if (data) {
-        setStudents(data.map(d => ({
-          ...DEFAULT_FORM,
-          ...d,
-          date_of_birth: d.dob,
-          address: d.current_address,
-          current_status: d.enrollment_status || 'active',
-        } as MassiveProfilingStudent)));
-      }
+  const fetchStudents = useCallback(async (forceRefresh = false) => {
+    if (!activeClassId) {
+      setStudents([]);
       setIsLoading(false);
+      return;
+    }
+
+    const seq = ++classSeqRef.current;
+
+    const cacheKey = buildCacheKey({
+      userId: user?.id,
+      role: profile?.role,
+      schoolId: profile?.school_id,
+      academicYearId: activeAcademicYear?.id,
+      classId: activeClassId,
+      resource: 'roster',
+    });
+
+    try {
+      const result = await getOrFetchScoped<MassiveProfilingStudent[]>(
+        cacheKey,
+        async () => {
+          const { data, error } = await supabase
+            .from('active_class_rosters')
+            .select(STUDENT_ROSTER_FIELDS)
+            .eq('enrollment_class_id', activeClassId)
+            .order('student_id_number', { ascending: true });
+
+          if (error) {
+            console.error('[useStudents] Query failed:', error);
+            throw error;
+          }
+
+          return (data || []).map(d => ({
+            ...DEFAULT_FORM,
+            ...d,
+            date_of_birth: d.dob,
+            address: d.current_address,
+            current_status: d.enrollment_status || 'active',
+          } as MassiveProfilingStudent));
+        },
+        { ttlMs: 120_000, forceRefresh, allowStale: true }
+      );
+
+      // Race guard: ignore responses for a class switch that happened while fetch was running
+      if (seq === classSeqRef.current) {
+        setStudents(result.data);
+        setIsLoading(false);
+      }
+    } catch (err) {
+      if (seq === classSeqRef.current) {
+        setIsLoading(false);
+      }
+    }
+  }, [activeClassId, user?.id, profile?.role, profile?.school_id, activeAcademicYear?.id, supabase]);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetchStudents(false);
+
+    if (!activeClassId) return;
+
+    // Reactively update when this class roster is invalidated by any mutation
+    const unsubscribe = subscribe(`c:${activeClassId}|res:roster`, () => {
+      fetchStudents(true);
+    });
+
+    return () => {
+      unsubscribe();
     };
-    fetchStudents();
-  }, [activeClassId]);
+  }, [activeClassId, fetchStudents]);
 
   const handleSort = (field: string) => {
     setSortState(prev => {
@@ -83,6 +138,7 @@ export function useStudents(activeClassId: string | undefined) {
     setSearchQuery,
     sortState,
     handleSort,
-    filteredStudents
+    filteredStudents,
+    refresh: fetchStudents,
   };
 }

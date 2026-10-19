@@ -9,11 +9,14 @@ interface PageProps {
   searchParams: Promise<{ classId?: string }>;
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage({ searchParams }: PageProps) {
+  const reqStart = performance.now();
   const supabase = await createClient();
   const { classId = 'all' } = await searchParams;
 
-  // 1. Get user profile
+  // 1. Authoritative Role Verification (deduplicated via React.cache)
   const { user, profile, role } = await getServerAuth();
   if (!user) {
     redirect('/login');
@@ -23,16 +26,24 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     redirect('/monitor/attendance');
   }
 
-  // 1.5 Fetch active academic year
+  // ==========================================
+  // STAGE 1: Active Academic Year Resolution
+  // ==========================================
+  const s1Start = performance.now();
   const { data: activeYear } = await supabase
     .from('academic_years')
     .select('id')
     .eq('is_active', true)
     .maybeSingle();
+  const s1Duration = performance.now() - s1Start;
 
-  // 1.6 Fetch homeroom teacher's active class
+  // ==========================================
+  // STAGE 2: Teacher / Active Class Resolution
+  // ==========================================
+  const s2Start = performance.now();
   let teacherClassName = null;
   let teacherClassId: string | null = null;
+
   if (profile?.role === 'teacher') {
     let teacherClassQuery = supabase
       .from('classes')
@@ -59,7 +70,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
   } else if (classId && classId !== 'all') {
     effectiveClassId = classId;
   }
-    
+
   let activeClassIds: string[] = [];
   if (!effectiveClassId && activeYear) {
     const { data: classes } = await supabase
@@ -69,6 +80,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       .eq('is_archived', false);
     activeClassIds = classes?.map(c => c.id) || [];
   }
+  const s2Duration = performance.now() - s2Start;
 
   // Helper to scope queries to the active academic year
   const scopeQueryToYear = (query: any, classCol: string = 'class_id') => {
@@ -77,33 +89,33 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     } else if (activeClassIds.length > 0) {
       return query.in(classCol, activeClassIds);
     } else if (activeYear) {
-      // fallback to return nothing if no classes in year but they are an admin
       return query.eq(classCol, '00000000-0000-0000-0000-000000000000');
     }
     return query;
   };
 
-  // 2. Fetch basic stats (only active students)
+  // ==========================================
+  // STAGE 3: Parallel Execution of All Class-Dependent Queries
+  // ==========================================
+  const s3Start = performance.now();
 
+  // 1. Students roster
   let studentsQuery = supabase.from('active_class_rosters').select('*', { count: 'exact' });
   studentsQuery = scopeQueryToYear(studentsQuery, 'enrollment_class_id');
-  const { data: studentsData, count: studentsCount } = await studentsQuery;
 
+  // 2. Slow learners count
   let remediationQuery = supabase.from('active_class_rosters').select('id', { count: 'exact' }).eq('is_slow_learner', true);
   remediationQuery = scopeQueryToYear(remediationQuery, 'enrollment_class_id');
-  const { data: remData, count: remCount } = await remediationQuery;
-  const remediationCount = remCount ?? remData?.length ?? 0;
 
-  // 3. Activity Logs (from activity_logs table)
+  // 3. Activity logs
   let activityQuery = supabase
     .from('activity_logs')
     .select('id, title, description, activity_type, class_id, created_at')
     .order('created_at', { ascending: false })
     .limit(20);
   activityQuery = scopeQueryToYear(activityQuery);
-  const { data: activityData } = await activityQuery;
 
-  // 4. Fetch Weekly Attendance (Current Week: Mon-Fri)
+  // 4. Weekly Attendance (Current Week: Mon-Fri)
   const today = new Date();
   const dayOfWeek = today.getDay(); // 0 is Sun, 1 is Mon
   const diffToMonday = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); 
@@ -121,8 +133,99 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     .select('date, status')
     .in('date', weekDates);
   weeklyQuery = scopeQueryToYear(weeklyQuery);
-  const { data: weeklyDataRaw } = await weeklyQuery;
 
+  // 5. 8-Month Trend Data
+  const trendMonths = [];
+  const monthLabels = ['មករា', 'កុម្ភៈ', 'មីនា', 'មេសា', 'ឧសភា', 'មិថុនា', 'កក្កដា', 'សីហា', 'កញ្ញា', 'តុលា', 'វិច្ឆិកា', 'ធ្នូ'];
+  const monthIds = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  
+  const currentDate = new Date();
+  for (let i = 7; i >= 0; i--) {
+    const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+    trendMonths.push({
+      monthStr: d.toISOString().slice(0, 7), // YYYY-MM
+      periodId: monthIds[d.getMonth()], // map to ACADEMIC_PERIODS
+      label: monthLabels[d.getMonth()]
+    });
+  }
+  const trendMonthStrs = trendMonths.map(m => m.monthStr);
+  const trendPeriodIds = trendMonths.map(m => m.periodId);
+
+  let monthlyAttQuery = supabase
+    .from('monthly_attendance_summaries')
+    .select('month, absent_count, permission_count')
+    .in('month', trendMonthStrs);
+  monthlyAttQuery = scopeQueryToYear(monthlyAttQuery);
+
+  let gradesQuery = supabase
+    .from('grades')
+    .select('period, total_score')
+    .in('period', trendPeriodIds);
+  gradesQuery = scopeQueryToYear(gradesQuery);
+
+  // 6. Monthly Report Cards Count
+  let reportsQuery = supabase.from('monthly_report_cards').select('id', { count: 'exact' });
+  if (effectiveClassId) {
+    reportsQuery = reportsQuery.eq('class_id', effectiveClassId);
+  }
+
+  // 7. At-risk students roster signals
+  const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+  let rosterAtRiskQuery = supabase
+    .from('active_class_rosters')
+    .select('id, full_name, dropout_risk, is_slow_learner, gender, father_phone, mother_phone, guardian_phone, emergency_contact_phone');
+
+  if (effectiveClassId) {
+    rosterAtRiskQuery = rosterAtRiskQuery.eq('enrollment_class_id', effectiveClassId);
+  } else if (activeClassIds.length > 0) {
+    rosterAtRiskQuery = rosterAtRiskQuery.in('enrollment_class_id', activeClassIds);
+  }
+
+  // 8. Current-month absence summaries for at-risk calculation
+  let absenceQuery = supabase
+    .from('monthly_attendance_summaries')
+    .select('student_id, absent_count, permission_count')
+    .eq('month', currentMonth);
+  if (effectiveClassId) {
+    absenceQuery = absenceQuery.eq('class_id', effectiveClassId);
+  } else if (activeClassIds.length > 0) {
+    absenceQuery = absenceQuery.in('class_id', activeClassIds);
+  }
+
+  // Execute all 8 stage 3 queries concurrently
+  const [
+    { data: studentsData, count: studentsCount },
+    { data: remData, count: remCount },
+    { data: activityData },
+    { data: weeklyDataRaw },
+    { data: monthlyAttRaw },
+    { data: gradesRaw },
+    { data: repData, count: repCount },
+    { data: rosterData },
+    { data: absenceData }
+  ] = await Promise.all([
+    studentsQuery,
+    remediationQuery,
+    activityQuery,
+    weeklyQuery,
+    monthlyAttQuery,
+    gradesQuery,
+    reportsQuery,
+    rosterAtRiskQuery,
+    absenceQuery
+  ]);
+
+  const s3Duration = performance.now() - s3Start;
+  const totalDuration = performance.now() - reqStart;
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[Perf:Server] HomeroomDashboard total: ${totalDuration.toFixed(1)}ms (S1: ${s1Duration.toFixed(1)}ms, S2: ${s2Duration.toFixed(1)}ms, S3: ${s3Duration.toFixed(1)}ms)`);
+  }
+
+  const remediationCount = remCount ?? remData?.length ?? 0;
+  const reportsCount = repCount ?? repData?.length ?? 0;
+
+  // Process Weekly Attendance
   const weeklyData = weekDates.map((date, index) => {
     const dayLabels = ['ច', 'អ', 'ព', 'ព្រ', 'សុ'];
     const dayRecords = weeklyDataRaw?.filter(r => r.date === date) || [];
@@ -145,37 +248,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     };
   });
 
-  // 5. Fetch 8-Month Trend Data
-  const trendMonths = [];
-  const monthLabels = ['មករា', 'កុម្ភៈ', 'មីនា', 'មេសា', 'ឧសភា', 'មិថុនា', 'កក្កដា', 'សីហា', 'កញ្ញា', 'តុលា', 'វិច្ឆិកា', 'ធ្នូ'];
-  const monthIds = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-  
-  const currentDate = new Date();
-  for (let i = 7; i >= 0; i--) {
-    const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-    trendMonths.push({
-      monthStr: d.toISOString().slice(0, 7), // YYYY-MM
-      periodId: monthIds[d.getMonth()], // map to ACADEMIC_PERIODS
-      label: monthLabels[d.getMonth()]
-    });
-  }
-  const trendMonthStrs = trendMonths.map(m => m.monthStr);
-  const trendPeriodIds = trendMonths.map(m => m.periodId);
-
-  let monthlyAttQuery = supabase
-    .from('monthly_attendance_summaries')
-    .select('month, absent_count, permission_count')
-    .in('month', trendMonthStrs);
-  monthlyAttQuery = scopeQueryToYear(monthlyAttQuery);
-  const { data: monthlyAttRaw } = await monthlyAttQuery;
-
-  let gradesQuery = supabase
-    .from('grades')
-    .select('period, total_score')
-    .in('period', trendPeriodIds);
-  gradesQuery = scopeQueryToYear(gradesQuery);
-  const { data: gradesRaw } = await gradesQuery;
-
+  // Process 8-Month Trend Data
   const assumedDaysPerMonth = 20;
   const totalPossibleAtt = (studentsCount || 0) * assumedDaysPerMonth;
   let overallAttSum = 0;
@@ -212,15 +285,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     };
   });
 
-  // 6. Fetch Total Monthly Report Cards
-  let reportsQuery = supabase.from('monthly_report_cards').select('id', { count: 'exact' });
-  if (effectiveClassId) {
-    reportsQuery = reportsQuery.eq('class_id', effectiveClassId);
-  }
-  const { data: repData, count: repCount } = await reportsQuery;
-  const reportsCount = repCount ?? repData?.length ?? 0;
-
-  // Calculate basic demographics
+  // Demographics
   let girlsCount = 0;
   let boysCount = 0;
   if (studentsData) {
@@ -254,33 +319,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     created_at: a.created_at,
   }));
 
-  // 7. Fetch at-risk students using reliable signal columns from active_class_rosters
-  // Signals: dropout_risk flag, is_slow_learner flag, and current-month unexcused absences >= 3
-  const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
-
-  let rosterAtRiskQuery = supabase
-    .from('active_class_rosters')
-    .select('id, full_name, dropout_risk, is_slow_learner, gender, father_phone, mother_phone, guardian_phone, emergency_contact_phone');
-
-  if (effectiveClassId) {
-    rosterAtRiskQuery = rosterAtRiskQuery.eq('enrollment_class_id', effectiveClassId);
-  } else if (activeClassIds.length > 0) {
-    rosterAtRiskQuery = rosterAtRiskQuery.in('enrollment_class_id', activeClassIds);
-  }
-  const { data: rosterData } = await rosterAtRiskQuery;
-
-  // Fetch current-month absence summaries for the relevant class scope
-  let absenceQuery = supabase
-    .from('monthly_attendance_summaries')
-    .select('student_id, absent_count, permission_count')
-    .eq('month', currentMonth);
-  if (effectiveClassId) {
-    absenceQuery = absenceQuery.eq('class_id', effectiveClassId);
-  } else if (activeClassIds.length > 0) {
-    absenceQuery = absenceQuery.in('class_id', activeClassIds);
-  }
-  const { data: absenceData } = await absenceQuery;
-
   // Build a student → absence map for O(1) lookup
   const absenceMap: Record<string, { absent: number; permission: number }> = {};
   (absenceData || []).forEach((r: any) => {
@@ -303,7 +341,6 @@ export default async function DashboardPage({ searchParams }: PageProps) {
       if (s.is_slow_learner) reasons.push('រៀនយឺត – ត្រូវការការគាំទ្របន្ថែម');
       if (highAbsence) reasons.push(`អវត្តមានឥតច្បាប់ ${abs.absent} ថ្ងៃក្នុងខែនេះ`);
 
-      // Only include students that actually have a risk signal
       if (reasons.length === 0) return null;
 
       const severity: 'high' | 'medium' =
@@ -324,4 +361,3 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   return <DashboardClient stats={stats} activities={activities} profile={profile} atRiskStudents={atRiskStudents} />;
 }
-

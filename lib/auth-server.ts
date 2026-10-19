@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { cache } from 'react';
 import { createClient } from './supabase/server';
 import { Profile, Role } from '@/types';
 
@@ -11,8 +12,9 @@ export interface AuthContextResult {
 /**
  * Authoritative Server-Side Authentication
  * Verifies genuine cryptographic Supabase Auth Session and retrieves authoritative DB Profile.
+ * Wrapped with React.cache() to deduplicate within the same Server Component render pass.
  */
-export async function getServerAuth(): Promise<AuthContextResult> {
+export const getServerAuth = cache(async (): Promise<AuthContextResult> => {
   let supabase;
   try {
     supabase = await createClient();
@@ -59,7 +61,7 @@ export async function getServerAuth(): Promise<AuthContextResult> {
   }
 
   return { user: null, profile: null, role: null };
-}
+});
 
 /**
  * Reusable Guard: Require Authenticated User

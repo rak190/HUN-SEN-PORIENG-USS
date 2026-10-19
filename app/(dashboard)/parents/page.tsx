@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { useSearchParams } from 'next/navigation';
 import Modal from '@/components/ui/Modal';
+import { buildCacheKey, getOrFetchScoped, invalidateParentContacts } from '@/lib/cache/client-cache';
 
 interface ContactRow {
   id: string;
@@ -23,7 +24,7 @@ interface ContactRow {
 }
 
 export default function ParentsPage() {
-  const { activeClass, user } = useAuth();
+  const { activeClass, user, profile, activeAcademicYear } = useAuth();
   const supabase = createClient();
   const searchParams = useSearchParams();
   const requestedStudent = searchParams.get('student');
@@ -49,15 +50,37 @@ export default function ParentsPage() {
     
     async function loadData() {
       try {
-        const { data: stdData } = await supabase.from('active_class_rosters').select('id, full_name').eq('enrollment_class_id', activeClass!.id).order('full_name');
-        
-        let contactsData = [];
+        const rosterKey = buildCacheKey({
+          userId: user?.id,
+          role: profile?.role,
+          schoolId: profile?.school_id,
+          academicYearId: activeAcademicYear?.id || activeClass?.academic_year_id,
+          classId: activeClass!.id,
+          resource: 'roster',
+        });
+
+        const rosterRes = await getOrFetchScoped<any[]>(
+          rosterKey,
+          async () => {
+            const { data, error } = await supabase
+              .from('active_class_rosters')
+              .select('id, full_name')
+              .eq('enrollment_class_id', activeClass!.id)
+              .order('full_name');
+            if (error) throw error;
+            return data || [];
+          },
+          { ttlMs: 120_000, allowStale: true }
+        );
+
+        const stdData = rosterRes.data;
+        let contactsData: any[] = [];
         if (stdData && stdData.length > 0) {
           setStudents(stdData);
           const studentIds = stdData.map(s => s.id);
           const { data: cData } = await supabase
             .from('parent_contacts')
-            .select('*, students(full_name, parent_phone, phone)')
+            .select('id, student_id, contact_type, contacted_at, outcome, agreement, follow_up_at, created_at, students(full_name, parent_phone, phone)')
             .in('student_id', studentIds)
             .order('created_at', { ascending: false });
           if (cData) contactsData = cData;
@@ -104,7 +127,7 @@ export default function ParentsPage() {
         agreement: form.agreement.trim() || null,
         follow_up_at: form.followUp || null,
         created_by: user.id
-      }).select('*, students(full_name, parent_phone, phone)').single();
+      }).select('id, student_id, contact_type, contacted_at, outcome, agreement, follow_up_at, created_at, students(full_name, parent_phone, phone)').single();
       
       if (error) {
         console.error('Error saving parent contact:', error);
@@ -114,6 +137,10 @@ export default function ParentsPage() {
       
       if (data) {
         setContacts((current) => [data as unknown as ContactRow, ...current]);
+      }
+      
+      if (activeClass?.id) {
+        invalidateParentContacts(activeClass.id);
       }
       
       setShowForm(false);

@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { Upload, X, Loader2, Check, AlertTriangle, FileSpreadsheet, Save } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
 import Modal from '@/components/ui/Modal';
@@ -44,6 +43,7 @@ export function ClassGradeImportModal({ isOpen, onClose, onImportComplete, class
     setIsUploading(true);
     try {
       const data = await file.arrayBuffer();
+      const XLSX = await import('xlsx');
       const workbook = XLSX.read(data);
       
       const results: ParsedRow[] = [];

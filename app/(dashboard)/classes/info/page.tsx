@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import ClassSchedule from '@/components/classes/ClassSchedule';
 import { Student } from '@/types';
+import { buildCacheKey, getOrFetchScoped } from '@/lib/cache/client-cache';
 
 export default function ClassInfoPage() {
   const { activeClass, profile } = useAuth();
@@ -28,53 +29,64 @@ export default function ClassInfoPage() {
 
       setLoading(true);
       try {
-        // 1. Fetch Students
-        const { data: stdData } = await supabase
-          .from('active_class_rosters')
-          .select('*')
-          .eq('enrollment_class_id', activeClass.id)
-          .order('full_name', { ascending: true });
+        const curMonth = new Date().toISOString().slice(0, 7);
 
-        setStudents((stdData as Student[]) || []);
+        const rosterKey = buildCacheKey({
+          userId: profile?.id,
+          role: profile?.role,
+          schoolId: profile?.school_id,
+          academicYearId: activeClass.academic_year_id,
+          classId: activeClass.id,
+          resource: 'roster',
+        });
 
-        // 2. Fetch Teacher Profile
-        if (activeClass.teacher_id) {
-          const { data: teacherData } = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', activeClass.teacher_id)
-            .single();
+        const [rosterRes, teacherRes, yrRes, attRes] = await Promise.all([
+          getOrFetchScoped<Student[]>(
+            rosterKey,
+            async () => {
+              const { data, error } = await supabase
+                .from('active_class_rosters')
+                .select('id, full_name, gender, id_poor, scholarship, dropout_risk, enrollment_status')
+                .eq('enrollment_class_id', activeClass.id)
+                .order('full_name', { ascending: true });
+              if (error) throw error;
+              return (data as Student[]) || [];
+            },
+            { ttlMs: 120_000, allowStale: true }
+          ),
+          activeClass.teacher_id
+            ? supabase.from('profiles').select('full_name').eq('id', activeClass.teacher_id).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          activeClass.academic_year_id
+            ? supabase.from('academic_years').select('name').eq('id', activeClass.academic_year_id).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          supabase
+            .from('attendance_records')
+            .select('status')
+            .eq('class_id', activeClass.id)
+            .gte('date', `${curMonth}-01`)
+            .lte('date', `${curMonth}-31`),
+        ]);
 
-          if (teacherData?.full_name) {
-            setTeacherName(teacherData.full_name);
-          }
+        setStudents(rosterRes.data || []);
+
+        const teacherData = teacherRes.data;
+        if (teacherData?.full_name) {
+          setTeacherName(teacherData.full_name);
         } else if (profile?.role === 'teacher' && profile.full_name) {
           setTeacherName(profile.full_name);
         } else {
           setTeacherName('មិនទាន់កំណត់');
         }
 
-        // 3. Fetch Academic Year
-        if (activeClass.academic_year_id) {
-          const { data: yrData } = await supabase
-            .from('academic_years')
-            .select('name')
-            .eq('id', activeClass.academic_year_id)
-            .single();
-          if (yrData?.name) setAcademicYear(yrData.name);
+        const yrData = yrRes.data;
+        if (yrData?.name) {
+          setAcademicYear(yrData.name);
         }
 
-        // 4. Calculate Attendance Rate for this class in current month
-        const curMonth = new Date().toISOString().slice(0, 7);
-        const { data: attData } = await supabase
-          .from('attendance_records')
-          .select('status')
-          .eq('class_id', activeClass.id)
-          .gte('date', `${curMonth}-01`)
-          .lte('date', `${curMonth}-31`);
-
+        const attData = attRes.data;
         if (attData && attData.length > 0) {
-          const present = attData.filter(r => r.status === 'present' || r.status === 'P').length;
+          const present = attData.filter((r: any) => r.status === 'present' || r.status === 'P').length;
           setAttRate(Math.round((present / attData.length) * 100));
         } else {
           setAttRate(0);

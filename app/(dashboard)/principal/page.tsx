@@ -8,9 +8,10 @@ import { fetchPrincipalDashboardData } from './actions';
 export const dynamic = 'force-dynamic';
 
 export default async function PrincipalDashboardPage() {
+  const reqStart = performance.now();
   const supabase = await createClient();
 
-  // 1. Verify User and Role
+  // 1. Authoritative Role Verification (deduplicated via React.cache)
   let auth;
   try {
     auth = await requirePrincipal();
@@ -46,7 +47,10 @@ export default async function PrincipalDashboardPage() {
     );
   }
 
-  // 2. Fetch Active Academic Year specifically for Principal's school
+  // ==========================================
+  // STAGE 1: Active Academic Year Resolution
+  // ==========================================
+  const s1Start = performance.now();
   const { data: activeYear } = await supabase
     .from('academic_years')
     .select('id, name')
@@ -57,6 +61,7 @@ export default async function PrincipalDashboardPage() {
     .maybeSingle();
 
   const activeYearId = activeYear?.id;
+  const s1Duration = performance.now() - s1Start;
 
   // Fail closed if no active academic year is configured for this school
   if (!activeYearId) {
@@ -83,16 +88,19 @@ export default async function PrincipalDashboardPage() {
     );
   }
 
-  // 3. Fetch Teachers scoped strictly to this school
-  const { count: teachers } = await supabase
+  // ==========================================
+  // STAGE 2: Parallel Queries Dependent on Active Year
+  // ==========================================
+  const s2Start = performance.now();
+
+  const teachersPromise = supabase
     .from('profiles')
     .select('*', { count: 'exact', head: true })
     .eq('school_id', schoolId)
     .eq('role', 'teacher')
     .eq('is_active', true);
 
-  // 4. Fetch Active Classes scoped strictly to this school and active academic year
-  const { data: activeClassesList } = await supabase
+  const activeClassesPromise = supabase
     .from('classes')
     .select('id, name')
     .eq('school_id', schoolId)
@@ -100,49 +108,73 @@ export default async function PrincipalDashboardPage() {
     .eq('is_archived', false)
     .order('name');
 
-  const activeClasses = activeClassesList || [];
-  const activeClassesCount = activeClasses.length;
-  const activeClassIds = activeClasses.map(c => c.id);
-
-  // 5. Real-time Attendance scoped strictly to active classes of this school
-  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
-  let recordedClassIds = new Set<string>();
-  if (activeClassIds.length > 0) {
-    const { data: todayAttendance } = await supabase
-      .from('attendance_records')
-      .select('class_id')
-      .eq('date', todayStr)
-      .in('class_id', activeClassIds);
-
-    recordedClassIds = new Set((todayAttendance || []).map(a => a.class_id));
-  }
-
-  const unsubmittedAttendanceClasses = activeClasses
-    .filter(c => !recordedClassIds.has(c.id))
-    .map(c => c.name);
-
-  // 6. Pending Support Cases scoped strictly to active classes of this school
-  let pendingFollowUpsCount = 0;
-  if (activeClassIds.length > 0) {
-    const { count } = await supabase
-      .from('support_cases')
-      .select('*', { count: 'exact', head: true })
-      .in('class_id', activeClassIds)
-      .neq('status', 'resolved');
-
-    pendingFollowUpsCount = count || 0;
-  }
-
-  // 7. Recent Audit Activities scoped strictly to this school
-  const { data: activities } = await supabase
+  const activitiesPromise = supabase
     .from('audit_logs')
     .select('id, action, created_at, profiles(full_name)')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false })
     .limit(8);
 
-  // 8. Fetch aggregated academic & student statistics from actions.ts (scoped to school & active year)
-  const dashboardData = await fetchPrincipalDashboardData();
+  const dashboardDataPromise = fetchPrincipalDashboardData();
+
+  const [
+    { count: teachers },
+    { data: activeClassesList },
+    { data: activities },
+    dashboardData
+  ] = await Promise.all([
+    teachersPromise,
+    activeClassesPromise,
+    activitiesPromise,
+    dashboardDataPromise
+  ]);
+
+  const s2Duration = performance.now() - s2Start;
+
+  const activeClasses = activeClassesList || [];
+  const activeClassesCount = activeClasses.length;
+  const activeClassIds = activeClasses.map(c => c.id);
+
+  // ==========================================
+  // STAGE 3: Parallel Class-Dependent Queries
+  // ==========================================
+  const s3Start = performance.now();
+  const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
+  let recordedClassIds = new Set<string>();
+  let pendingFollowUpsCount = 0;
+
+  if (activeClassIds.length > 0) {
+    const todayAttendancePromise = supabase
+      .from('attendance_records')
+      .select('class_id')
+      .eq('date', todayStr)
+      .in('class_id', activeClassIds);
+
+    const supportCasesPromise = supabase
+      .from('support_cases')
+      .select('*', { count: 'exact', head: true })
+      .in('class_id', activeClassIds)
+      .neq('status', 'resolved');
+
+    const [{ data: todayAttendance }, { count: supportCount }] = await Promise.all([
+      todayAttendancePromise,
+      supportCasesPromise
+    ]);
+
+    recordedClassIds = new Set((todayAttendance || []).map(a => a.class_id));
+    pendingFollowUpsCount = supportCount || 0;
+  }
+
+  const s3Duration = performance.now() - s3Start;
+  const totalDuration = performance.now() - reqStart;
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[Perf:Server] PrincipalDashboard total: ${totalDuration.toFixed(1)}ms (S1: ${s1Duration.toFixed(1)}ms, S2: ${s2Duration.toFixed(1)}ms, S3: ${s3Duration.toFixed(1)}ms)`);
+  }
+
+  const unsubmittedAttendanceClasses = activeClasses
+    .filter(c => !recordedClassIds.has(c.id))
+    .map(c => c.name);
 
   // Resolve true monthly absence rate vs year-to-date rate
   const hasMonthlyRate = dashboardData?.thisMonthAbsentRate !== null && dashboardData?.thisMonthAbsentRate !== undefined;
