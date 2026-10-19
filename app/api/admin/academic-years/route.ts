@@ -46,7 +46,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-  const { name, start_date, end_date } = body;
+  const { name, start_date, end_date, is_active } = body;
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return NextResponse.json({ 
@@ -111,6 +111,17 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
+    const shouldBeActive = is_active === true;
+
+    // If setting as active, close previous active years (trigger syncs is_active & is_current)
+    if (shouldBeActive) {
+      await adminClient
+        .from('academic_years')
+        .update({ status: 'closed', is_active: false })
+        .eq('school_id', targetSchoolId)
+        .eq('status', 'active');
+    }
+
     const { data: newYear, error } = await adminClient
       .from('academic_years')
       .insert([{ 
@@ -118,8 +129,8 @@ export async function POST(req: Request) {
         name: name.trim(), 
         start_date: start_date, 
         end_date: effectiveEndDate,
-        status: 'planned',
-        is_active: false,
+        status: shouldBeActive ? 'active' : 'planned', // status: 'planned' by default
+        is_active: shouldBeActive,
         is_archived: false 
       }])
       .select()
@@ -139,7 +150,8 @@ export async function POST(req: Request) {
         name: newYear.name,
         start_date: newYear.start_date,
         end_date: newYear.end_date,
-        status: newYear.status
+        status: newYear.status,
+        is_active: newYear.is_active
       }
     }]);
 
@@ -375,18 +387,16 @@ export async function DELETE(req: Request) {
       }, { status: 400 });
     }
 
-    // 7. SAFETY GUARD: Exam Standards Dependency Check
-    const { count: standardCount, error: stdErr } = await adminClient
-      .from('exam_subject_standards')
-      .select('id', { count: 'exact', head: true })
+    // 7. Clean up attached exam standards & grading scales for unused academic year
+    await adminClient
+      .from('exam_grading_scales')
+      .delete()
       .eq('academic_year_id', id);
 
-    if (stdErr) throw stdErr;
-    if (standardCount && standardCount > 0) {
-      return NextResponse.json({ 
-        error: `មិនអាចលុបឆ្នាំសិក្សានេះបានទេ ដោយសារមានស្តង់ដារវិញ្ញាសាប្រឡងភ្ជាប់ជាមួយឆ្នាំសិក្សានេះ។` 
-      }, { status: 400 });
-    }
+    await adminClient
+      .from('exam_subject_standards')
+      .delete()
+      .eq('academic_year_id', id);
 
     // Execute deletion of accidental/unused year
     const { error: delErr } = await adminClient

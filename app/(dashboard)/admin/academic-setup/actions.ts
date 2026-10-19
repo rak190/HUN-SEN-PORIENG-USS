@@ -5,7 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requireAdmin } from '@/lib/auth-server';
 import { revalidatePath } from 'next/cache';
 
-export async function createAcademicYearAction(payload: { name: string; start_date: string; end_date?: string }) {
+export async function createAcademicYearAction(payload: { name: string; start_date: string; end_date?: string; is_active?: boolean }) {
   const { user, profile } = await requireAdmin();
   const adminClient = createAdminClient();
 
@@ -13,7 +13,7 @@ export async function createAcademicYearAction(payload: { name: string; start_da
     return { success: false, error: 'Database service unavailable' };
   }
 
-  const { name, start_date, end_date } = payload;
+  const { name, start_date, end_date, is_active } = payload;
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return { success: false, error: 'សូមបញ្ចូលឈ្មោះឆ្នាំសិក្សាឱ្យបានត្រឹមត្រូវ' };
@@ -57,6 +57,16 @@ export async function createAcademicYearAction(payload: { name: string; start_da
       return { success: false, error: `ឈ្មោះឆ្នាំសិក្សា "${name.trim()}" មានរួចហើយក្នុងប្រព័ន្ធ។` };
     }
 
+    const shouldBeActive = is_active === true;
+
+    if (shouldBeActive) {
+      await adminClient
+        .from('academic_years')
+        .update({ status: 'closed', is_active: false })
+        .eq('school_id', targetSchoolId)
+        .eq('status', 'active');
+    }
+
     const { data: newYear, error } = await adminClient
       .from('academic_years')
       .insert([{
@@ -64,8 +74,8 @@ export async function createAcademicYearAction(payload: { name: string; start_da
         name: name.trim(),
         start_date,
         end_date: effectiveEndDate,
-        status: 'planned',
-        is_active: false,
+        status: shouldBeActive ? 'active' : 'planned',
+        is_active: shouldBeActive,
         is_archived: false
       }])
       .select()
@@ -84,7 +94,8 @@ export async function createAcademicYearAction(payload: { name: string; start_da
         name: newYear.name,
         start_date: newYear.start_date,
         end_date: newYear.end_date,
-        status: newYear.status
+        status: newYear.status,
+        is_active: newYear.is_active
       }
     }]);
 
@@ -182,18 +193,16 @@ export async function deleteAcademicYearAction(id: string) {
       };
     }
 
-    // 7. Exam Standards Check
-    const { count: standardCount } = await adminClient
-      .from('exam_subject_standards')
-      .select('id', { count: 'exact', head: true })
+    // 7. Clean up attached exam standards & grading scales for unused academic year
+    await adminClient
+      .from('exam_grading_scales')
+      .delete()
       .eq('academic_year_id', id);
 
-    if (standardCount && standardCount > 0) {
-      return { 
-        success: false, 
-        error: 'មិនអាចលុបឆ្នាំសិក្សានេះបានទេ ដោយសារមានស្តង់ដារវិញ្ញាសាប្រឡងភ្ជាប់ជាមួយឆ្នាំសិក្សានេះ។' 
-      };
-    }
+    await adminClient
+      .from('exam_subject_standards')
+      .delete()
+      .eq('academic_year_id', id);
 
     // Delete
     const { error: delErr } = await adminClient

@@ -41,6 +41,9 @@ export default function PremiumMoEYSAcademicSetupPage() {
         const activeYear = data.academicYears.find((y: any) => y.status === 'active' || y.is_active || y.is_current);
         if (activeYear) setSelectedYearId(activeYear.id);
         else setSelectedYearId(data.academicYears[0].id);
+      } else {
+        setAcademicYears([]);
+        setSelectedYearId(null);
       }
     } catch (e) {
       console.error(e);
@@ -57,6 +60,7 @@ export default function PremiumMoEYSAcademicSetupPage() {
     const name = (formData.get('name') as string)?.trim();
     const start_date = formData.get('start_date') as string;
     const end_date = formData.get('end_date') as string;
+    const is_active = formData.get('is_active') === 'on';
 
     if (!name || !start_date) {
       setCreateError('សូមបញ្ចូលឈ្មោះឆ្នាំសិក្សា និងកាលបរិច្ឆេទចាប់ផ្តើមឱ្យបានត្រឹមត្រូវ');
@@ -68,7 +72,7 @@ export default function PremiumMoEYSAcademicSetupPage() {
       const res = await fetch('/api/admin/academic-years', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, start_date, end_date }),
+        body: JSON.stringify({ name, start_date, end_date, is_active }),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -287,76 +291,98 @@ export default function PremiumMoEYSAcademicSetupPage() {
             </div>
           </div>
 
-          <div className="space-y-3 pr-1">
-            {academicYears.map(y => {
-              const status = y.status || (y.is_active ? 'active' : 'closed');
-              return (
-              <div key={y.id} className="flex gap-3.5 items-start p-3.5 rounded-2xl bg-white hover:bg-slate-50 transition-all border border-slate-100/80 hover:border-slate-200 group relative shadow-2xs">
-                <div className={`p-3 rounded-2xl shadow-sm shrink-0 ${status === 'active' ? 'bg-[#FFCF59] text-yellow-950' : status === 'closed' ? 'bg-amber-50 text-amber-600' : status === 'archived' ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-500'}`}>
-                  {status === 'closed' ? <Lock className="w-5 h-5" /> : status === 'archived' ? <Archive className="w-5 h-5" /> : <Calendar className="w-5 h-5" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="text-sm font-extrabold text-slate-900 truncate group-hover:text-[#155EEF] transition-colors">
-                      {y.name}
-                    </h4>
-                    {status === 'active' ? (
-                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 shrink-0 flex items-center gap-1">
-                        <Check className="w-3 h-3" /> កំពុងដំណើរការ
-                      </span>
-                    ) : status === 'closed' ? (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0 flex items-center gap-1">
-                        <Lock className="w-3 h-3" /> បានបិទបញ្ចប់ / ចាក់សោ
-                      </span>
-                    ) : status === 'archived' ? (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
-                        បណ្ណសារ
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
-                        កំពុងរៀបចំ
-                      </span>
-                    )}
+          {academicYears.length === 0 ? (
+            <div className="text-center py-12 px-4 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/60 my-2">
+              <div className="w-14 h-14 bg-blue-50 text-[#155EEF] rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-xs">
+                <CalendarDays className="w-7 h-7" />
+              </div>
+              <h4 className="text-base font-extrabold text-slate-800">មិនទាន់មានឆ្នាំសិក្សានៅឡើយទេ</h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-5 leading-relaxed font-medium">
+                សូមចាប់ផ្តើមបង្កើតឆ្នាំសិក្សាដំបូងរបស់អ្នក ដើម្បីរៀបចំរចនាសម្ព័ន្ធថ្នាក់រៀន បញ្ជីសិស្ស និងកាលវិភាគបង្រៀនឱ្យបានត្រឹមត្រូវ។
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreateError(null);
+                  setShowYearModal(true);
+                }}
+                className="px-6 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-all inline-flex items-center gap-2 shadow-sm shadow-blue-500/20 cursor-pointer active:scale-98"
+              >
+                <Plus className="w-4 h-4" /> បង្កើតឆ្នាំសិក្សាដំបូងឥឡូវនេះ
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3 pr-1">
+              {academicYears.map(y => {
+                const status = y.status || (y.is_active ? 'active' : 'closed');
+                return (
+                <div key={y.id} className="flex gap-3.5 items-start p-3.5 rounded-2xl bg-white hover:bg-slate-50 transition-all border border-slate-100/80 hover:border-slate-200 group relative shadow-2xs">
+                  <div className={`p-3 rounded-2xl shadow-sm shrink-0 ${status === 'active' ? 'bg-[#FFCF59] text-yellow-950' : status === 'closed' ? 'bg-amber-50 text-amber-600' : status === 'archived' ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-500'}`}>
+                    {status === 'closed' ? <Lock className="w-5 h-5" /> : status === 'archived' ? <Archive className="w-5 h-5" /> : <Calendar className="w-5 h-5" />}
                   </div>
-                  <p className="text-xs text-[#64748B] mt-1 font-medium leading-relaxed">
-                    ចាប់ផ្តើម: <span className="font-bold text-slate-600">{y.start_date || y.startDate || '-'}</span> • បញ្ចប់: <span className="font-bold text-slate-600">{y.end_date || y.endDate || '-'}</span>
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 h-full">
-                  <div className="relative group/dropdown">
-                    <button className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm cursor-pointer">
-                      <MoreVertical className="w-4 h-4 text-slate-600" />
-                    </button>
-                    <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-lg border border-slate-100 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-10 flex flex-col p-1">
-                      {status !== 'active' && (
-                        <button onClick={() => handleActivate(y.id)} className="text-left px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-lg flex items-center gap-2 cursor-pointer">
-                          <Check className="w-4 h-4" /> កំណត់ជាឆ្នាំកំពុងដំណើរការ
-                        </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-extrabold text-slate-900 truncate group-hover:text-[#155EEF] transition-colors">
+                        {y.name}
+                      </h4>
+                      {status === 'active' ? (
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 shrink-0 flex items-center gap-1">
+                          <Check className="w-3 h-3" /> កំពុងដំណើរការ
+                        </span>
+                      ) : status === 'closed' ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0 flex items-center gap-1">
+                          <Lock className="w-3 h-3" /> បានបិទបញ្ចប់ / ចាក់សោ
+                        </span>
+                      ) : status === 'archived' ? (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                          បណ្ណសារ
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
+                          កំពុងរៀបចំ
+                        </span>
                       )}
-                      {status === 'active' && (
-                        <button onClick={() => setShowCloseConfirm(y.id)} className="text-left px-3 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 rounded-lg flex items-center gap-2 cursor-pointer">
-                          <Lock className="w-4 h-4" /> បិទបញ្ចប់ឆ្នាំសិក្សា
-                        </button>
-                      )}
-                      {(status === 'closed' || status === 'archived') && (
-                        <button onClick={() => setShowReopenConfirm(y.id)} className="text-left px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-2 cursor-pointer mt-1 border-t border-slate-100 pt-2">
-                          <Unlock className="w-4 h-4" /> បើកដំណើរការឡើងវិញ
-                        </button>
-                      )}
-                      {status !== 'active' && (
-                        <button 
-                          onClick={() => setShowDeleteConfirm(y)} 
-                          className="text-left px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer mt-1 border-t border-slate-100 pt-2"
-                        >
-                          <Trash2 className="w-4 h-4" /> លុបឆ្នាំសិក្សា
-                        </button>
-                      )}
+                    </div>
+                    <p className="text-xs text-[#64748B] mt-1 font-medium leading-relaxed">
+                      ចាប់ផ្តើម: <span className="font-bold text-slate-600">{y.start_date || y.startDate || '-'}</span> • បញ្ចប់: <span className="font-bold text-slate-600">{y.end_date || y.endDate || '-'}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 h-full">
+                    <div className="relative group/dropdown">
+                      <button className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm cursor-pointer">
+                        <MoreVertical className="w-4 h-4 text-slate-600" />
+                      </button>
+                      <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-lg border border-slate-100 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-10 flex flex-col p-1">
+                        {status !== 'active' && (
+                          <button onClick={() => handleActivate(y.id)} className="text-left px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-lg flex items-center gap-2 cursor-pointer">
+                            <Check className="w-4 h-4" /> កំណត់ជាឆ្នាំកំពុងដំណើរការ
+                          </button>
+                        )}
+                        {status === 'active' && (
+                          <button onClick={() => setShowCloseConfirm(y.id)} className="text-left px-3 py-2 text-xs font-bold text-amber-600 hover:bg-amber-50 rounded-lg flex items-center gap-2 cursor-pointer">
+                            <Lock className="w-4 h-4" /> បិទបញ្ចប់ឆ្នាំសិក្សា
+                          </button>
+                        )}
+                        {(status === 'closed' || status === 'archived') && (
+                          <button onClick={() => setShowReopenConfirm(y.id)} className="text-left px-3 py-2 text-xs font-bold text-blue-600 hover:bg-blue-50 rounded-lg flex items-center gap-2 cursor-pointer mt-1 border-t border-slate-100 pt-2">
+                            <Unlock className="w-4 h-4" /> បើកដំណើរការឡើងវិញ
+                          </button>
+                        )}
+                        {status !== 'active' && (
+                          <button 
+                            onClick={() => setShowDeleteConfirm(y)} 
+                            className="text-left px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer mt-1 border-t border-slate-100 pt-2"
+                          >
+                            <Trash2 className="w-4 h-4" /> លុបឆ្នាំសិក្សា
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )})}
-          </div>
+              )})}
+            </div>
+          )}
         </div>
       </div>
 
@@ -418,6 +444,20 @@ export default function PremiumMoEYSAcademicSetupPage() {
                   className="w-full bg-slate-50 border border-slate-200/90 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none transition-all cursor-pointer"
                 />
               </div>
+            </div>
+            <div className="pt-1">
+              <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 cursor-pointer bg-slate-50 hover:bg-slate-100 p-3 rounded-2xl border border-slate-200/80 transition-colors">
+                <input
+                  type="checkbox"
+                  name="is_active"
+                  defaultChecked={academicYears.length === 0}
+                  className="w-4 h-4 text-[#155EEF] rounded border-slate-300 focus:ring-[#155EEF] cursor-pointer"
+                />
+                <div>
+                  <span className="block font-extrabold text-slate-800">កំណត់ជាឆ្នាំសិក្សាសកម្ម (Active) ភ្លាមៗ</span>
+                  <span className="block text-[11px] text-[#64748B] font-normal">អនុញ្ញាតឱ្យប្រព័ន្ធប្រើប្រាស់ឆ្នាំសិក្សានេះសម្រាប់ការចុះឈ្មោះ និងបង្កើតថ្នាក់រៀន</span>
+                </div>
+              </label>
             </div>
           </div>
           <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3 justify-end rounded-b-[32px]">
