@@ -77,6 +77,7 @@ const MENU_ITEMS: MenuItem[] = [
     children: [
       { id: 'grades', label: 'Grades & Ranking', khmerLabel: 'ពិន្ទុ & ថ្នាក់បំប៉ន', href: '/grades', icon: FileEdit, roles: ['teacher'] },
       { id: 'report-cards', label: 'Report Cards', khmerLabel: 'ព្រឹត្តិបត្រពិន្ទុ', href: '/report-cards', icon: FileSpreadsheet, roles: ['teacher'], badge: 'បោះពុម្ព' },
+      { id: 'student-study-plans', label: 'Student Study Plans', khmerLabel: 'ផែនការសិក្សារបស់សិស្ស', href: '/homeroom/student-study-plans', icon: FileText, roles: ['teacher'], badge: 'ផែនការ' },
       { id: 'student-records', label: 'Student Records', khmerLabel: 'សៀវភៅសិក្ខាគារិក', href: '/student-records', icon: Book, roles: ['teacher'] },
     ]
   },
