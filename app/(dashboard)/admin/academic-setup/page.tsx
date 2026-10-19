@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import React, { useState, useEffect } from 'react';
 import { 
   School, Calendar, Plus, Save, Trash2, Edit3, Check, X, FileSpreadsheet, 
-  Download, Upload, AlertTriangle, Search, Users, Building, 
+  Download, Upload, AlertTriangle, AlertCircle, CheckCircle2, Search, Users, Building, 
   CalendarDays, Server, ChevronDown, CalendarCheck, ClipboardList,
   Lock, Unlock, Archive, MoreVertical
 } from 'lucide-react';
@@ -18,10 +18,14 @@ export default function PremiumMoEYSAcademicSetupPage() {
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<string | null>(null);
   const [showYearModal, setShowYearModal] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
   
   // Transition Modals State
   const [showCloseConfirm, setShowCloseConfirm] = useState<string | null>(null);
   const [showReopenConfirm, setShowReopenConfirm] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<any | null>(null);
   const [reopenReason, setReopenReason] = useState('');
 
   useEffect(() => {
@@ -47,11 +51,18 @@ export default function PremiumMoEYSAcademicSetupPage() {
 
   const handleCreateYear = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setCreateError(null);
     setLoading(true);
     const formData = new FormData(e.currentTarget);
-    const name = formData.get('name') as string;
+    const name = (formData.get('name') as string)?.trim();
     const start_date = formData.get('start_date') as string;
     const end_date = formData.get('end_date') as string;
+
+    if (!name || !start_date) {
+      setCreateError('សូមបញ្ចូលឈ្មោះឆ្នាំសិក្សា និងកាលបរិច្ឆេទចាប់ផ្តើមឱ្យបានត្រឹមត្រូវ');
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/admin/academic-years', {
@@ -59,12 +70,42 @@ export default function PremiumMoEYSAcademicSetupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, start_date, end_date }),
       });
-      if (res.ok) {
-        fetchAcademicYears();
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setCreateError(data.error || 'បរាជ័យក្នុងការបង្កើតឆ្នាំសិក្សាថ្មី');
+      } else {
         setShowYearModal(false);
+        setSuccessBanner(`បានបង្កើតឆ្នាំសិក្សា "${name}" ជោគជ័យ!`);
+        setTimeout(() => setSuccessBanner(null), 4000);
+        await fetchAcademicYears();
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setCreateError(e.message || 'កំហុសបណ្តាញ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteYear = async (year: any) => {
+    setLoading(true);
+    setErrorBanner(null);
+    try {
+      const res = await fetch(`/api/admin/academic-years?id=${year.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setErrorBanner(data.error || 'បរាជ័យក្នុងការលុបឆ្នាំសិក្សា');
+      } else {
+        setShowDeleteConfirm(null);
+        setSuccessBanner(`បានលុបឆ្នាំសិក្សា "${year.name}" ជោគជ័យ!`);
+        setTimeout(() => setSuccessBanner(null), 4000);
+        await fetchAcademicYears();
+      }
+    } catch (e: any) {
+      console.error(e);
+      setErrorBanner(e.message || 'កំហុសបណ្តាញក្នុងការលុប');
     } finally {
       setLoading(false);
     }
@@ -72,15 +113,19 @@ export default function PremiumMoEYSAcademicSetupPage() {
 
   const handleActivate = async (id: string) => {
     setLoading(true);
+    setErrorBanner(null);
     try {
       const res = await activateAcademicYear(id);
       if (res.success) {
+        setSuccessBanner('បានកំណត់ឆ្នាំសិក្សានេះជាឆ្នាំសកម្ម (Active) ជោគជ័យ!');
+        setTimeout(() => setSuccessBanner(null), 4000);
         await fetchAcademicYears();
       } else {
-        alert(res.error);
+        setErrorBanner(res.error || 'បរាជ័យក្នុងការកំណត់ឆ្នាំសិក្សាសកម្ម');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setErrorBanner(e.message || 'កំហុសបណ្តាញ');
     } finally {
       setLoading(false);
     }
@@ -88,16 +133,20 @@ export default function PremiumMoEYSAcademicSetupPage() {
 
   const handleCloseYear = async (id: string) => {
     setLoading(true);
+    setErrorBanner(null);
     try {
       const res = await closeAcademicYear(id);
       if (res.success) {
         setShowCloseConfirm(null);
+        setSuccessBanner('បានបិទបញ្ចប់ និងចាក់សោឆ្នាំសិក្សាជោគជ័យ!');
+        setTimeout(() => setSuccessBanner(null), 4000);
         await fetchAcademicYears();
       } else {
-        alert(res.error);
+        setErrorBanner(res.error || 'បរាជ័យក្នុងការបិទឆ្នាំសិក្សា');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setErrorBanner(e.message || 'កំហុសបណ្តាញ');
     } finally {
       setLoading(false);
     }
@@ -106,17 +155,21 @@ export default function PremiumMoEYSAcademicSetupPage() {
   const handleReopenYear = async (id: string) => {
     if (!reopenReason) return alert('បញ្ជាក់ហេតុផល (Reason required)');
     setLoading(true);
+    setErrorBanner(null);
     try {
       const res = await reopenAcademicYear(id, reopenReason);
       if (res.success) {
         setShowReopenConfirm(null);
         setReopenReason('');
+        setSuccessBanner('បានបើកដំណើរការឆ្នាំសិក្សាឡើងវិញជោគជ័យ!');
+        setTimeout(() => setSuccessBanner(null), 4000);
         await fetchAcademicYears();
       } else {
-        alert(res.error);
+        setErrorBanner(res.error || 'បរាជ័យក្នុងការបើកដំណើរការឡើងវិញ');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setErrorBanner(e.message || 'កំហុសបណ្តាញ');
     } finally {
       setLoading(false);
     }
@@ -138,11 +191,39 @@ export default function PremiumMoEYSAcademicSetupPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-          <button onClick={() => setShowYearModal(true)} className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-full text-sm transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap group cursor-pointer">
+          <button 
+            onClick={() => {
+              setCreateError(null);
+              setShowYearModal(true);
+            }} 
+            className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-full text-sm transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap group cursor-pointer"
+          >
             <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" /> ឆ្នាំសិក្សាថ្មី
           </button>
         </div>
       </header>
+
+      {/* Success Alert */}
+      {successBanner && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center justify-between text-sm font-bold animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>{successBanner}</span>
+          </div>
+          <button onClick={() => setSuccessBanner(null)} className="text-emerald-600 hover:text-emerald-800 text-xs px-2 py-1 rounded cursor-pointer">បិទ</button>
+        </div>
+      )}
+
+      {/* Error Alert */}
+      {errorBanner && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl flex items-center justify-between text-sm font-bold animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <span>{errorBanner}</span>
+          </div>
+          <button onClick={() => setErrorBanner(null)} className="text-rose-600 hover:text-rose-800 text-xs px-2 py-1 rounded cursor-pointer">បិទ</button>
+        </div>
+      )}
 
       {/* Action Switcher */}
       <div className="flex flex-wrap items-center gap-2 pt-1 border-b border-slate-200/60 pb-4">
@@ -162,7 +243,7 @@ export default function PremiumMoEYSAcademicSetupPage() {
           <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">
             <div className="flex justify-between items-start">
               <h2 className="text-3xl lg:text-4xl font-black text-white tracking-tight leading-none">
-                {academicYears.find(y => y.is_active || y.isActive)?.name || 'មិនមាន'}
+                {academicYears.find(y => y.status === 'active' || y.is_active || y.isActive)?.name || 'មិនមាន'}
               </h2>
               <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all shadow-2xs">
                 <CalendarDays className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
@@ -175,7 +256,7 @@ export default function PremiumMoEYSAcademicSetupPage() {
           <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
             <div className="flex justify-between items-start">
               <h2 className="text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-none">
-                {academicYears.filter(y => !(y.is_active || y.isActive)).length || '0'}
+                {academicYears.filter(y => !(y.status === 'active' || y.is_active || y.isActive)).length || '0'}
               </h2>
               <div className="w-9 h-9 bg-yellow-100 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
                 <Server className="w-4 h-4 text-yellow-900" />
@@ -246,7 +327,7 @@ export default function PremiumMoEYSAcademicSetupPage() {
                     <button className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm cursor-pointer">
                       <MoreVertical className="w-4 h-4 text-slate-600" />
                     </button>
-                    <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-10 flex flex-col p-1">
+                    <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-lg border border-slate-100 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-10 flex flex-col p-1">
                       {status !== 'active' && (
                         <button onClick={() => handleActivate(y.id)} className="text-left px-3 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-lg flex items-center gap-2 cursor-pointer">
                           <Check className="w-4 h-4" /> កំណត់ជាឆ្នាំកំពុងដំណើរការ
@@ -262,6 +343,14 @@ export default function PremiumMoEYSAcademicSetupPage() {
                           <Unlock className="w-4 h-4" /> បើកដំណើរការឡើងវិញ
                         </button>
                       )}
+                      {status !== 'active' && (
+                        <button 
+                          onClick={() => setShowDeleteConfirm(y)} 
+                          className="text-left px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer mt-1 border-t border-slate-100 pt-2"
+                        >
+                          <Trash2 className="w-4 h-4" /> លុបឆ្នាំសិក្សា
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -271,10 +360,13 @@ export default function PremiumMoEYSAcademicSetupPage() {
         </div>
       </div>
 
-      {/* MODALS (Full-Screen Frosted Glass Portal) */}
+      {/* CREATE YEAR MODAL */}
       <Modal
         isOpen={showYearModal}
-        onClose={() => setShowYearModal(false)}
+        onClose={() => {
+          setShowYearModal(false);
+          setCreateError(null);
+        }}
         size="md"
         icon={
           <div className="w-10 h-10 bg-[#155EEF]/10 text-[#155EEF] rounded-2xl flex items-center justify-center shadow-xs">
@@ -285,22 +377,28 @@ export default function PremiumMoEYSAcademicSetupPage() {
       >
         <form onSubmit={handleCreateYear}>
           <div className="p-6 sm:p-8 space-y-4">
+            {createError && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl flex items-center gap-2 text-xs font-bold animate-fadeIn">
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>{createError}</span>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-extrabold text-[#64748B] mb-1.5 uppercase tracking-wider">
-                ឈ្មោះឆ្នាំសិក្សា
+                ឈ្មោះឆ្នាំសិក្សា *
               </label>
               <input
                 name="name"
                 required
                 type="text"
-                placeholder="2025-2026"
+                placeholder="ឧ. 2026-2027 ឬ ២០២៦-២០២៧"
                 className="w-full bg-slate-50 border border-slate-200/90 rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none transition-all"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-extrabold text-[#64748B] mb-1.5 uppercase tracking-wider">
-                  ថ្ងៃចាប់ផ្តើម
+                  ថ្ងៃចាប់ផ្តើម *
                 </label>
                 <input
                   name="start_date"
@@ -311,10 +409,11 @@ export default function PremiumMoEYSAcademicSetupPage() {
               </div>
               <div>
                 <label className="block text-xs font-extrabold text-[#64748B] mb-1.5 uppercase tracking-wider">
-                  ថ្ងៃបញ្ចប់
+                  ថ្ងៃបញ្ចប់ *
                 </label>
                 <input
                   name="end_date"
+                  required
                   type="date"
                   className="w-full bg-slate-50 border border-slate-200/90 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] outline-none transition-all cursor-pointer"
                 />
@@ -324,7 +423,10 @@ export default function PremiumMoEYSAcademicSetupPage() {
           <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3 justify-end rounded-b-[32px]">
             <button
               type="button"
-              onClick={() => setShowYearModal(false)}
+              onClick={() => {
+                setShowYearModal(false);
+                setCreateError(null);
+              }}
               className="px-6 py-2.5 font-extrabold text-xs text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-all shadow-xs cursor-pointer"
             >
               បោះបង់
@@ -332,12 +434,56 @@ export default function PremiumMoEYSAcademicSetupPage() {
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2.5 font-extrabold text-xs text-white bg-[#155EEF] hover:bg-blue-700 rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50 active:scale-98"
+              className="px-6 py-2.5 font-extrabold text-xs text-white bg-[#155EEF] hover:bg-blue-700 rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50 active:scale-98 flex items-center gap-2"
             >
+              {loading ? <Server className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               {loading ? 'កំពុងបង្កើត...' : 'បង្កើត'}
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete Accidental Academic Year Modal */}
+      <Modal
+        isOpen={!!showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(null)}
+        size="sm"
+        icon={
+          <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center shadow-xs mx-auto mb-4">
+            <Trash2 className="w-6 h-6" />
+          </div>
+        }
+        title={<span className="text-center block text-xl text-rose-600">លុបឆ្នាំសិក្សា</span>}
+      >
+        <div className="p-6 pt-0 text-center space-y-5">
+          <p className="text-sm font-semibold text-slate-600 leading-relaxed">
+            តើលោកគ្រូអ្នកគ្រូពិតជាចង់លុបឆ្នាំសិក្សា <strong className="text-slate-900">"{showDeleteConfirm?.name}"</strong> នេះមែនទេ?
+          </p>
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-left text-xs font-medium text-amber-800 space-y-1">
+            <div className="flex items-center gap-1.5 font-bold text-amber-900">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+              <span>ល័ក្ខខ័ណ្ឌសុវត្ថិភាពទិន្នន័យ៖</span>
+            </div>
+            <p>ការលុបអាចធ្វើទៅបានលុះត្រាតែឆ្នាំសិក្សានេះមិនទាន់មានថ្នាក់រៀន សិស្សចុះឈ្មោះ ឬកំណត់ត្រាពិន្ទុ/វត្តមានណាមួយឡើយ។</p>
+          </div>
+          <div className="flex gap-3 justify-center">
+            <button 
+              onClick={() => setShowDeleteConfirm(null)} 
+              disabled={loading}
+              className="px-6 py-2.5 font-extrabold text-sm text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl transition-all cursor-pointer"
+            >
+              បោះបង់
+            </button>
+            <button 
+              onClick={() => handleDeleteYear(showDeleteConfirm)} 
+              disabled={loading} 
+              className="px-6 py-2.5 font-extrabold text-sm text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-all shadow-md shadow-rose-500/20 cursor-pointer flex items-center gap-2 disabled:opacity-50"
+            >
+              {loading ? <Server className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              លុបចេញ
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Close Confirm Modal */}
