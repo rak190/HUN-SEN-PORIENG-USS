@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, RefreshCcw, CheckCircle2, Download, Building2, Loader2 } from 'lucide-react';
+import { Save, RefreshCcw, CheckCircle2, Download, Building2, Loader2, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
 
 export default function AdminSchoolInfoPage() {
   const [loading, setLoading] = useState(true);
   const [isSavingSchool, setIsSavingSchool] = useState(false);
   const [schoolSaved, setSchoolSaved] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Basic Info
   const [schoolName, setSchoolName] = useState('វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង');
@@ -49,11 +50,11 @@ export default function AdminSchoolInfoPage() {
         if (res.ok) {
           const { schoolInfo } = await res.json();
           if (schoolInfo) {
-            if (schoolInfo.schoolName) setSchoolName(schoolInfo.schoolName);
-            if (schoolInfo.schoolNameEn) setSchoolNameEn(schoolInfo.schoolNameEn);
-            if (schoolInfo.schoolType) setSchoolType(schoolInfo.schoolType);
-            if (schoolInfo.schoolCode) setSchoolCode(schoolInfo.schoolCode);
-            if (schoolInfo.academicYear) setAcademicYear(schoolInfo.academicYear);
+            if (schoolInfo.schoolName || schoolInfo.name) setSchoolName(schoolInfo.schoolName || schoolInfo.name);
+            if (schoolInfo.schoolNameEn || schoolInfo.name_en) setSchoolNameEn(schoolInfo.schoolNameEn || schoolInfo.name_en);
+            if (schoolInfo.schoolType || schoolInfo.school_type) setSchoolType(schoolInfo.schoolType || schoolInfo.school_type);
+            if (schoolInfo.schoolCode || schoolInfo.code) setSchoolCode(schoolInfo.schoolCode || schoolInfo.code);
+            if (schoolInfo.academicYear || schoolInfo.academic_year) setAcademicYear(schoolInfo.academicYear || schoolInfo.academic_year);
             if (schoolInfo.abbreviation) setAbbreviation(schoolInfo.abbreviation);
             if (schoolInfo.department) setDepartment(schoolInfo.department);
 
@@ -62,18 +63,20 @@ export default function AdminSchoolInfoPage() {
             if (schoolInfo.district) setDistrict(schoolInfo.district);
             if (schoolInfo.province) setProvince(schoolInfo.province);
 
-            if (schoolInfo.principalName) setPrincipalName(schoolInfo.principalName);
-            if (schoolInfo.principalTitle) setPrincipalTitle(schoolInfo.principalTitle);
-            if (schoolInfo.principalPhone) setPrincipalPhone(schoolInfo.principalPhone);
+            if (schoolInfo.principalName || schoolInfo.principal_name) setPrincipalName(schoolInfo.principalName || schoolInfo.principal_name);
+            if (schoolInfo.principalTitle || schoolInfo.principal_title) setPrincipalTitle(schoolInfo.principalTitle || schoolInfo.principal_title);
+            if (schoolInfo.principalPhone || schoolInfo.principal_phone) setPrincipalPhone(schoolInfo.principalPhone || schoolInfo.principal_phone);
 
-            if (schoolInfo.ictLeadName) setIctLeadName(schoolInfo.ictLeadName);
-            if (schoolInfo.ictLeadPhone) setIctLeadPhone(schoolInfo.ictLeadPhone);
-            if (schoolInfo.ictLeadEmail) setIctLeadEmail(schoolInfo.ictLeadEmail);
+            if (schoolInfo.ictLeadName || schoolInfo.ict_lead_name) setIctLeadName(schoolInfo.ictLeadName || schoolInfo.ict_lead_name);
+            if (schoolInfo.ictLeadPhone || schoolInfo.ict_lead_phone) setIctLeadPhone(schoolInfo.ictLeadPhone || schoolInfo.ict_lead_phone);
+            if (schoolInfo.ictLeadEmail || schoolInfo.ict_lead_email || schoolInfo.contact_email) {
+              setIctLeadEmail(schoolInfo.ictLeadEmail || schoolInfo.ict_lead_email || schoolInfo.contact_email);
+            }
 
-            if (schoolInfo.smcHeadName) setSmcHeadName(schoolInfo.smcHeadName);
-            if (schoolInfo.smcHeadPhone) setSmcHeadPhone(schoolInfo.smcHeadPhone);
+            if (schoolInfo.smcHeadName || schoolInfo.smc_head_name) setSmcHeadName(schoolInfo.smcHeadName || schoolInfo.smc_head_name);
+            if (schoolInfo.smcHeadPhone || schoolInfo.smc_head_phone) setSmcHeadPhone(schoolInfo.smcHeadPhone || schoolInfo.smc_head_phone);
 
-            if (schoolInfo.waterSupply) setWaterSupply(schoolInfo.waterSupply);
+            if (schoolInfo.waterSupply || schoolInfo.water_supply) setWaterSupply(schoolInfo.waterSupply || schoolInfo.water_supply);
             if (schoolInfo.electricity) setElectricity(schoolInfo.electricity);
             if (schoolInfo.internet) setInternet(schoolInfo.internet);
           }
@@ -90,6 +93,7 @@ export default function AdminSchoolInfoPage() {
 
   const handleSaveSchool = async () => {
     setIsSavingSchool(true);
+    setErrorMessage(null);
     try {
       const payload = {
         schoolName,
@@ -130,7 +134,8 @@ export default function AdminSchoolInfoPage() {
       setSchoolSaved(true);
       setTimeout(() => setSchoolSaved(false), 3000);
     } catch (err: any) {
-      alert('កំហុសក្នុងការរក្សាទុក៖ ' + err.message);
+      console.error('Save error:', err);
+      setErrorMessage(err.message || 'កំហុសមិនស្គាល់ក្នុងការរក្សាទុក');
     } finally {
       setIsSavingSchool(false);
     }
@@ -200,6 +205,22 @@ export default function AdminSchoolInfoPage() {
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center gap-2 text-sm font-bold animate-fadeIn">
           <CheckCircle2 className="w-5 h-5 text-emerald-600" />
           <span>ព័ត៌មានសាលារៀនត្រូវបានរក្សាទុកជោគជ័យទៅក្នុងប្រព័ន្ធ Database!</span>
+        </div>
+      )}
+
+      {/* Error Alert */}
+      {errorMessage && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl flex items-center justify-between text-sm font-bold animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <span>កំហុសក្នុងការរក្សាទុក៖ {errorMessage}</span>
+          </div>
+          <button 
+            onClick={() => setErrorMessage(null)}
+            className="text-rose-500 hover:text-rose-700 text-xs px-2 py-1 rounded cursor-pointer"
+          >
+            បិទ
+          </button>
         </div>
       )}
 
