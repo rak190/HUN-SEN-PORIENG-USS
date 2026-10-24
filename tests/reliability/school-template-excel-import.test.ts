@@ -226,11 +226,12 @@ describe('Official School Template Excel Import & Study Plan Reliability Suite',
     test('Scenario 4E: useStudents.ts selects all profiling fields in STUDENT_ROSTER_FIELDS', () => {
       const hookPath = path.resolve(process.cwd(), 'hooks/useStudents.ts');
       const code = fs.readFileSync(hookPath, 'utf8');
-      assert.ok(code.includes('birth_cert_no'));
       assert.ok(code.includes('parent_phone'));
       assert.ok(code.includes('health_note'));
       assert.ok(code.includes('height_m'));
       assert.ok(code.includes('weight_kg'));
+      assert.ok(code.includes('bmi'));
+      assert.ok(code.includes('nutrition_status'));
     });
 
     test('Scenario 4F: Migration 083 exists and defines batch_update_student_profiles_atomic RPC', () => {

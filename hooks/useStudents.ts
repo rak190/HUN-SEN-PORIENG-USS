@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { buildCacheKey, getOrFetchScoped, subscribe } from '@/lib/cache/client-cache';
 
 export const STUDENT_ROSTER_FIELDS = 
-  'id, student_id_number, desk_number, room_number, full_name, english_name, photo_url, gender, dob, current_address, enrollment_status, scholarship, id_poor, orphan, distance_km, weight_kg, height_m, bmi, nutrition_status, disability, assistive_device, health_note, father_name, father_job, father_phone, mother_name, mother_job, mother_phone, guardian_name, guardian_job, guardian_phone, siblings_count, housing, income, parent_phone, birth_cert_no, risk_level';
+  'id, student_id_number, desk_number, room_number, full_name, english_name, photo_url, gender, dob, current_address, enrollment_status, scholarship, id_poor, orphan, distance_km, weight_kg, height_m, bmi, nutrition_status, disability, health_note, father_name, father_job, father_phone, mother_name, mother_job, mother_phone, guardian_name, guardian_job, guardian_phone, siblings_count, housing, income, parent_phone, risk_level';
 
 export function useStudents(activeClassId: string | undefined) {
   const { user, profile, activeAcademicYear } = useAuth();
