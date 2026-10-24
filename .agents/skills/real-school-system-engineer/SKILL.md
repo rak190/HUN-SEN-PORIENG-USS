@@ -51,7 +51,7 @@ Never optimize only for visual appearance or speed of implementation.
 
 # 2. PROJECT CONTEXT
 
-This project is a web-based school management system for a Cambodian upper-secondary school.
+This project is a web-based school management system for a Cambodian lower and upper-secondary school.
 
 Approximate operational scale:
 
