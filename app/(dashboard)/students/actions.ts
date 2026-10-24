@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { formatKhmerAddress } from './types';
 
 const StudentSchema = z.object({
   id: z.string().optional(),
@@ -619,6 +620,10 @@ export async function batchUpdateStudentProfilesAction(payload: {
     siblings_count?: number;
     income?: number;
     address?: string;
+    addr_village?: string;
+    addr_commune?: string;
+    addr_district?: string;
+    addr_province?: string;
     migrant_status?: 'none' | 'parents' | 'student';
     housing?: string;
   }>;
@@ -667,11 +672,50 @@ export async function batchUpdateStudentProfilesAction(payload: {
       }
     }
 
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
+    // Prepare normalized update items
+    const preparedUpdates = payload.updates.map(item => {
+      let currentAddress: string | undefined = undefined;
+      if (item.address !== undefined) {
+        currentAddress = item.address.trim() || undefined;
+      } else if (item.addr_village || item.addr_commune || item.addr_district || item.addr_province) {
+        const fullAddr = formatKhmerAddress(item.addr_village, item.addr_commune, item.addr_district, item.addr_province);
+        if (fullAddr) currentAddress = fullAddr;
+      }
 
-    // Execute atomic-like progressive updates
+      return {
+        ...item,
+        current_address: currentAddress,
+      };
+    });
+
+    // 1. Primary execution path: Atomic Database RPC
+    const { data: rpcData, error: rpcError } = await supabase.rpc('batch_update_student_profiles_atomic', {
+      p_class_id: payload.class_id,
+      p_updates: preparedUpdates,
+      p_caller_id: user.id,
+    });
+
+    if (!rpcError && rpcData?.success) {
+      revalidatePath('/students');
+      revalidatePath('/homeroom');
+      revalidatePath('/homeroom/student-study-plans');
+      revalidatePath('/health');
+      revalidatePath('/classes/info');
+      return { success: true, count: rpcData.updated_count ?? preparedUpdates.length };
+    }
+
+    // If RPC failed due to an authorization or validation error, return immediately
+    if (rpcError && rpcError.code !== 'PGRST202' && rpcError.code !== '42883') {
+      console.error('[batchUpdateStudentProfilesAction] RPC error:', rpcError);
+      return { success: false, error: rpcError.message || 'Atomic batch update failed.' };
+    }
+
+    // 2. Fallback progressive updates (if RPC function not yet deployed)
+    console.warn('[batchUpdateStudentProfilesAction] RPC unavailable, falling back to sequential transaction loop');
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
     let updatedCount = 0;
-    for (const item of payload.updates) {
+
+    for (const item of preparedUpdates) {
       const studentFields: Record<string, any> = {};
 
       if (item.full_name !== undefined) studentFields.full_name = item.full_name.trim();
@@ -727,11 +771,11 @@ export async function batchUpdateStudentProfilesAction(payload: {
       if (item.guardian_phone !== undefined) studentFields.guardian_phone = item.guardian_phone.trim() || null;
       if (item.siblings_count !== undefined) studentFields.siblings_count = Number(item.siblings_count) || 0;
       if (item.income !== undefined) studentFields.income = Number(item.income) || 0;
-      if (item.address !== undefined) studentFields.current_address = item.address.trim() || null;
+      if (item.current_address !== undefined) studentFields.current_address = item.current_address;
       if (item.migrant_status !== undefined) studentFields.migrant_status = item.migrant_status || 'none';
       if (item.housing !== undefined) studentFields.housing = item.housing.trim() || null;
 
-      // 1. Update students table if any student fields are populated
+      // 1. Update students table
       if (Object.keys(studentFields).length > 0) {
         const { error: studentErr } = await supabase
           .from('students')
@@ -762,7 +806,7 @@ export async function batchUpdateStudentProfilesAction(payload: {
         }
       }
 
-      // 3. Update health records if height or weight were modified
+      // 3. Update health records
       if (item.weight_kg !== undefined || item.height_m !== undefined || item.health_issues !== undefined || item.disability !== undefined) {
         const academicYearId = validStudentMap.get(item.id);
         if (academicYearId) {
@@ -791,6 +835,7 @@ export async function batchUpdateStudentProfilesAction(payload: {
 
     revalidatePath('/students');
     revalidatePath('/homeroom');
+    revalidatePath('/homeroom/student-study-plans');
     revalidatePath('/health');
     revalidatePath('/classes/info');
 
@@ -800,6 +845,7 @@ export async function batchUpdateStudentProfilesAction(payload: {
     return { success: false, error: err?.message || 'Failed to batch update student profiles.' };
   }
 }
+
 
 
 

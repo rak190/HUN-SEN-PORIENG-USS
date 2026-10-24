@@ -10,9 +10,11 @@ export interface MassiveProfilingStudent {
   photo_url?: string;
   gender: string;
   date_of_birth?: string;
+  dob?: string;
   age?: number;
   birth_cert_no?: string;
   student_phone?: string;
+  parent_phone?: string;
   // Tab 2: Academic
   status: 'new' | 'repeater' | 'transfer';
   prev_school?: string;
@@ -121,6 +123,14 @@ export function normalizePastedCell(field: string, rawVal: string): any {
   // 1. Date of birth normalization
   if (field === 'date_of_birth' || field === 'dob') {
     if (!str) return '';
+    // Handle Excel serial date numbers (e.g. 39553 -> 2008-04-15)
+    const numDate = Number(str);
+    if (!isNaN(numDate) && numDate > 25000 && numDate < 65000) {
+      const dateObj = new Date((numDate - 25569) * 86400 * 1000);
+      if (!isNaN(dateObj.getTime())) {
+        return dateObj.toISOString().split('T')[0];
+      }
+    }
     // Match DD/MM/YYYY or DD-MM-YYYY
     const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if (dmyMatch) {
@@ -189,18 +199,205 @@ export function normalizePastedCell(field: string, rawVal: string): any {
     return 'no';
   }
 
-  // 8. Numbers
+  // 9. Numbers
   if (['distance_km', 'income', 'siblings_count', 'age'].includes(field)) {
     const num = parseFloat(str.replace(/[^0-9.]/g, ''));
     return isNaN(num) ? 0 : num;
   }
 
-  // 9. Phone Numbers
+  // 10. Phone Numbers
   if (['student_phone', 'father_phone', 'mother_phone', 'guardian_phone'].includes(field)) {
     return str.replace(/[^0-9+]/g, '');
   }
 
   return str;
+}
+
+export function formatKhmerAddress(village?: string, commune?: string, district?: string, province?: string): string {
+  const parts: string[] = [];
+  if (village?.trim()) {
+    const v = village.trim();
+    parts.push(v.startsWith('ភូមិ') ? v : `ភូមិ${v}`);
+  }
+  if (commune?.trim()) {
+    const c = commune.trim();
+    parts.push(c.startsWith('ឃុំ') || c.startsWith('សង្កាត់') ? c : `ឃុំ${c}`);
+  }
+  if (district?.trim()) {
+    const d = district.trim();
+    parts.push(d.startsWith('ស្រុក') || d.startsWith('ក្រុង') || d.startsWith('ខណ្ឌ') ? d : `ស្រុក${d}`);
+  }
+  if (province?.trim()) {
+    const p = province.trim();
+    parts.push(p.startsWith('ខេត្ត') || p.startsWith('រាជធានី') ? p : `ខេត្ត${p}`);
+  }
+  return parts.join(' ');
+}
+
+export type OfficialTemplateType = '7-9' | '10-12';
+
+export interface ParsedOfficialExcelCandidate {
+  rawIndex: number;
+  student_id_number?: string;
+  full_name?: string;
+  gender?: string;
+  date_of_birth?: string;
+  pob?: string;
+  room_number?: string;
+  desk_number?: string;
+  prev_school?: string;
+  father_name?: string;
+  father_job?: string;
+  father_phone?: string;
+  mother_name?: string;
+  mother_job?: string;
+  mother_phone?: string;
+  address?: string;
+  student_phone?: string;
+  indigenous?: 'yes' | 'no';
+  scholarship?: 'yes' | 'no';
+  disability?: 'none' | 'mild' | 'severe';
+  id_poor?: 'none' | 'level_1' | 'level_2';
+}
+
+/**
+ * Parses a single row copied from official Ministry Excel template (Worksheet A or B)
+ */
+export function parseOfficialExcelRow(
+  template: OfficialTemplateType,
+  cells: string[],
+  rawIndex: number
+): ParsedOfficialExcelCandidate {
+  const safeCell = (idx: number) => (cells[idx] !== undefined ? cells[idx].trim() : '');
+
+  // Common identity indices
+  const idNum = normalizeKhmerDigits(safeCell(1)); // Col B
+  const fullName = safeCell(2); // Col C
+  const gender = normalizePastedCell('gender', safeCell(3)); // Col D
+  const dob = normalizePastedCell('date_of_birth', safeCell(4)); // Col E
+  const pob = safeCell(5); // Col F
+
+  if (template === '10-12') {
+    // Upper Secondary (Worksheet B)
+    const prevPrimary = safeCell(6); // Col G
+    const roomNumber = safeCell(7); // Col H (បន្ទប់)
+    const deskNumber = safeCell(8); // Col I (លេខតុ)
+    const prevSecondary = safeCell(10); // Col K
+    const fatherName = safeCell(11); // Col L
+    const fatherJob = safeCell(12); // Col M
+    const fatherPhone = normalizePastedCell('father_phone', safeCell(13)); // Col N
+    const motherName = safeCell(14); // Col O
+    const motherJob = safeCell(15); // Col P
+    const motherPhone = normalizePastedCell('mother_phone', safeCell(16)); // Col Q
+    const village = safeCell(17); // Col R
+    const commune = safeCell(18); // Col S
+    const district = safeCell(19); // Col T
+    const province = safeCell(20); // Col U
+    const studentPhone = normalizePastedCell('student_phone', safeCell(21)); // Col V
+    const indigenous = safeCell(22) ? (normalizePastedCell('indigenous', safeCell(22)) as any) : undefined; // Col W
+
+    // Scholarship across cols X-AA
+    let scholarship: 'yes' | 'no' = 'no';
+    if ([safeCell(23), safeCell(24), safeCell(25), safeCell(26)].some(v => v && v !== 'គ្មាន' && v !== '-')) {
+      scholarship = 'yes';
+    }
+
+    const disability = safeCell(27) ? (normalizePastedCell('disability', safeCell(27)) as any) : 'none'; // Col AB
+
+    // ID Poor: Col BB is ក្រ១, Col BC is ក្រ២
+    const poor1 = safeCell(53); // Col BB
+    const poor2 = safeCell(54); // Col BC
+    let idPoor: 'none' | 'level_1' | 'level_2' = 'none';
+    if (poor1 && poor1 !== '-' && poor1 !== '0') {
+      idPoor = 'level_1';
+    } else if (poor2 && poor2 !== '-' && poor2 !== '0') {
+      idPoor = 'level_2';
+    }
+
+    const address = formatKhmerAddress(village, commune, district, province);
+
+    return {
+      rawIndex,
+      student_id_number: idNum || undefined,
+      full_name: fullName || undefined,
+      gender: gender || undefined,
+      date_of_birth: dob || undefined,
+      pob: pob || undefined,
+      room_number: roomNumber || undefined,
+      desk_number: deskNumber || undefined,
+      prev_school: [prevPrimary, prevSecondary].filter(Boolean).join(', ') || undefined,
+      father_name: fatherName || undefined,
+      father_job: fatherJob || undefined,
+      father_phone: fatherPhone || undefined,
+      mother_name: motherName || undefined,
+      mother_job: motherJob || undefined,
+      mother_phone: motherPhone || undefined,
+      address: address || undefined,
+      student_phone: studentPhone || undefined,
+      indigenous,
+      scholarship,
+      disability,
+      id_poor: idPoor,
+    };
+  }
+
+  // Lower Secondary (Worksheet A: Grades 7-9)
+  const prevPrimary = safeCell(6); // Col G
+  const prevSecondary = safeCell(7); // Col H
+  const fatherName = safeCell(8); // Col I
+  const fatherJob = safeCell(9); // Col J
+  const fatherPhone = normalizePastedCell('father_phone', safeCell(10)); // Col K
+  const motherName = safeCell(11); // Col L
+  const motherJob = safeCell(12); // Col M
+  const motherPhone = normalizePastedCell('mother_phone', safeCell(13)); // Col N
+  const village = safeCell(14); // Col O
+  const commune = safeCell(15); // Col P
+  const district = safeCell(16); // Col Q
+  const province = safeCell(17); // Col R
+  const studentPhone = normalizePastedCell('student_phone', safeCell(18)); // Col S
+  const indigenous = safeCell(19) ? (normalizePastedCell('indigenous', safeCell(19)) as any) : undefined; // Col T
+
+  // Scholarship across cols U-X
+  let scholarship: 'yes' | 'no' = 'no';
+  if ([safeCell(20), safeCell(21), safeCell(22), safeCell(23)].some(v => v && v !== 'គ្មាន' && v !== '-')) {
+    scholarship = 'yes';
+  }
+
+  const disability = safeCell(24) ? (normalizePastedCell('disability', safeCell(24)) as any) : 'none'; // Col Y
+
+  // ID Poor: Col AY is ក្រ១, Col AZ is ក្រ២
+  const poor1 = safeCell(50); // Col AY
+  const poor2 = safeCell(51); // Col AZ
+  let idPoor: 'none' | 'level_1' | 'level_2' = 'none';
+  if (poor1 && poor1 !== '-' && poor1 !== '0') {
+    idPoor = 'level_1';
+  } else if (poor2 && poor2 !== '-' && poor2 !== '0') {
+    idPoor = 'level_2';
+  }
+
+  const address = formatKhmerAddress(village, commune, district, province);
+
+  return {
+    rawIndex,
+    student_id_number: idNum || undefined,
+    full_name: fullName || undefined,
+    gender: gender || undefined,
+    date_of_birth: dob || undefined,
+    pob: pob || undefined,
+    prev_school: [prevPrimary, prevSecondary].filter(Boolean).join(', ') || undefined,
+    father_name: fatherName || undefined,
+    father_job: fatherJob || undefined,
+    father_phone: fatherPhone || undefined,
+    mother_name: motherName || undefined,
+    mother_job: motherJob || undefined,
+    mother_phone: motherPhone || undefined,
+    address: address || undefined,
+    student_phone: studentPhone || undefined,
+    indigenous,
+    scholarship,
+    disability,
+    id_poor: idPoor,
+  };
 }
 
 

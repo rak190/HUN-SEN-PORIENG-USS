@@ -14,6 +14,7 @@ interface StudentFiltersProps {
   isEditMode?: boolean;
   onToggleEditMode?: () => void;
   unsavedCount?: number;
+  onOpenExcelImport?: () => void;
 }
 
 export default function StudentFilters({
@@ -28,7 +29,8 @@ export default function StudentFilters({
   onOpenBulkImage,
   isEditMode = false,
   onToggleEditMode,
-  unsavedCount = 0
+  unsavedCount = 0,
+  onOpenExcelImport,
 }: StudentFiltersProps) {
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
 
@@ -60,6 +62,18 @@ export default function StudentFilters({
             className="px-4 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors mr-2 disabled:opacity-50"
           >
             <AlertCircle className="w-4 h-4" /> បោះបង់សិស្សដែលជ្រើសរើស ({selectedIdsCount})
+          </button>
+        )}
+
+        {onOpenExcelImport && (
+          <button 
+            type="button"
+            onClick={onOpenExcelImport} 
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm shadow-emerald-600/20"
+            title="នាំចូលទិន្នន័យពី Excel គំរូផ្លូវការដើមឆ្នាំ (Import / Paste)"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
+            <span>នាំចូលពី Excel (Import / Paste)</span>
           </button>
         )}
 

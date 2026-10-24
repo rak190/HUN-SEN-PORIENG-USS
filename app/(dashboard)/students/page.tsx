@@ -15,6 +15,7 @@ import StudentTable from '@/components/students/StudentTable';
 import StudentProfileDrawer from '@/components/students/StudentProfileDrawer';
 import StudentFilters from '@/components/students/StudentFilters';
 import BulkImageUploadModal from '@/components/students/BulkImageUploadModal';
+import StudentExcelImportModal from '@/components/students/StudentExcelImportModal';
 import { saveStudentAction, batchUpdateStudentProfilesAction } from './actions';
 import { useStudents } from '@/hooks/useStudents';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
@@ -44,6 +45,7 @@ export default function StudentsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [profileDrawerData, setProfileDrawerData] = useState<Partial<MassiveProfilingStudent> | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isExcelImportModalOpen, setIsExcelImportModalOpen] = useState(false);
   const [isGridModalOpen, setIsGridModalOpen] = useState(false);
   const [isBulkImageModalOpen, setIsBulkImageModalOpen] = useState(false);
   const [activeTableView, setActiveTableView] = useState(0);
@@ -823,6 +825,7 @@ export default function StudentsPage() {
             isEditMode={isEditMode}
             onToggleEditMode={handleToggleEditMode}
             unsavedCount={unsavedCount}
+            onOpenExcelImport={() => setIsExcelImportModalOpen(true)}
           />
 
       {/* Table View Filters */}
@@ -1360,6 +1363,19 @@ export default function StudentsPage() {
         onComplete={() => {
           // Re-fetch or just let the local state update handle it
           console.log('Bulk image upload completed');
+        }}
+      />
+
+      {/* Official School Excel Template Import Modal */}
+      <StudentExcelImportModal
+        isOpen={isExcelImportModalOpen}
+        onClose={() => setIsExcelImportModalOpen(false)}
+        students={students}
+        activeClass={activeClass}
+        onApplyUpdates={(incomingUpdates) => {
+          handleBatchDraftChange(incomingUpdates);
+          setIsEditMode(true);
+          setActiveTableView(0); // Switch to Master Full View to review staged updates
         }}
       />
 
