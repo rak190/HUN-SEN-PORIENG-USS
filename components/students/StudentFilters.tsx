@@ -69,11 +69,11 @@ export default function StudentFilters({
           <button 
             type="button"
             onClick={onOpenExcelImport} 
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm shadow-emerald-600/20"
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors cursor-pointer"
             title="នាំចូលទិន្នន័យពី Excel គំរូផ្លូវការដើមឆ្នាំ (Import / Paste)"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
-            <span>នាំចូលពី Excel (Import / Paste)</span>
+            <FileSpreadsheet className="w-4 h-4 text-[#155EEF]" />
+            <span>នាំចូលពី Excel</span>
           </button>
         )}
 

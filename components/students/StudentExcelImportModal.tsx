@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FileSpreadsheet,
   Upload,
@@ -9,13 +10,10 @@ import {
   AlertTriangle,
   Info,
   X,
-  ArrowRight,
   Sparkles,
-  HelpCircle,
   FileCheck,
-  AlertCircle,
   Loader2,
-  RefreshCw
+  UploadCloud
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import {
@@ -45,12 +43,13 @@ export default function StudentExcelImportModal({
   activeClass,
   onApplyUpdates,
 }: StudentExcelImportModalProps) {
+  const [mounted, setMounted] = useState(false);
+
   // Auto-detect template: Grade 10-12 uses upper secondary template, otherwise Grade 7-9
   const defaultTemplate: OfficialTemplateType = useMemo(() => {
     const rawGrade = activeClass?.grade;
     const gradeNum = rawGrade ? parseInt(String(rawGrade), 10) : undefined;
     if (gradeNum && gradeNum >= 10) return '10-12';
-    // If class name contains 10, 11, 12
     const name = activeClass?.name || '';
     if (name.includes('10') || name.includes('11') || name.includes('12') || name.includes('១០') || name.includes('១១') || name.includes('១២')) {
       return '10-12';
@@ -68,6 +67,10 @@ export default function StudentExcelImportModal({
   const [parsedRows, setParsedRows] = useState<ParsedOfficialExcelCandidate[]>([]);
   const [matchedUpdates, setMatchedUpdates] = useState<Record<string, Partial<MassiveProfilingStudent>>>({});
   const [unmatchedRows, setUnmatchedRows] = useState<Array<{ rowIdx: number; id?: string; name?: string; reason: string }>>([]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     setTemplate(defaultTemplate);
@@ -116,7 +119,7 @@ export default function StudentExcelImportModal({
       const unmatched: Array<{ rowIdx: number; id?: string; name?: string; reason: string }> = [];
 
       let dataRowCounter = 0;
-      matrix.forEach((cells, originalIndex) => {
+      matrix.forEach((cells) => {
         if (!cells || cells.length < 2) return;
         if (isHeaderRow(cells)) return;
 
@@ -249,62 +252,59 @@ export default function StudentExcelImportModal({
     onClose();
   };
 
-  if (!isOpen) return null;
+  if (!mounted || !isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh] overflow-hidden">
+  return createPortal(
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fadeIn"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100"
+        onClick={e => e.stopPropagation()}
+      >
         
-        {/* Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white flex items-center justify-between shadow-md">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-white/15 rounded-xl backdrop-blur-md">
-              <FileSpreadsheet className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold leading-tight flex items-center gap-2">
-                នាំចូលពី Excel គំរូផ្លូវការដើមឆ្នាំ (Official Template Import)
-                <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full font-normal">
-                  MoEYS Template
-                </span>
-              </h2>
-              <p className="text-xs text-emerald-100 mt-0.5">
-                ចម្លងទិន្នន័យ (Copy/Paste) ពីឯកសារ Excel គំរូដើមឆ្នាំរបស់ក្រសួង/សាលា ដើម្បីបំពេញប្រវត្តិរូបសិស្សស្វ័យប្រវត្តិ
-              </p>
-            </div>
+        {/* Header matching BulkImageUploadModal */}
+        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center shrink-0 bg-white z-10">
+          <div>
+            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#155EEF] flex items-center justify-center">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              នាំចូលទិន្នន័យពី Excel គំរូដើមឆ្នាំ
+            </h2>
+            <p className="text-sm font-semibold text-slate-500 mt-0.5">
+              ចម្លង-បិទភ្ជាប់ (Copy/Paste) ឬជ្រើសរើសឯកសារ Excel ដើមឆ្នាំរបស់ក្រសួង/សាលា ដើម្បីបំពេញទិន្នន័យស្វ័យប្រវត្តិ។
+            </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
+            className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-full transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* Configuration Bar */}
-        <div className="px-6 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-              ថ្នាក់គោលដៅ:
-            </span>
-            <span className="text-xs font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
+        <div className="px-6 py-3.5 bg-slate-50/50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-bold text-slate-600">ថ្នាក់គោលដៅ៖</span>
+            <span className="text-xs font-black bg-blue-50 text-[#155EEF] px-3 py-1 rounded-xl border border-blue-200 shadow-2xs">
               {activeClass?.name || 'មិនទាន់ជ្រើសរើសថ្នាក់'}
             </span>
           </div>
 
           {/* Template Selector Toggle */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-              ទម្រង់ឯកសារ Excel:
-            </span>
-            <div className="inline-flex rounded-lg p-0.5 bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xs font-bold text-slate-600">ទម្រង់ឯកសារ Excel៖</span>
+            <div className="inline-flex rounded-xl p-1 bg-slate-200/70 border border-slate-200 shadow-inner">
               <button
                 type="button"
                 onClick={() => setTemplate('7-9')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                className={`px-3.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   template === '7-9'
-                    ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-white text-[#155EEF] shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 ថ្នាក់ទី ៧-៩ (កម្រិតអនុវិទ្យាល័យ)
@@ -312,41 +312,41 @@ export default function StudentExcelImportModal({
               <button
                 type="button"
                 onClick={() => setTemplate('10-12')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                className={`px-3.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   template === '10-12'
-                    ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-white text-[#155EEF] shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                ថ្នាក់ទី ១០-១២ (កម្រិតវិទ្យាល័យ / មានបន្ទប់ និងលេខតុ)
+                ថ្នាក់ទី ១០-១២ (កម្រិតវិទ្យាល័យ / មានបន្ទប់ & លេខតុ)
               </button>
             </div>
           </div>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-5">
+        {/* Body Container */}
+        <div className="flex-1 overflow-y-auto flex flex-col bg-slate-50/50 p-6 space-y-5 custom-scrollbar">
 
-          {/* Skipped Operational Notice */}
-          <div className="p-3.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl flex items-start gap-3 text-xs text-blue-900 dark:text-blue-200">
-            <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+          {/* Safe Column Notice */}
+          <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-2xl flex items-start gap-3 text-xs text-blue-900 shadow-2xs">
+            <Info className="w-5 h-5 text-[#155EEF] shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold">កំណត់សម្គាល់អំពីទិន្នន័យប្រតិបត្តិការ (Safe Column Demarcation):</p>
-              <p className="mt-0.5 text-blue-800 dark:text-blue-300">
+              <p className="font-bold text-slate-800">កំណត់សម្គាល់សុវត្ថិភាពទិន្នន័យ (Safe Column Demarcation)៖</p>
+              <p className="mt-0.5 text-slate-600 leading-relaxed font-semibold">
                 ជួរឈរប្រតិបត្តិការក្នុងឯកសារ Excel (រួមមាន ពិន្ទុប្រចាំខែ, អវត្តមាន, និងតួនាទីសិស្ស) ត្រូវបានរំលងដោយសុវត្ថិភាព។ 
-                ទិន្នន័យពិន្ទុត្រូវបញ្ចូលក្នុងផ្ទាំង <span className="font-semibold">"ពិន្ទុ (Grades)"</span> ហើយអវត្តមានត្រូវកត់ត្រាក្នុង <span className="font-semibold">"វត្តមាន (Attendance)"</span>។
+                ពិន្ទុត្រូវបញ្ចូលក្នុងផ្ទាំង <span className="font-bold text-[#155EEF]">&quot;ពិន្ទុ (Grades)&quot;</span> ហើយអវត្តមានត្រូវកត់ត្រាក្នុង <span className="font-bold text-[#155EEF]">&quot;វត្តមាន (Attendance)&quot;</span>។
               </p>
             </div>
           </div>
 
           {/* Input Method Tabs */}
-          <div className="flex border-b border-slate-200 dark:border-slate-800 gap-6">
+          <div className="flex border-b border-slate-200 gap-6 shrink-0">
             <button
               onClick={() => setActiveTab('paste')}
-              className={`pb-2.5 text-xs font-bold flex items-center gap-2 border-b-2 transition-all ${
+              className={`pb-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
                 activeTab === 'paste'
-                  ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                  ? 'border-[#155EEF] text-[#155EEF]'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
               <Clipboard className="w-4 h-4" />
@@ -354,10 +354,10 @@ export default function StudentExcelImportModal({
             </button>
             <button
               onClick={() => setActiveTab('file')}
-              className={`pb-2.5 text-xs font-bold flex items-center gap-2 border-b-2 transition-all ${
+              className={`pb-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
                 activeTab === 'file'
-                  ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                  ? 'border-[#155EEF] text-[#155EEF]'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
               <Upload className="w-4 h-4" />
@@ -374,28 +374,28 @@ export default function StudentExcelImportModal({
                   onChange={(e) => setPastedText(e.target.value)}
                   placeholder={`ចុចទីនេះ រួចចុចបញ្ជា Ctrl + V (បិទភ្ជាប់) ទិន្នន័យដែលបាន Copy ពី Excel គំរូ...\n\nគន្លឹះ៖ លោកអ្នកអាច Copy ដោយភ្ជាប់ជួរក្បាលតារាង (Headers) ឬ Copy តែជួរទិន្នន័យសិស្សសុទ្ធក៏បាន ប្រព័ន្ធនឹងស្វែងយល់ និងផ្គូផ្គងស្វ័យប្រវត្ត។`}
                   rows={6}
-                  className="w-full text-xs font-mono p-3.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
+                  className="w-full text-xs font-mono p-4 border-2 border-slate-200 rounded-2xl bg-white focus:border-[#155EEF] focus:ring-4 focus:ring-blue-50 outline-none transition-all placeholder:text-slate-400 shadow-2xs"
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                <p className="text-[11px] font-semibold text-slate-500">
                   * គាំទ្រការ Copy ពី Sheet &quot;បញ្ជីឈ្មោះសិស្ស7-9&quot; ឬ &quot;បញ្ជីឈ្មោះសិស្ស 10-12&quot;
                 </p>
                 <button
                   type="button"
                   onClick={handleProcessPastedText}
                   disabled={!pastedText.trim() || isProcessing}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 disabled:opacity-50 transition-all shadow-sm"
+                  className="px-6 py-2.5 bg-[#155EEF] hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 disabled:opacity-50 transition-all shadow-md cursor-pointer"
                 >
                   {isProcessing ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
                       កំពុងដំណើរការ...
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-3.5 h-3.5" />
+                      <Sparkles className="w-4 h-4" />
                       ដំណើរការទិន្នន័យ (Process Data)
                     </>
                   )}
@@ -407,13 +407,18 @@ export default function StudentExcelImportModal({
           {/* File Upload Tab Content */}
           {activeTab === 'file' && (
             <div className="space-y-3">
-              <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                <Upload className="w-8 h-8 text-emerald-600 dark:text-emerald-400 mb-2" />
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                  {fileName ? fileName : 'ចុចទីនេះដើម្បីជ្រើសរើសឯកសារ Excel ឬទម្លាក់ឯកសារទីនេះ'}
-                </span>
-                <span className="text-[11px] text-slate-500 mt-1">
-                  គាំទ្រប្រភេទឯកសារ .xlsx, .xls
+              <label className="w-full border-4 border-dashed border-slate-200 rounded-[2rem] p-12 flex flex-col items-center justify-center text-center cursor-pointer hover:border-[#155EEF] hover:bg-blue-50/50 transition-colors bg-white">
+                <div className="w-20 h-20 bg-blue-100 text-[#155EEF] rounded-full flex items-center justify-center mb-4 shadow-xs">
+                  <UploadCloud className="w-10 h-10" />
+                </div>
+                <h3 className="text-lg font-black text-slate-800 mb-1">
+                  {fileName ? fileName : 'ចុចទីនេះដើម្បីជ្រើសរើសឯកសារ Excel'}
+                </h3>
+                <p className="text-slate-500 font-semibold mb-5 max-w-md text-xs">
+                  ជ្រើសរើសឯកសារ Excel គំរូដើមឆ្នាំ (.xlsx, .xls)។ ប្រព័ន្ធនឹងអានសន្លឹកកិច្ចការស្វ័យប្រវត្តិតាមកម្រិតថ្នាក់។
+                </p>
+                <span className="px-8 py-3 bg-[#155EEF] hover:bg-blue-600 text-white font-bold rounded-2xl shadow-lg transition-colors cursor-pointer text-xs">
+                  ជ្រើសរើសឯកសារ (Select Excel)
                 </span>
                 <input
                   type="file"
@@ -425,51 +430,55 @@ export default function StudentExcelImportModal({
             </div>
           )}
 
-          {/* Results & Summary */}
+          {/* Results Summary & Preview */}
           {parsedRows.length > 0 && (
             <div className="space-y-4 pt-2">
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs text-xs">
+                <div className="flex items-center gap-5">
                   <div>
-                    <span className="text-slate-500">បានអានសរុប: </span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200">{parsedRows.length} ជួរ</span>
+                    <span className="text-slate-500 font-semibold">បានអានសរុប៖ </span>
+                    <span className="font-black text-slate-800">{parsedRows.length} ជួរ</span>
                   </div>
+                  <div className="h-4 w-px bg-slate-200"></div>
                   <div>
-                    <span className="text-slate-500">ផ្គូផ្គងជោគជ័យ: </span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{matchedCount} នាក់</span>
+                    <span className="text-slate-500 font-semibold">ផ្គូផ្គងជោគជ័យ៖ </span>
+                    <span className="font-black text-emerald-600">{matchedCount} នាក់</span>
                   </div>
                   {unmatchedRows.length > 0 && (
-                    <div>
-                      <span className="text-slate-500">មិនស្គាល់/ក្រៅបញ្ជី: </span>
-                      <span className="font-bold text-amber-600 dark:text-amber-400">{unmatchedRows.length} ជួរ</span>
-                    </div>
+                    <>
+                      <div className="h-4 w-px bg-slate-200"></div>
+                      <div>
+                        <span className="text-slate-500 font-semibold">មិនស្គាល់/ក្រៅបញ្ជី៖ </span>
+                        <span className="font-black text-amber-600">{unmatchedRows.length} ជួរ</span>
+                      </div>
+                    </>
                   )}
                 </div>
 
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="text-[11px] text-slate-500 font-semibold">
                   * ទិន្នន័យទទេក្នុង Excel មិនធ្វើឱ្យបាត់បង់ទិន្នន័យដែលមានស្រាប់ទេ (Non-destructive policy)
                 </div>
               </div>
 
               {/* Unmatched Warnings Card */}
               {unmatchedRows.length > 0 && (
-                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-xs text-amber-900 dark:text-amber-200">
-                  <div className="flex items-center gap-2 font-bold mb-1">
+                <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl text-xs text-amber-900 shadow-2xs">
+                  <div className="flex items-center gap-2 font-black mb-1 text-slate-800">
                     <AlertTriangle className="w-4 h-4 text-amber-600" />
                     សិស្សដែលមិនស្គាល់ក្នុងថ្នាក់នេះ ({unmatchedRows.length} នាក់)
                   </div>
-                  <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                  <p className="text-[11px] text-slate-600 font-semibold">
                     យោងតាមគោលការណ៍សុវត្ថិភាព គ្រូបន្ទុកថ្នាក់អាចកែប្រែបានតែសិស្សដែលមានឈ្មោះក្នុងបញ្ជីថ្នាក់ស្រាប់ប៉ុណ្ណោះ។ 
                     សិស្សថ្មីត្រូវស្នើសុំតាមរយៈគណនី Admin ឬ នាយកសាលា។
                   </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
                     {unmatchedRows.slice(0, 10).map((u, idx) => (
-                      <span key={idx} className="bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded text-[11px]">
-                        ជួរ {u.rowIdx}: {u.name || u.id || 'អនាមិក'}
+                      <span key={idx} className="bg-white border border-amber-200 px-2.5 py-1 rounded-lg text-[11px] font-bold text-slate-700 shadow-2xs">
+                        ជួរ {u.rowIdx}៖ {u.name || u.id || 'អនាមិក'}
                       </span>
                     ))}
                     {unmatchedRows.length > 10 && (
-                      <span className="text-[11px] text-amber-700 dark:text-amber-400 self-center">
+                      <span className="text-[11px] text-amber-700 font-bold self-center">
                         ...និង {unmatchedRows.length - 10} នាក់ទៀត
                       </span>
                     )}
@@ -478,90 +487,93 @@ export default function StudentExcelImportModal({
               )}
 
               {/* Matched Preview Table */}
-              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
-                <div className="bg-slate-100 dark:bg-slate-800 px-4 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                    <FileCheck className="w-4 h-4 text-emerald-600" />
-                    មើលទិដ្ឋភាពទិន្នន័យដែលនឹងត្រូវធ្វើបច្ចុប្បន្នភាព ({matchedCount} នាក់)
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+                <div className="bg-slate-50/80 px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-800 flex items-center gap-2">
+                    <FileCheck className="w-4 h-4 text-[#155EEF]" />
+                    ទិដ្ឋភាពទិន្នន័យដែលនឹងត្រូវធ្វើបច្ចុប្បន្នភាព ({matchedCount} នាក់)
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-500">
+                    សូមពិនិត្យមុននឹងចុចផ្ទេរទិន្នន័យ
                   </span>
                 </div>
-                <div className="overflow-x-auto max-h-64">
+                <div className="overflow-x-auto max-h-64 custom-scrollbar">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 sticky top-0">
-                        <th className="p-2.5 text-center w-10">ល.រ</th>
-                        <th className="p-2.5 font-mono">អត្តលេខ</th>
-                        <th className="p-2.5">គោត្តនាម-នាម</th>
-                        <th className="p-2.5 text-center">ភេទ</th>
-                        <th className="p-2.5">ថ្ងៃកំណើត</th>
-                        <th className="p-2.5">អាសយដ្ឋានបច្ចុប្បន្ន</th>
-                        <th className="p-2.5">ឪពុក/ម្តាយ</th>
-                        <th className="p-2.5 font-mono">ទូរស័ព្ទ</th>
-                        <th className="p-2.5 text-center">ក្រីក្រ</th>
+                      <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 sticky top-0 font-bold">
+                        <th className="p-3 text-center w-12">ល.រ</th>
+                        <th className="p-3 font-mono">អត្តលេខ</th>
+                        <th className="p-3">គោត្តនាម-នាម</th>
+                        <th className="p-3 text-center">ភេទ</th>
+                        <th className="p-3">ថ្ងៃកំណើត</th>
+                        <th className="p-3">អាសយដ្ឋានបច្ចុប្បន្ន</th>
+                        <th className="p-3">ឪពុក/ម្តាយ</th>
+                        <th className="p-3 font-mono">ទូរស័ព្ទ</th>
+                        <th className="p-3 text-center">ក្រីក្រ</th>
                         {template === '10-12' && (
                           <>
-                            <th className="p-2.5 text-center">បន្ទប់</th>
-                            <th className="p-2.5 text-center">លេខតុ</th>
+                            <th className="p-3 text-center">បន្ទប់</th>
+                            <th className="p-3 text-center">លេខតុ</th>
                           </>
                         )}
-                        <th className="p-2.5 text-center">ចំនួនកែប្រែ</th>
+                        <th className="p-3 text-center">ចំនួនកែប្រែ</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    <tbody className="divide-y divide-slate-100 font-semibold">
                       {students
                         .filter(s => matchedUpdates[s.id])
                         .map((std, idx) => {
                           const patch = matchedUpdates[std.id];
                           const fieldCount = Object.keys(patch).length;
                           return (
-                            <tr key={std.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                              <td className="p-2.5 text-center font-bold text-slate-400">{idx + 1}</td>
-                              <td className="p-2.5 font-mono text-emerald-700 dark:text-emerald-400 font-bold">
+                            <tr key={std.id} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="p-3 text-center font-bold text-slate-400">{idx + 1}</td>
+                              <td className="p-3 font-mono text-[#155EEF] font-bold">
                                 {std.student_id_number || '-'}
                               </td>
-                              <td className="p-2.5 font-semibold text-slate-900 dark:text-slate-100">
+                              <td className="p-3 font-bold text-slate-900">
                                 {patch.full_name || std.full_name}
                               </td>
-                              <td className="p-2.5 text-center">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  (patch.gender || std.gender) === 'F' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'
+                              <td className="p-3 text-center">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  (patch.gender || std.gender) === 'F' ? 'bg-pink-50 text-pink-700 border border-pink-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
                                 }`}>
                                   {(patch.gender || std.gender) === 'F' ? 'ស្រី' : 'ប្រុស'}
                                 </span>
                               </td>
-                              <td className="p-2.5 text-slate-600 dark:text-slate-300 font-mono text-[11px]">
+                              <td className="p-3 text-slate-600 font-mono text-[11px]">
                                 {patch.date_of_birth || std.date_of_birth || '-'}
                               </td>
-                              <td className="p-2.5 text-slate-600 dark:text-slate-300 max-w-xs truncate text-[11px]">
+                              <td className="p-3 text-slate-600 max-w-xs truncate text-[11px]">
                                 {patch.address || std.address || '-'}
                               </td>
-                              <td className="p-2.5 text-slate-600 dark:text-slate-300 text-[11px]">
+                              <td className="p-3 text-slate-600 text-[11px]">
                                 {patch.father_name || patch.mother_name || std.father_name || std.mother_name || '-'}
                               </td>
-                              <td className="p-2.5 font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                              <td className="p-3 font-mono text-[11px] text-slate-600">
                                 {patch.student_phone || patch.father_phone || patch.mother_phone || std.student_phone || '-'}
                               </td>
-                              <td className="p-2.5 text-center">
+                              <td className="p-3 text-center">
                                 {(patch.id_poor || std.id_poor) === 'level_1' ? (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">ក្រ១</span>
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">ក្រ១</span>
                                 ) : (patch.id_poor || std.id_poor) === 'level_2' ? (
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">ក្រ២</span>
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">ក្រ២</span>
                                 ) : (
                                   <span className="text-slate-400 text-[11px]">គ្មាន</span>
                                 )}
                               </td>
                               {template === '10-12' && (
                                 <>
-                                  <td className="p-2.5 text-center font-mono text-[11px]">
+                                  <td className="p-3 text-center font-mono text-[11px]">
                                     {patch.room_number || std.room_number || '-'}
                                   </td>
-                                  <td className="p-2.5 text-center font-mono text-[11px]">
+                                  <td className="p-3 text-center font-mono text-[11px]">
                                     {patch.desk_number || std.desk_number || '-'}
                                   </td>
                                 </>
                               )}
-                              <td className="p-2.5 text-center">
-                                <span className="bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full text-[10px]">
+                              <td className="p-3 text-center">
+                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold px-2.5 py-0.5 rounded-full text-[10px]">
                                   +{fieldCount} វាល
                                 </span>
                               </td>
@@ -576,12 +588,12 @@ export default function StudentExcelImportModal({
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        {/* Footer matching BulkImageUploadModal */}
+        <div className="p-4 sm:p-6 border-t border-slate-100 bg-white flex justify-between items-center shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="px-6 py-2.5 text-slate-500 hover:bg-slate-100 font-bold rounded-xl transition-colors cursor-pointer text-xs"
           >
             បោះបង់ (Cancel)
           </button>
@@ -590,14 +602,15 @@ export default function StudentExcelImportModal({
             type="button"
             onClick={handleConfirmApply}
             disabled={matchedCount === 0}
-            className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="px-8 py-2.5 bg-[#155EEF] disabled:bg-slate-300 disabled:cursor-not-allowed hover:bg-blue-600 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center gap-2 text-xs"
           >
             <CheckCircle2 className="w-4 h-4" />
-            ផ្ទេរទិន្នន័យ {matchedCount} នាក់ ទៅក្នុងតារាង (Apply to Table Draft)
+            <span>ផ្ទេរទិន្នន័យ {matchedCount} នាក់ ទៅក្នុងតារាង (Apply to Table Draft)</span>
           </button>
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

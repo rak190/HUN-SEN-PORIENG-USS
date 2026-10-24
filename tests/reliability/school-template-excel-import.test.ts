@@ -203,7 +203,7 @@ describe('Official School Template Excel Import & Study Plan Reliability Suite',
       const code = fs.readFileSync(filterPath, 'utf8');
       assert.ok(code.includes('onOpenExcelImport'));
       assert.ok(code.includes('FileSpreadsheet'));
-      assert.ok(code.includes('នាំចូលពី Excel (Import / Paste)'));
+      assert.ok(code.includes('នាំចូលពី Excel'));
     });
 
     test('Scenario 4C: students/page.tsx connects onOpenExcelImport and mounts StudentExcelImportModal', () => {
