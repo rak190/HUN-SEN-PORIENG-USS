@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Table as TableIcon, X, Check, Plus, Loader2, Save } from 'lucide-react';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 interface StudentGridEntryModalProps {
   isOpen: boolean;
@@ -38,6 +39,29 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
   });
 
   const [gridData, setGridData] = useState<any[]>(Array(15).fill(null).map(generateEmptyRow));
+
+  const isDirty = useMemo(() => {
+    return gridData.some(row => 
+      (row.full_name && row.full_name.trim() !== '') ||
+      (row.student_id_number && row.student_id_number.trim() !== '') ||
+      (row.dob && row.dob.trim() !== '') ||
+      (row.father_name && row.father_name.trim() !== '') ||
+      (row.father_phone && row.father_phone.trim() !== '') ||
+      (row.mother_name && row.mother_name.trim() !== '') ||
+      (row.mother_phone && row.mother_phone.trim() !== '') ||
+      (row.address && row.address.trim() !== '')
+    );
+  }, [gridData]);
+
+  useUnsavedChanges(isOpen && isDirty);
+
+  const handleSafeClose = () => {
+    if (isDirty) {
+      const confirmLeave = window.confirm('លោកគ្រូ អ្នកគ្រូមានទិន្នន័យសិស្សដែលមិនទាន់រក្សាទុក។ តើពិតជាចង់ចាកចេញមែនទេ?');
+      if (!confirmLeave) return;
+    }
+    onClose();
+  };
 
   if (!isOpen || !mounted) return null;
 
@@ -212,7 +236,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 lg:p-10 animate-overlayFade" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4 lg:p-10 animate-overlayFade" onClick={handleSafeClose}>
       <div className="w-full h-full max-w-7xl bg-white rounded-[24px] shadow-2xl overflow-hidden flex flex-col relative animate-modalScale" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
@@ -226,7 +250,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
               <p className="text-xs font-bold text-slate-500">Copy ជួរពី Excel រួច Paste ចូលក្នុងក្រឡាណាមួយដើម្បីបំពេញដោយស្វ័យប្រវត្តិ។</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer">
+          <button onClick={handleSafeClose} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>

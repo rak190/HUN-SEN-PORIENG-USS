@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { MassiveProfilingStudent, DEFAULT_FORM, calculateProfileCompleteness } from '@/app/(dashboard)/students/types';
 import { UserSquare2, FileText, Heart, Users, MapPin, X, Loader2, Check, Camera, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 const VIEW_TABS = [
   { id: 1, label: 'មូលដ្ឋាន', icon: UserSquare2 },
@@ -41,6 +42,36 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  const isDirty = useMemo(() => {
+    if (!isOpen || !initialData) return false;
+    const keys: (keyof MassiveProfilingStudent)[] = [
+      'student_id_number', 'full_name', 'english_name', 'gender', 'date_of_birth', 'age',
+      'birth_cert_no', 'desk_number', 'room_number', 'status', 'prev_school', 'id_poor',
+      'scholarship', 'distance_km', 'orphan', 'weight_kg', 'height_m', 'disability',
+      'health_issues', 'father_name', 'father_job', 'father_phone', 'mother_name',
+      'mother_job', 'mother_phone', 'income', 'migrant_status', 'address', 'student_phone',
+      'current_status', 'photo_url'
+    ];
+    return keys.some(k => {
+      const orig = initialData[k];
+      const curr = formData[k];
+      if ((orig === undefined || orig === null || orig === '') && (curr === undefined || curr === null || curr === '')) {
+        return false;
+      }
+      return orig !== curr;
+    });
+  }, [isOpen, initialData, formData]);
+
+  useUnsavedChanges(isOpen && isDirty);
+
+  const handleSafeClose = () => {
+    if (isDirty) {
+      const confirmLeave = window.confirm('លោកគ្រូ អ្នកគ្រូមានការកែប្រែព័ត៌មានសិស្សដែលមិនទាន់រក្សាទុក។ តើពិតជាចង់ចាកចេញមែនទេ?');
+      if (!confirmLeave) return;
+    }
+    onClose();
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -220,7 +251,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
   return createPortal(
     <div 
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fadeIn"
-      onClick={onClose}
+      onClick={handleSafeClose}
     >
       <div 
         className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 border border-slate-100"
@@ -252,7 +283,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
           </div>
           <button 
             type="button"
-            onClick={onClose} 
+            onClick={handleSafeClose} 
             className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-700 rounded-full transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -490,7 +521,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
           <div className="flex gap-2.5 ml-auto">
             <button 
               type="button" 
-              onClick={onClose} 
+              onClick={handleSafeClose} 
               className="px-5 py-2.5 rounded-xl font-bold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
             >
               បោះបង់

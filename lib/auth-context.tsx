@@ -179,9 +179,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const userId = session.user.id;
+    const isExistingActiveSession = userId === currentUserIdRef.current && !!profileRef.current;
 
     // 2. Case: Token Refreshed for same active user (deduplicate database queries)
-    if (eventName === 'TOKEN_REFRESHED' && userId === currentUserIdRef.current && profileRef.current) {
+    if (eventName === 'TOKEN_REFRESHED' && isExistingActiveSession) {
       setUser(session.user);
       return;
     }
@@ -199,7 +200,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setUser(session.user);
     setIsDemoMode(false);
-    setAuthStatus('loading');
+    // Never switch authStatus to 'loading' if user is already actively authenticated!
+    // This stops DashboardLayout from unmounting active pages/drawers/forms on tab switches.
+    if (!isExistingActiveSession) {
+      setAuthStatus('loading');
+    }
     setAuthError(null);
 
     try {
@@ -214,6 +219,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (seq !== authSeqRef.current) return;
 
       if (profileErr || !dbProfile) {
+        // If this is an already verified active session and we hit a transient network error,
+        // do not abruptly kick out or destroy the UI. Keep current session.
+        if (isExistingActiveSession && profileErr) {
+          console.warn('[auth-context] Transient background profile query error (preserving session):', profileErr);
+          return;
+        }
+
         // Fail-closed: Never retain unverified session
         currentUserIdRef.current = null;
         profileRef.current = null;
@@ -251,6 +263,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loadBackgroundContext(userId, dbProfile as Profile, seq);
     } catch (err: any) {
       if (seq !== authSeqRef.current) return;
+      if (isExistingActiveSession) {
+        console.warn('[auth-context] Transient background profile error (preserving session):', err);
+        return;
+      }
       currentUserIdRef.current = null;
       profileRef.current = null;
       setUser(null);
