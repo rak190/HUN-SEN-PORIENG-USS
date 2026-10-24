@@ -473,13 +473,17 @@ export default function StudentTable({
                         {getCellValue(std, 'bmi') || std.bmi || '-'}
                       </td>
                       <td className="p-2.5 text-center w-24">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                          (getCellValue(std, 'nutrition_status') || std.nutrition_status) === 'ធម្មតា' 
-                            ? 'bg-emerald-100 text-emerald-700' 
-                            : 'bg-rose-100 text-rose-700'
-                        }`}>
-                          {getCellValue(std, 'nutrition_status') || std.nutrition_status || 'ធម្មតា'}
-                        </span>
+                        {(getCellValue(std, 'nutrition_status') || std.nutrition_status) ? (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                            (getCellValue(std, 'nutrition_status') || std.nutrition_status) === 'ធម្មតា' 
+                              ? 'bg-emerald-100 text-emerald-700' 
+                              : 'bg-rose-100 text-rose-700'
+                          }`}>
+                            {getCellValue(std, 'nutrition_status') || std.nutrition_status}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
                       </td>
                       <td className="p-2.5 text-center w-24">
                         {renderEditableCell(std, index, 'disability', 'select', [{ label: 'គ្មាន', value: 'none' }, { label: 'ស្រាល', value: 'mild' }, { label: 'ធ្ងន់', value: 'severe' }])}
@@ -629,13 +633,17 @@ export default function StudentTable({
                         {getCellValue(std, 'bmi') || std.bmi || '-'}
                       </td>
                       <td className="p-3 text-center">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                          (getCellValue(std, 'nutrition_status') || std.nutrition_status) === 'ធម្មតា' 
-                            ? 'bg-emerald-100 text-emerald-700' 
-                            : 'bg-rose-100 text-rose-700'
-                        }`}>
-                          {getCellValue(std, 'nutrition_status') || std.nutrition_status || 'ធម្មតា'}
-                        </span>
+                        {(getCellValue(std, 'nutrition_status') || std.nutrition_status) ? (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                            (getCellValue(std, 'nutrition_status') || std.nutrition_status) === 'ធម្មតា' 
+                              ? 'bg-emerald-100 text-emerald-700' 
+                              : 'bg-rose-100 text-rose-700'
+                          }`}>
+                            {getCellValue(std, 'nutrition_status') || std.nutrition_status}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
                       </td>
                       <td className="p-3 text-center">
                         {renderEditableCell(std, index, 'disability', 'select', [{ label: 'គ្មាន', value: 'none' }, { label: 'ស្រាល', value: 'mild' }, { label: 'ធ្ងន់', value: 'severe' }])}

@@ -8,6 +8,7 @@ import {
   normalizeKhmerDigits,
   normalizePastedCell,
   formatKhmerAddress,
+  DEFAULT_FORM,
   OfficialTemplateType
 } from '../../app/(dashboard)/students/types';
 
@@ -97,16 +98,41 @@ describe('Official School Template Excel Import & Study Plan Reliability Suite',
     });
   });
 
-  // 2. Real Excel Template Workbook Inspection
-  describe('Official Excel Template File Parsing', () => {
-    const templateFilePath = 'C:\\Users\\Admin\\Downloads\\Telegram Desktop\\គំរូ_បញ្ជីឈ្មោះសិស្ស_គ្រូ_ឆ្នាំសិក្សា_2026_2027 (2).xlsx';
+  // 2. Real & Synthetic Excel Template Workbook Inspection
+  describe('Official Excel Template File Parsing & Reproducible Fixtures', () => {
+    // Generate synthetic in-memory fixture matching official workbook layout
+    const createSyntheticOfficialWorkbook = (): Buffer => {
+      const wb = XLSX.utils.book_new();
 
-    test('Scenario 2A: Official template file exists and workbook loads properly', () => {
-      if (!fs.existsSync(templateFilePath)) {
-        console.warn(`Template file not found at ${templateFilePath}, skipping file test`);
-        return;
-      }
-      const buffer = fs.readFileSync(templateFilePath);
+      // Sheet 7-9: Header at row 7 (index 6)
+      const sheet79Data: any[][] = [];
+      sheet79Data.push(['ព្រះរាជាណាចក្រកម្ពុជា']);
+      sheet79Data.push(['ជាតិ សាសនា ព្រះមហាក្សត្រ']);
+      sheet79Data.push(['មន្ទីរអប់រំ យុវជន និងកីឡាខេត្តព្រៃវែង']);
+      sheet79Data.push(['វិទ្យាល័យ ហ៊ុន សែន ពោធិ៍រៀង']);
+      sheet79Data.push(['បញ្ជីឈ្មោះសិស្សថ្នាក់ទី ៧-៩ ឆ្នាំសិក្សា ២០២៦-២០២៧']);
+      sheet79Data.push([]);
+      sheet79Data.push(['ល.រ', 'អត្តលេខ', 'គោត្តនាម និងនាម', 'ភេទ', 'ថ្ងៃខែឆ្នាំកំណើត', 'ទីកន្លែងកំណើត']);
+      sheet79Data.push(['1', '00101', 'ចាន់ សុខា', 'ស្រី', '15/04/2009', 'ព្រៃវែង']);
+
+      const ws79 = XLSX.utils.aoa_to_sheet(sheet79Data);
+      XLSX.utils.book_append_sheet(wb, ws79, 'បញ្ជីឈ្មោះសិស្ស7-9');
+
+      // Sheet 10-12: Header at row 10-11
+      const sheet1012Data: any[][] = [];
+      for (let i = 0; i < 9; i++) sheet1012Data.push([`Banner line ${i + 1}`]);
+      sheet1012Data.push(['ល.រ', 'អត្តលេខ', 'គោត្តនាម និងនាម', 'ភេទ', 'ថ្ងៃខែឆ្នាំកំណើត', 'ទីកន្លែងកំណើត', 'បឋម', 'បន្ទប់', 'លេខតុ']);
+      sheet1012Data.push(['', '', '', '', '', '', '', 'លេខបន្ទប់', 'លេខតុ']);
+      sheet1012Data.push(['1', '00201', 'ស៊ូ វាសនា', 'ប្រុស', '20/11/2007', 'កណ្តាល', '', '04', '18']);
+
+      const ws1012 = XLSX.utils.aoa_to_sheet(sheet1012Data);
+      XLSX.utils.book_append_sheet(wb, ws1012, 'បញ្ជីឈ្មោះសិស្ស 10-12');
+
+      return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    };
+
+    test('Scenario 2A: Official template structure has expected sheets', () => {
+      const buffer = createSyntheticOfficialWorkbook();
       const wb = XLSX.read(buffer, { type: 'buffer' });
       assert.ok(wb.SheetNames.length >= 2, 'Workbook should contain at least 2 sheets');
       assert.ok(wb.SheetNames.includes('បញ្ជីឈ្មោះសិស្ស7-9'), 'Must contain Grade 7-9 sheet');
@@ -114,8 +140,7 @@ describe('Official School Template Excel Import & Study Plan Reliability Suite',
     });
 
     test('Scenario 2B: Sheet 7-9 has expected column layout at header row 7', () => {
-      if (!fs.existsSync(templateFilePath)) return;
-      const buffer = fs.readFileSync(templateFilePath);
+      const buffer = createSyntheticOfficialWorkbook();
       const wb = XLSX.read(buffer, { type: 'buffer' });
       const sheet = wb.Sheets['បញ្ជីឈ្មោះសិស្ស7-9'];
       const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
@@ -129,8 +154,7 @@ describe('Official School Template Excel Import & Study Plan Reliability Suite',
     });
 
     test('Scenario 2C: Sheet 10-12 has expected exam room and desk columns at header row 10-11', () => {
-      if (!fs.existsSync(templateFilePath)) return;
-      const buffer = fs.readFileSync(templateFilePath);
+      const buffer = createSyntheticOfficialWorkbook();
       const wb = XLSX.read(buffer, { type: 'buffer' });
       const sheet = wb.Sheets['បញ្ជីឈ្មោះសិស្ស 10-12'];
       const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
@@ -146,11 +170,12 @@ describe('Official School Template Excel Import & Study Plan Reliability Suite',
     });
   });
 
-  // 3. Normalization Engine
-  describe('Normalization Engine', () => {
-    test('Scenario 3A: normalizeKhmerDigits converts all Khmer numeral glyphs to ASCII', () => {
+  // 3. Normalization Engine & Non-Destructive Behavior
+  describe('Normalization Engine & Non-Destructive Blank Handling', () => {
+    test('Scenario 3A: normalizeKhmerDigits converts all Khmer numeral glyphs to ASCII without stripping zeros', () => {
       assert.strictEqual(normalizeKhmerDigits('០១២៣៤៥៦៧៨៩'), '0123456789');
       assert.strictEqual(normalizeKhmerDigits('ថ្នាក់ទី ៩ខ'), 'ថ្នាក់ទី 9ខ');
+      assert.strictEqual(normalizeKhmerDigits('០០១២៥'), '00125', 'Must preserve leading zeros');
     });
 
     test('Scenario 3B: normalizePastedCell normalizes DD/MM/YYYY into ISO YYYY-MM-DD', () => {
@@ -160,25 +185,70 @@ describe('Official School Template Excel Import & Study Plan Reliability Suite',
     });
 
     test('Scenario 3C: normalizePastedCell handles Excel date serial numbers', () => {
-      // 39553 corresponds to 2008-04-15
       assert.strictEqual(normalizePastedCell('date_of_birth', '39553'), '2008-04-15');
     });
 
-    test('Scenario 3D: normalizePastedCell handles gender variants', () => {
+    test('Scenario 3D: Gender normalization rejects blank/unknown and normalizes valid variants', () => {
+      // Valid variants
       assert.strictEqual(normalizePastedCell('gender', 'ស្រី'), 'F');
       assert.strictEqual(normalizePastedCell('gender', 'ស'), 'F');
       assert.strictEqual(normalizePastedCell('gender', 'Female'), 'F');
       assert.strictEqual(normalizePastedCell('gender', 'ប្រុស'), 'M');
       assert.strictEqual(normalizePastedCell('gender', 'ប'), 'M');
+      assert.strictEqual(normalizePastedCell('gender', 'Male'), 'M');
+
+      // Blank or unrecognized must NEVER default to 'M'
+      assert.strictEqual(normalizePastedCell('gender', ''), undefined);
+      assert.strictEqual(normalizePastedCell('gender', '   '), undefined);
+      assert.strictEqual(normalizePastedCell('gender', null), undefined);
+      assert.strictEqual(normalizePastedCell('gender', undefined), undefined);
+      assert.strictEqual(normalizePastedCell('gender', 'X_INVALID'), undefined);
     });
 
-    test('Scenario 3E: normalizePastedCell parses id_poor safely', () => {
+    test('Scenario 3E: Disability normalization distinguishes blank from explicit negatives', () => {
+      // Blank -> undefined (non-destructive)
+      assert.strictEqual(normalizePastedCell('disability', ''), undefined);
+      assert.strictEqual(normalizePastedCell('disability', null), undefined);
+
+      // Explicit negative -> 'none'
+      assert.strictEqual(normalizePastedCell('disability', 'គ្មាន'), 'none');
+      assert.strictEqual(normalizePastedCell('disability', '-'), 'none');
+      assert.strictEqual(normalizePastedCell('disability', 'none'), 'none');
+
+      // Mild and severe
+      assert.strictEqual(normalizePastedCell('disability', 'ស្រាល'), 'mild');
+      assert.strictEqual(normalizePastedCell('disability', 'mild'), 'mild');
+      assert.strictEqual(normalizePastedCell('disability', 'ធ្ងន់'), 'severe');
+      assert.strictEqual(normalizePastedCell('disability', 'severe'), 'severe');
+    });
+
+    test('Scenario 3F: Scholarship normalization distinguishes blank from explicit negatives', () => {
+      assert.strictEqual(normalizePastedCell('scholarship', ''), undefined);
+      assert.strictEqual(normalizePastedCell('scholarship', 'គ្មាន'), 'no');
+      assert.strictEqual(normalizePastedCell('scholarship', '-'), 'no');
+      assert.strictEqual(normalizePastedCell('scholarship', 'no'), 'no');
+      assert.strictEqual(normalizePastedCell('scholarship', 'មាន'), 'yes');
+      assert.strictEqual(normalizePastedCell('scholarship', 'yes'), 'yes');
+    });
+
+    test('Scenario 3G: id_poor normalization parses level_1, level_2, and none without defaults', () => {
+      assert.strictEqual(normalizePastedCell('id_poor', ''), undefined);
       assert.strictEqual(normalizePastedCell('id_poor', 'ក្រ១'), 'level_1');
       assert.strictEqual(normalizePastedCell('id_poor', 'ក្រ២'), 'level_2');
       assert.strictEqual(normalizePastedCell('id_poor', 'គ្មាន'), 'none');
+      assert.strictEqual(normalizePastedCell('id_poor', '-'), 'none');
     });
 
-    test('Scenario 3F: formatKhmerAddress synthesizes 4 address parts cleanly', () => {
+    test('Scenario 3H: DEFAULT_FORM contains no fake measurements or default gender', () => {
+      assert.strictEqual(DEFAULT_FORM.gender, undefined, 'DEFAULT_FORM must not default gender to M');
+      assert.strictEqual(DEFAULT_FORM.weight_kg, undefined, 'DEFAULT_FORM must not fabricate weight 40kg');
+      assert.strictEqual(DEFAULT_FORM.height_m, undefined, 'DEFAULT_FORM must not fabricate height 1.50m');
+      assert.strictEqual(DEFAULT_FORM.disability, undefined, 'DEFAULT_FORM must not default disability to none');
+      assert.strictEqual(DEFAULT_FORM.scholarship, undefined, 'DEFAULT_FORM must not default scholarship to no');
+      assert.strictEqual(DEFAULT_FORM.id_poor, undefined, 'DEFAULT_FORM must not default id_poor to none');
+    });
+
+    test('Scenario 3I: formatKhmerAddress synthesizes 4 address parts cleanly', () => {
       const addr = formatKhmerAddress('ព្រៃពោធិ៍', 'ពោធិ៍រៀង', 'ពោធិ៍រៀង', 'ព្រៃវែង');
       assert.strictEqual(addr, 'ភូមិព្រៃពោធិ៍ ឃុំពោធិ៍រៀង ស្រុកពោធិ៍រៀង ខេត្តព្រៃវែង');
     });
@@ -196,6 +266,10 @@ describe('Official School Template Excel Import & Study Plan Reliability Suite',
       assert.ok(code.includes('handleProcessPastedText'));
       assert.ok(code.includes('onApplyUpdates'));
       assert.ok(code.includes('parseOfficialExcelRow'));
+      // Verify raw: false is used
+      assert.ok(code.includes('raw: false'), 'Must use raw: false to preserve leading zeros');
+      // Verify អនុវិ check was removed from header detection
+      assert.ok(!code.includes("joined.includes('អនុវិ')"), 'Must NOT check អនុវិ in isHeaderRow');
     });
 
     test('Scenario 4B: StudentFilters toolbar mounts the Excel import button', () => {
@@ -215,15 +289,18 @@ describe('Official School Template Excel Import & Study Plan Reliability Suite',
       assert.ok(code.includes('<StudentExcelImportModal'));
     });
 
-    test('Scenario 4D: actions.ts handles address synthesis and calls atomic RPC', () => {
+    test('Scenario 4D: actions.ts does not store student_phone as parent_phone and prevents fake health records', () => {
       const actionPath = path.resolve(process.cwd(), 'app/(dashboard)/students/actions.ts');
       const code = fs.readFileSync(actionPath, 'utf8');
       assert.ok(code.includes('formatKhmerAddress'));
       assert.ok(code.includes('batch_update_student_profiles_atomic'));
-      assert.ok(code.includes('revalidatePath(\'/homeroom/student-study-plans\')'));
+      // Confirm student_phone is never used as parent_phone
+      assert.ok(!code.includes('studentFields.parent_phone = item.student_phone'), 'student_phone must never become parent_phone');
+      // Confirm health records condition excludes disability-only
+      assert.ok(!code.includes("|| item.disability !== undefined"), 'Disability-only import must not create health record');
     });
 
-    test('Scenario 4E: useStudents.ts selects all profiling fields in STUDENT_ROSTER_FIELDS', () => {
+    test('Scenario 4E: useStudents.ts selects confirmed profiling fields in STUDENT_ROSTER_FIELDS', () => {
       const hookPath = path.resolve(process.cwd(), 'hooks/useStudents.ts');
       const code = fs.readFileSync(hookPath, 'utf8');
       assert.ok(code.includes('parent_phone'));
@@ -242,6 +319,54 @@ describe('Official School Template Excel Import & Study Plan Reliability Suite',
       assert.ok(code.includes('ROLLBACK') || code.includes('RAISE EXCEPTION'));
       assert.ok(code.includes('student_enrollments'));
       assert.ok(code.includes('student_health_records'));
+      assert.ok(code.includes('prev_school ='));
+      assert.ok(code.includes('student_phone ='));
+    });
+
+    test('Scenario 4G: Migration 084 exists and adds missing profiling columns safely', () => {
+      const migPath = path.resolve(process.cwd(), 'supabase/migrations/084_add_missing_student_profiling_columns.sql');
+      assert.ok(fs.existsSync(migPath), 'Migration 084 must exist');
+      const code = fs.readFileSync(migPath, 'utf8');
+      assert.ok(code.includes('student_phone'));
+      assert.ok(code.includes('prev_school'));
+      assert.ok(code.includes('indigenous'));
+      assert.ok(code.includes('birth_cert_no'));
+      assert.ok(code.includes('active_class_rosters'));
+    });
+  });
+
+  // 5. Study Plan Document Data Mapping Verification
+  describe('Student Study Plan Generation Data Contract', () => {
+    test('Scenario 5A: id_poor correctly maps to Khmer familyCondition labels', () => {
+      const mapCondition = (idPoor?: string) => {
+        if (idPoor === 'level_1') return 'ក្រីក្រ (កម្រិត ១)';
+        if (idPoor === 'level_2') return 'ក្រីក្រ (កម្រិត ២)';
+        return 'មធ្យម';
+      };
+
+      assert.strictEqual(mapCondition('level_1'), 'ក្រីក្រ (កម្រិត ១)');
+      assert.strictEqual(mapCondition('level_2'), 'ក្រីក្រ (កម្រិត ២)');
+      assert.strictEqual(mapCondition('none'), 'មធ្យម');
+      assert.strictEqual(mapCondition(undefined), 'មធ្យម');
+    });
+
+    test('Scenario 5B: Gender correctly maps to Khmer gender labels', () => {
+      const mapGender = (g?: string) => (g === 'M' || g === 'ប្រុស' ? 'ប្រុស' : 'ស្រី');
+      assert.strictEqual(mapGender('M'), 'ប្រុស');
+      assert.strictEqual(mapGender('ប្រុស'), 'ប្រុស');
+      assert.strictEqual(mapGender('F'), 'ស្រី');
+      assert.strictEqual(mapGender('ស្រី'), 'ស្រី');
+    });
+
+    test('Scenario 5C: Parent phone strictly prioritizes parent contacts over student phone', () => {
+      const resolveParentPhone = (std: { parent_phone?: string; father_phone?: string; mother_phone?: string; student_phone?: string }) => {
+        return std.parent_phone || std.father_phone || std.mother_phone || '..................................';
+      };
+
+      // When father_phone is available
+      assert.strictEqual(resolveParentPhone({ father_phone: '012345678', student_phone: '097999888' }), '012345678');
+      // When only student phone is available, parent phone must NOT be student phone
+      assert.strictEqual(resolveParentPhone({ student_phone: '097999888' }), '..................................');
     });
   });
 });

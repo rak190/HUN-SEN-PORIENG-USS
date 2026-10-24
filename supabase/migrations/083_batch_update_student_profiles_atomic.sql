@@ -159,11 +159,13 @@ BEGIN
       dob = CASE WHEN v_raw_dob IS NOT NULL THEN v_dob ELSE dob END,
       date_of_birth = CASE WHEN v_raw_dob IS NOT NULL THEN v_dob ELSE date_of_birth END,
       birth_cert_no = CASE WHEN v_item ? 'birth_cert_no' THEN NULLIF(trim(v_item->>'birth_cert_no'), '') ELSE birth_cert_no END,
+      student_phone = CASE WHEN v_item ? 'student_phone' THEN NULLIF(trim(v_item->>'student_phone'), '') ELSE student_phone END,
+      prev_school = CASE WHEN v_item ? 'prev_school' THEN NULLIF(trim(v_item->>'prev_school'), '') ELSE prev_school END,
+      indigenous = CASE WHEN v_item ? 'indigenous' THEN NULLIF(trim(v_item->>'indigenous'), '') ELSE indigenous END,
       parent_phone = CASE
         WHEN v_item ? 'parent_phone' THEN NULLIF(trim(v_item->>'parent_phone'), '')
         WHEN v_item ? 'father_phone' AND NULLIF(trim(v_item->>'father_phone'), '') IS NOT NULL THEN trim(v_item->>'father_phone')
         WHEN v_item ? 'mother_phone' AND NULLIF(trim(v_item->>'mother_phone'), '') IS NOT NULL THEN trim(v_item->>'mother_phone')
-        WHEN v_item ? 'student_phone' AND NULLIF(trim(v_item->>'student_phone'), '') IS NOT NULL THEN trim(v_item->>'student_phone')
         WHEN v_item ? 'guardian_phone' AND NULLIF(trim(v_item->>'guardian_phone'), '') IS NOT NULL THEN trim(v_item->>'guardian_phone')
         ELSE parent_phone
       END,
@@ -222,7 +224,7 @@ BEGIN
     END IF;
 
     -- C. Upsert health record if metrics or notes are provided
-    IF (v_weight_kg IS NOT NULL OR v_height_m IS NOT NULL OR (v_item ? 'health_note') OR (v_item ? 'health_issues') OR (v_item ? 'disability')) THEN
+    IF (v_weight_kg IS NOT NULL OR v_height_m IS NOT NULL OR (v_item ? 'health_note') OR (v_item ? 'health_issues')) THEN
       INSERT INTO public.student_health_records (
         student_id,
         academic_year_id,

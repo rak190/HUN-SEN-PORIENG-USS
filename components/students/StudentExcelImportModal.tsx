@@ -88,26 +88,47 @@ export default function StudentExcelImportModal({
   }, [isOpen]);
 
   const isHeaderRow = (cells: string[]): boolean => {
-    if (cells.length === 0) return true;
-    const joined = cells.join(' ').toLowerCase();
+    if (!cells || cells.length === 0) return true;
+
+    // Check if whole row has at least one non-empty cell
+    const nonEmptyCells = cells.filter(c => c && String(c).trim().length > 0);
+    if (nonEmptyCells.length === 0) return true;
+
+    const c0 = String(cells[0] ?? '').trim();
+    const c1 = String(cells[1] ?? '').trim();
+    const c2 = String(cells[2] ?? '').trim();
+
+    // Skip top Ministry / Kingdom banners & School titles
+    const joined = cells.slice(0, 10).join(' ');
     if (
-      joined.includes('ព្រះរាជាណាចក្រ') ||
-      joined.includes('ជាតិ សាសនា') ||
+      joined.includes('ព្រះរាជាណាចក្រកម្ពុជា') ||
+      joined.includes('ជាតិ សាសនា ព្រះមហាក្សត្រ') ||
+      joined.includes('ក្រសួងអប់រំ') ||
       joined.includes('មន្ទីរអប់រំ') ||
-      joined.includes('អនុវិ') ||
       joined.includes('ព័ត៌មានសិស្ស') ||
       joined.includes('ឆ្នាំសិក្សា') ||
-      joined.includes('គោត្តនាម') ||
-      joined.includes('អត្តលេខ') ||
-      (cells[0] && cells[0].includes('ល.រ')) ||
-      (cells[14] && cells[14].includes('ភូមិ')) ||
-      (cells[17] && cells[17].includes('ភូមិ'))
+      joined.includes('បញ្ជីរាយនាមសិស្ស') ||
+      joined.includes('បញ្ជីឈ្មោះសិស្ស')
     ) {
       return true;
     }
-    const cell1 = cells[1]?.trim();
-    const cell2 = cells[2]?.trim();
-    if (!cell1 && !cell2) return true;
+
+    // Skip column header row (e.g., contains 'ល.រ', 'អត្តលេខ', 'គោត្តនាម', 'ភេទ')
+    if (
+      c0 === 'ល.រ' ||
+      c0.includes('ល.រ') ||
+      c1 === 'អត្តលេខ' ||
+      c1.includes('អត្តលេខ') ||
+      c2 === 'គោត្តនាម' ||
+      c2.includes('គោត្តនាម') ||
+      c2.includes('គោត្តនាម និងនាម')
+    ) {
+      return true;
+    }
+
+    // If neither cell 1 (ID) nor cell 2 (Full Name) has text, this cannot be a student row
+    if (!c1 && !c2) return true;
+
     return false;
   };
 
@@ -117,6 +138,9 @@ export default function StudentExcelImportModal({
       const candidates: ParsedOfficialExcelCandidate[] = [];
       const updatesMap: Record<string, Partial<MassiveProfilingStudent>> = {};
       const unmatched: Array<{ rowIdx: number; id?: string; name?: string; reason: string }> = [];
+
+      const seenSourceIds = new Set<string>();
+      const matchedTargetIds = new Set<string>();
 
       let dataRowCounter = 0;
       matrix.forEach((cells) => {
@@ -129,14 +153,39 @@ export default function StudentExcelImportModal({
 
         // 1. Primary matching by Student ID Number
         const idQuery = candidate.student_id_number ? normalizeKhmerDigits(candidate.student_id_number).trim() : '';
-        let matchedStudent = idQuery
-          ? students.find(s => s.student_id_number && normalizeKhmerDigits(s.student_id_number).trim() === idQuery)
-          : undefined;
+        let matchedStudent: MassiveProfilingStudent | undefined = undefined;
 
-        // 2. Secondary fallback matching by Full Name + Gender
-        if (!matchedStudent && candidate.full_name?.trim()) {
+        if (idQuery) {
+          // Check for duplicate student ID in the source workbook
+          if (seenSourceIds.has(idQuery)) {
+            unmatched.push({
+              rowIdx: dataRowCounter,
+              id: idQuery,
+              name: candidate.full_name,
+              reason: `ទិន្នន័យស្ទួនក្នុង Excel៖ អត្តលេខ "${idQuery}" ត្រូវបានរកឃើញលើសពីមួយដង`,
+            });
+            return;
+          }
+          seenSourceIds.add(idQuery);
+
+          matchedStudent = students.find(
+            s => s.student_id_number && normalizeKhmerDigits(s.student_id_number).trim() === idQuery
+          );
+
+          if (!matchedStudent) {
+            // Priority 3: Treat supplied student ID as authoritative. DO NOT fall back to name matching when ID fails.
+            unmatched.push({
+              rowIdx: dataRowCounter,
+              id: idQuery,
+              name: candidate.full_name,
+              reason: `អត្តលេខ "${idQuery}" មិនមានក្នុងបញ្ជីថ្នាក់បច្ចុប្បន្នទេ`,
+            });
+            return;
+          }
+        } else if (candidate.full_name?.trim()) {
+          // 2. Secondary fallback matching ONLY when student ID is absent in the source workbook
           const normName = candidate.full_name.trim();
-          matchedStudent = students.find(s => {
+          const matchingCandidates = students.filter(s => {
             const sName = s.full_name?.trim();
             if (sName !== normName) return false;
             if (candidate.gender && s.gender) {
@@ -144,9 +193,46 @@ export default function StudentExcelImportModal({
             }
             return true;
           });
+
+          if (matchingCandidates.length === 1) {
+            matchedStudent = matchingCandidates[0];
+          } else if (matchingCandidates.length > 1) {
+            unmatched.push({
+              rowIdx: dataRowCounter,
+              name: candidate.full_name,
+              reason: `ឈ្មោះ "${candidate.full_name}" ជាន់គ្នាលើសពីម្នាក់ក្នុងថ្នាក់ (Ambiguous name)`,
+            });
+            return;
+          } else {
+            unmatched.push({
+              rowIdx: dataRowCounter,
+              name: candidate.full_name,
+              reason: `រកមិនឃើញឈ្មោះ "${candidate.full_name}" ក្នុងបញ្ជីថ្នាក់បច្ចុប្បន្នទេ`,
+            });
+            return;
+          }
+        } else {
+          // Neither ID nor name supplied
+          unmatched.push({
+            rowIdx: dataRowCounter,
+            reason: 'ជួរទិន្នន័យគ្មានអត្តលេខ ឬឈ្មោះសិស្សទេ',
+          });
+          return;
         }
 
+        // Check if multiple rows in the same workbook mapped to the same student
         if (matchedStudent) {
+          if (matchedTargetIds.has(matchedStudent.id)) {
+            unmatched.push({
+              rowIdx: dataRowCounter,
+              id: candidate.student_id_number,
+              name: candidate.full_name,
+              reason: `សិស្ស "${matchedStudent.full_name}" ត្រូវផ្គូផ្គងស្ទួនពីជួរមុនរួចហើយ`,
+            });
+            return;
+          }
+          matchedTargetIds.add(matchedStudent.id);
+
           // Construct non-destructive patch (only non-blank cells in Excel update existing record)
           const patch: Partial<MassiveProfilingStudent> = {};
 
@@ -167,27 +253,21 @@ export default function StudentExcelImportModal({
           if (candidate.mother_phone?.trim()) patch.mother_phone = candidate.mother_phone.trim();
           if (candidate.address?.trim()) patch.address = candidate.address.trim();
           if (candidate.student_phone?.trim()) patch.student_phone = candidate.student_phone.trim();
-          if (candidate.indigenous) patch.indigenous = candidate.indigenous;
-          if (candidate.scholarship) patch.scholarship = candidate.scholarship;
-          if (candidate.disability) patch.disability = candidate.disability;
-          if (candidate.id_poor) patch.id_poor = candidate.id_poor;
+          if (candidate.indigenous !== undefined) patch.indigenous = candidate.indigenous;
+          if (candidate.scholarship !== undefined) patch.scholarship = candidate.scholarship;
+          if (candidate.disability !== undefined) patch.disability = candidate.disability;
+          if (candidate.id_poor !== undefined) patch.id_poor = candidate.id_poor;
 
-          // Merge parent_phone fallback
-          if (!patch.parent_phone) {
-            patch.parent_phone = patch.father_phone || patch.mother_phone || matchedStudent.parent_phone;
+          // Merge parent_phone fallback: STRICTLY father, mother, or existing parent phone. NEVER student_phone!
+          const newParentPhone = patch.father_phone || patch.mother_phone || matchedStudent.parent_phone;
+          if (newParentPhone) {
+            patch.parent_phone = newParentPhone;
           }
 
           updatesMap[matchedStudent.id] = {
             ...(updatesMap[matchedStudent.id] || {}),
             ...patch,
           };
-        } else {
-          unmatched.push({
-            rowIdx: dataRowCounter,
-            id: candidate.student_id_number,
-            name: candidate.full_name,
-            reason: 'រកមិនឃើញក្នុងបញ្ជីថ្នាក់បច្ចុប្បន្ន',
-          });
         }
       });
 
@@ -231,7 +311,8 @@ export default function StudentExcelImportModal({
         }
 
         const worksheet = workbook.Sheets[sheetName];
-        const rawJson: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+        // Use raw: false to preserve formatted text like leading zeros in IDs and phone numbers
+        const rawJson: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', raw: false });
         const matrix: string[][] = rawJson.map(row => row.map(v => String(v ?? '')));
         processMatrix(matrix);
       } catch (err) {
@@ -331,10 +412,10 @@ export default function StudentExcelImportModal({
           <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-2xl flex items-start gap-3 text-xs text-blue-900 shadow-2xs">
             <Info className="w-5 h-5 text-[#155EEF] shrink-0 mt-0.5" />
             <div>
-              <p className="font-bold text-slate-800">កំណត់សម្គាល់សុវត្ថិភាពទិន្នន័យ (Safe Column Demarcation)៖</p>
+              <p className="font-bold text-slate-800">កំណត់សម្គាល់សុវត្ថិភាព និងដែនកំណត់ទិន្នន័យ (Safe Column Demarcation)៖</p>
               <p className="mt-0.5 text-slate-600 leading-relaxed font-semibold">
-                ជួរឈរប្រតិបត្តិការក្នុងឯកសារ Excel (រួមមាន ពិន្ទុប្រចាំខែ, អវត្តមាន, និងតួនាទីសិស្ស) ត្រូវបានរំលងដោយសុវត្ថិភាព។ 
-                ពិន្ទុត្រូវបញ្ចូលក្នុងផ្ទាំង <span className="font-bold text-[#155EEF]">&quot;ពិន្ទុ (Grades)&quot;</span> ហើយអវត្តមានត្រូវកត់ត្រាក្នុង <span className="font-bold text-[#155EEF]">&quot;វត្តមាន (Attendance)&quot;</span>។
+                ការនាំចូលនេះសម្រាប់តែព័ត៌មានប្រវត្តិរូបសិស្ស (Profile) និងទិន្នន័យចាំបាច់សម្រាប់បង្កើត <span className="font-bold text-[#155EEF]">&quot;ផែនការសិក្សា&quot;</span>។ 
+                ទិន្នន័យប្រតិបត្តិការដទៃរួមមាន ពិន្ទុប្រចាំខែ (បញ្ចូលក្នុងផ្ទាំង Grades), អវត្តមាន (កត់ត្រាក្នុង Attendance), រូបថតសិស្ស (បញ្ចូលតាមមុខងារ &quot;បញ្ចូលរូបភាពច្រើន&quot;) និងតួនាទីសិស្ស ត្រូវបានរំលងដោយសុវត្ថិភាព និងរក្សាដាច់ដោយឡែក។
               </p>
             </div>
           </div>

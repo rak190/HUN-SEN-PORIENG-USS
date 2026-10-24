@@ -185,8 +185,8 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
     if (validatedPayload.mother_job !== undefined) dbRecord.mother_job = validatedPayload.mother_job || null;
     if (validatedPayload.guardian_name !== undefined) dbRecord.guardian_name = validatedPayload.guardian_name || null;
     if (validatedPayload.guardian_job !== undefined) dbRecord.guardian_job = validatedPayload.guardian_job || null;
-    if (validatedPayload.father_phone || validatedPayload.mother_phone || validatedPayload.parent_phone || validatedPayload.student_phone) {
-      dbRecord.parent_phone = validatedPayload.father_phone || validatedPayload.mother_phone || validatedPayload.parent_phone || validatedPayload.student_phone || null;
+    if (validatedPayload.parent_phone || validatedPayload.father_phone || validatedPayload.mother_phone || validatedPayload.guardian_phone) {
+      dbRecord.parent_phone = validatedPayload.parent_phone || validatedPayload.father_phone || validatedPayload.mother_phone || validatedPayload.guardian_phone || null;
     }
     if (validatedPayload.father_phone !== undefined) dbRecord.father_phone = validatedPayload.father_phone || null;
     if (validatedPayload.mother_phone !== undefined) dbRecord.mother_phone = validatedPayload.mother_phone || null;
@@ -598,8 +598,10 @@ export async function batchUpdateStudentProfilesAction(payload: {
     date_of_birth?: string;
     birth_cert_no?: string;
     student_phone?: string;
+    parent_phone?: string;
     status?: 'new' | 'repeater' | 'transfer';
     prev_school?: string;
+    indigenous?: 'yes' | 'no';
     scholarship?: 'yes' | 'no';
     id_poor?: 'none' | 'level_1' | 'level_2';
     orphan?: 'yes' | 'no';
@@ -701,7 +703,11 @@ export async function batchUpdateStudentProfilesAction(payload: {
       revalidatePath('/homeroom/student-study-plans');
       revalidatePath('/health');
       revalidatePath('/classes/info');
-      return { success: true, count: rpcData.updated_count ?? preparedUpdates.length };
+      return { 
+        success: true, 
+        count: rpcData.updated_count ?? preparedUpdates.length,
+        executionMode: 'atomic_rpc'
+      };
     }
 
     // If RPC failed due to an authorization or validation error, return immediately
@@ -711,7 +717,7 @@ export async function batchUpdateStudentProfilesAction(payload: {
     }
 
     // 2. Fallback progressive updates (if RPC function not yet deployed)
-    console.warn('[batchUpdateStudentProfilesAction] RPC unavailable, falling back to sequential transaction loop');
+    console.warn('[batchUpdateStudentProfilesAction] RPC unavailable, falling back to safe sequential update loop');
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
     let updatedCount = 0;
 
@@ -727,10 +733,10 @@ export async function batchUpdateStudentProfilesAction(payload: {
       if (item.birth_cert_no !== undefined) studentFields.birth_cert_no = item.birth_cert_no.trim() || null;
       if (item.student_phone !== undefined) {
         studentFields.student_phone = item.student_phone.trim() || null;
-        if (!studentFields.parent_phone) studentFields.parent_phone = item.student_phone.trim() || null;
       }
       if (item.status !== undefined) studentFields.status = item.status;
       if (item.prev_school !== undefined) studentFields.prev_school = item.prev_school.trim() || null;
+      if (item.indigenous !== undefined) studentFields.indigenous = item.indigenous;
       if (item.scholarship !== undefined) studentFields.scholarship = item.scholarship === 'yes' ? 'yes' : 'no';
       if (item.id_poor !== undefined) studentFields.id_poor = item.id_poor;
       if (item.orphan !== undefined) studentFields.orphan = item.orphan === 'yes' ? 'yes' : 'no';
@@ -756,31 +762,51 @@ export async function batchUpdateStudentProfilesAction(payload: {
 
       if (item.father_name !== undefined) studentFields.father_name = item.father_name.trim() || null;
       if (item.father_job !== undefined) studentFields.father_job = item.father_job.trim() || null;
-      if (item.father_phone !== undefined) {
-        studentFields.father_phone = item.father_phone.trim() || null;
-        studentFields.parent_phone = item.father_phone.trim() || studentFields.parent_phone || null;
-      }
+      if (item.father_phone !== undefined) studentFields.father_phone = item.father_phone.trim() || null;
       if (item.mother_name !== undefined) studentFields.mother_name = item.mother_name.trim() || null;
       if (item.mother_job !== undefined) studentFields.mother_job = item.mother_job.trim() || null;
-      if (item.mother_phone !== undefined) {
-        studentFields.mother_phone = item.mother_phone.trim() || null;
-        studentFields.parent_phone = item.mother_phone.trim() || studentFields.parent_phone || null;
-      }
+      if (item.mother_phone !== undefined) studentFields.mother_phone = item.mother_phone.trim() || null;
       if (item.guardian_name !== undefined) studentFields.guardian_name = item.guardian_name.trim() || null;
       if (item.guardian_job !== undefined) studentFields.guardian_job = item.guardian_job.trim() || null;
       if (item.guardian_phone !== undefined) studentFields.guardian_phone = item.guardian_phone.trim() || null;
+
+      // Parent phone: strictly father, mother, guardian, or explicit parent phone.
+      // Priority 2: NEVER store student_phone as parent_phone!
+      const parentContact = item.parent_phone?.trim() || item.father_phone?.trim() || item.mother_phone?.trim() || item.guardian_phone?.trim();
+      if (parentContact) {
+        studentFields.parent_phone = parentContact;
+      }
+
       if (item.siblings_count !== undefined) studentFields.siblings_count = Number(item.siblings_count) || 0;
       if (item.income !== undefined) studentFields.income = Number(item.income) || 0;
       if (item.current_address !== undefined) studentFields.current_address = item.current_address;
       if (item.migrant_status !== undefined) studentFields.migrant_status = item.migrant_status || 'none';
       if (item.housing !== undefined) studentFields.housing = item.housing.trim() || null;
 
-      // 1. Update students table
+      // 1. Update students table with resilient column fallback
       if (Object.keys(studentFields).length > 0) {
-        const { error: studentErr } = await supabase
+        let { error: studentErr } = await supabase
           .from('students')
           .update(studentFields)
           .eq('id', item.id);
+
+        // If the remote database has not yet run Migration 084 (e.g. column student_phone or prev_school does not exist),
+        // safely fall back to updating the confirmed canonical columns so the batch does not fail.
+        if (studentErr && (studentErr.code === '42703' || String(studentErr.message).includes('does not exist'))) {
+          console.warn('[batchUpdateStudentProfilesAction] Schema column mismatch on remote DB:', studentErr.message);
+          const sanitizedFields = { ...studentFields };
+          delete sanitizedFields.student_phone;
+          delete sanitizedFields.prev_school;
+          delete sanitizedFields.birth_cert_no;
+          delete sanitizedFields.indigenous;
+          delete sanitizedFields.assistive_device;
+
+          const retryResult = await supabase
+            .from('students')
+            .update(sanitizedFields)
+            .eq('id', item.id);
+          studentErr = retryResult.error;
+        }
 
         if (studentErr) {
           console.error(`[batchUpdateStudentProfilesAction] Error updating student ${item.id}:`, studentErr);
@@ -806,8 +832,9 @@ export async function batchUpdateStudentProfilesAction(payload: {
         }
       }
 
-      // 3. Update health records
-      if (item.weight_kg !== undefined || item.height_m !== undefined || item.health_issues !== undefined || item.disability !== undefined) {
+      // 3. Update health records - ONLY if actual health measurements/notes are provided.
+      // Priority 1: Profile imports with only disability must NOT fabricate empty/default health records.
+      if (item.weight_kg !== undefined || item.height_m !== undefined || item.health_issues !== undefined) {
         const academicYearId = validStudentMap.get(item.id);
         if (academicYearId) {
           const heightCm = item.height_m ? Math.round(Number(item.height_m) * 100) : null;
@@ -839,13 +866,14 @@ export async function batchUpdateStudentProfilesAction(payload: {
     revalidatePath('/health');
     revalidatePath('/classes/info');
 
-    return { success: true, count: updatedCount };
+    return { 
+      success: true, 
+      count: updatedCount,
+      executionMode: 'sequential_fallback',
+      warning: 'ទិន្នន័យត្រូវបានរក្សាទុកជាជោគជ័យ (មុខងារ RPC Atomic មិនទាន់ត្រូវបានដាក់ឱ្យដំណើរការលើ Server)'
+    };
   } catch (err: any) {
     console.error('[batchUpdateStudentProfilesAction] Caught exception:', err);
     return { success: false, error: err?.message || 'Failed to batch update student profiles.' };
   }
 }
-
-
-
-

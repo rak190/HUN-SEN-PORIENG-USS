@@ -49,9 +49,9 @@ export interface MassiveProfilingStudent {
 }
 
 export const DEFAULT_FORM: Partial<MassiveProfilingStudent> = {
-  gender: 'M', status: 'new', prev_school: '', scholarship: 'no', id_poor: 'none', orphan: 'no', indigenous: 'no', distance_km: 0,
-  weight_kg: 40, height_m: 1.50, disability: 'none', assistive_device: '', health_issues: '',
-  siblings_count: 0, migrant_status: 'none', domestic_violence: 'no', housing: '', income: 0, current_status: 'active',
+  gender: undefined, status: 'new', prev_school: '', scholarship: undefined, id_poor: undefined, orphan: undefined, indigenous: undefined, distance_km: 0,
+  weight_kg: undefined, height_m: undefined, disability: undefined, assistive_device: '', health_issues: '',
+  siblings_count: 0, migrant_status: 'none', domestic_violence: undefined, housing: '', income: 0, current_status: 'active',
   risk_level: 'low', attendance_rate: 100
 };
 
@@ -116,13 +116,14 @@ export function normalizeKhmerDigits(val: string): string {
   return val.replace(/[០-៩]/g, m => khmerNums[m]);
 }
 
-export function normalizePastedCell(field: string, rawVal: string): any {
-  if (rawVal === undefined || rawVal === null) return '';
-  let str = normalizeKhmerDigits(rawVal.trim());
+export function normalizePastedCell(field: string, rawVal: any): any {
+  if (rawVal === undefined || rawVal === null) return undefined;
+  const strVal = typeof rawVal === 'string' ? rawVal.trim() : String(rawVal).trim();
+  if (strVal === '') return undefined;
+  let str = normalizeKhmerDigits(strVal);
 
   // 1. Date of birth normalization
   if (field === 'date_of_birth' || field === 'dob') {
-    if (!str) return '';
     // Handle Excel serial date numbers (e.g. 39553 -> 2008-04-15)
     const numDate = Number(str);
     if (!isNaN(numDate) && numDate > 25000 && numDate < 65000) {
@@ -147,19 +148,21 @@ export function normalizePastedCell(field: string, rawVal: string): any {
     const lower = str.toLowerCase();
     if (['f', 'female', 'ស្រី', 'ស'].includes(lower)) return 'F';
     if (['m', 'male', 'ប្រុស', 'ប'].includes(lower)) return 'M';
-    return str === 'F' || str === 'ស្រី' ? 'F' : 'M';
+    if (str === 'F' || str === 'ស្រី') return 'F';
+    if (str === 'M' || str === 'ប្រុស') return 'M';
+    return undefined;
   }
 
   // 3. Health Height & Weight
   if (field === 'height_m') {
     const num = parseFloat(str);
-    if (isNaN(num) || num <= 0) return null;
+    if (isNaN(num) || num <= 0) return undefined;
     // If entered in cm (e.g. 155), convert to meters (1.55)
     return num > 3 ? parseFloat((num / 100).toFixed(2)) : parseFloat(num.toFixed(2));
   }
   if (field === 'weight_kg') {
     const num = parseFloat(str);
-    return isNaN(num) || num <= 0 ? null : Math.round(num);
+    return isNaN(num) || num <= 0 ? undefined : Math.round(num);
   }
 
   // 4. Academic Status
@@ -171,43 +174,48 @@ export function normalizePastedCell(field: string, rawVal: string): any {
 
   // 5. Poverty ID Poor
   if (field === 'id_poor') {
-    if (str.includes('គ្មាន') || str.toLowerCase().includes('none') || str === '-') return 'none';
-    if (str.includes('1') || str.includes('១')) return 'level_1';
-    if (str.includes('2') || str.includes('២')) return 'level_2';
-    return str as any;
+    const lower = str.toLowerCase();
+    if (str.includes('គ្មាន') || lower === 'none' || str === '-' || str === '0') return 'none';
+    if (str.includes('1') || str.includes('១') || lower.includes('level_1') || lower.includes('level 1')) return 'level_1';
+    if (str.includes('2') || str.includes('២') || lower.includes('level_2') || lower.includes('level 2')) return 'level_2';
+    return undefined;
   }
 
   // 6. Scholarship
   if (field === 'scholarship') {
-    if (str.includes('គ្មាន') || str.toLowerCase() === 'no' || str === '0' || str === '-') return 'no';
-    if (str.includes('មាន') || str.toLowerCase() === 'yes' || str === '1') return 'yes';
-    return 'no';
+    const lower = str.toLowerCase();
+    if (str.includes('គ្មាន') || lower === 'no' || str === '0' || str === '-') return 'no';
+    if (str.includes('មាន') || lower === 'yes' || str === '1') return 'yes';
+    return undefined;
   }
 
   // 7. Disability
   if (field === 'disability') {
-    if (str.includes('គ្មាន') || str.toLowerCase().includes('none') || str === '-') return 'none';
-    if (str.includes('ធ្ងន់') || str.toLowerCase().includes('severe')) return 'severe';
-    if (str.includes('ស្រាល') || str.includes('មាន') || str.toLowerCase().includes('mild')) return 'mild';
-    return 'none';
+    const lower = str.toLowerCase();
+    if (str.includes('គ្មាន') || lower === 'none' || str === '-' || str === '0') return 'none';
+    if (str.includes('ធ្ងន់') || lower.includes('severe')) return 'severe';
+    if (str.includes('ស្រាល') || str.includes('មាន') || lower.includes('mild')) return 'mild';
+    return undefined;
   }
 
   // 8. Yes/No Fields: Orphan, Domestic Violence, Indigenous
   if (['orphan', 'domestic_violence', 'indigenous'].includes(field)) {
-    if (str.includes('គ្មាន') || str.includes('ទេ') || str.toLowerCase() === 'no' || str === '0') return 'no';
-    if (str.includes('មាន') || str.includes('បាទ') || str.includes('ចាស') || str.toLowerCase() === 'yes' || str === '1') return 'yes';
-    return 'no';
+    const lower = str.toLowerCase();
+    if (str.includes('គ្មាន') || str.includes('ទេ') || lower === 'no' || str === '0' || str === '-') return 'no';
+    if (str.includes('មាន') || str.includes('បាទ') || str.includes('ចាស') || lower === 'yes' || str === '1') return 'yes';
+    return undefined;
   }
 
   // 9. Numbers
   if (['distance_km', 'income', 'siblings_count', 'age'].includes(field)) {
     const num = parseFloat(str.replace(/[^0-9.]/g, ''));
-    return isNaN(num) ? 0 : num;
+    return isNaN(num) ? undefined : num;
   }
 
   // 10. Phone Numbers
   if (['student_phone', 'father_phone', 'mother_phone', 'guardian_phone'].includes(field)) {
-    return str.replace(/[^0-9+]/g, '');
+    const cleaned = str.replace(/[^0-9+]/g, '');
+    return cleaned || undefined;
   }
 
   return str;
@@ -296,22 +304,31 @@ export function parseOfficialExcelRow(
     const studentPhone = normalizePastedCell('student_phone', safeCell(21)); // Col V
     const indigenous = safeCell(22) ? (normalizePastedCell('indigenous', safeCell(22)) as any) : undefined; // Col W
 
-    // Scholarship across cols X-AA
-    let scholarship: 'yes' | 'no' = 'no';
-    if ([safeCell(23), safeCell(24), safeCell(25), safeCell(26)].some(v => v && v !== 'គ្មាន' && v !== '-')) {
-      scholarship = 'yes';
+    // Scholarship across cols X-AA (indices 23, 24, 25, 26)
+    const scholarshipCells = [safeCell(23), safeCell(24), safeCell(25), safeCell(26)].filter(Boolean);
+    let scholarship: 'yes' | 'no' | undefined = undefined;
+    if (scholarshipCells.length > 0) {
+      if (scholarshipCells.some(v => v !== 'គ្មាន' && v !== '-' && v !== '0')) {
+        scholarship = 'yes';
+      } else if (scholarshipCells.every(v => v === 'គ្មាន' || v === '-' || v === '0')) {
+        scholarship = 'no';
+      }
     }
 
-    const disability = safeCell(27) ? (normalizePastedCell('disability', safeCell(27)) as any) : 'none'; // Col AB
+    // Disability at Col AB (index 27)
+    const disabilityRaw = safeCell(27);
+    const disability = disabilityRaw ? (normalizePastedCell('disability', disabilityRaw) as any) : undefined;
 
-    // ID Poor: Col BB is ក្រ១, Col BC is ក្រ២
-    const poor1 = safeCell(53); // Col BB
-    const poor2 = safeCell(54); // Col BC
-    let idPoor: 'none' | 'level_1' | 'level_2' = 'none';
-    if (poor1 && poor1 !== '-' && poor1 !== '0') {
+    // ID Poor: Col BB is ក្រ១ (index 53), Col BC is ក្រ២ (index 54)
+    const poor1 = safeCell(53);
+    const poor2 = safeCell(54);
+    let idPoor: 'none' | 'level_1' | 'level_2' | undefined = undefined;
+    if (poor1 && poor1 !== '-' && poor1 !== '0' && poor1 !== 'គ្មាន') {
       idPoor = 'level_1';
-    } else if (poor2 && poor2 !== '-' && poor2 !== '0') {
+    } else if (poor2 && poor2 !== '-' && poor2 !== '0' && poor2 !== 'គ្មាន') {
       idPoor = 'level_2';
+    } else if ((poor1 === 'គ្មាន' || poor1 === '-') || (poor2 === 'គ្មាន' || poor2 === '-')) {
+      idPoor = 'none';
     }
 
     const address = formatKhmerAddress(village, commune, district, province);
@@ -357,22 +374,31 @@ export function parseOfficialExcelRow(
   const studentPhone = normalizePastedCell('student_phone', safeCell(18)); // Col S
   const indigenous = safeCell(19) ? (normalizePastedCell('indigenous', safeCell(19)) as any) : undefined; // Col T
 
-  // Scholarship across cols U-X
-  let scholarship: 'yes' | 'no' = 'no';
-  if ([safeCell(20), safeCell(21), safeCell(22), safeCell(23)].some(v => v && v !== 'គ្មាន' && v !== '-')) {
-    scholarship = 'yes';
+  // Scholarship across cols U-X (indices 20, 21, 22, 23)
+  const scholarshipCells = [safeCell(20), safeCell(21), safeCell(22), safeCell(23)].filter(Boolean);
+  let scholarship: 'yes' | 'no' | undefined = undefined;
+  if (scholarshipCells.length > 0) {
+    if (scholarshipCells.some(v => v !== 'គ្មាន' && v !== '-' && v !== '0')) {
+      scholarship = 'yes';
+    } else if (scholarshipCells.every(v => v === 'គ្មាន' || v === '-' || v === '0')) {
+      scholarship = 'no';
+    }
   }
 
-  const disability = safeCell(24) ? (normalizePastedCell('disability', safeCell(24)) as any) : 'none'; // Col Y
+  // Disability at Col Y (index 24)
+  const disabilityRaw = safeCell(24);
+  const disability = disabilityRaw ? (normalizePastedCell('disability', disabilityRaw) as any) : undefined;
 
-  // ID Poor: Col AY is ក្រ១, Col AZ is ក្រ២
-  const poor1 = safeCell(50); // Col AY
-  const poor2 = safeCell(51); // Col AZ
-  let idPoor: 'none' | 'level_1' | 'level_2' = 'none';
-  if (poor1 && poor1 !== '-' && poor1 !== '0') {
+  // ID Poor: Col AY is ក្រ១ (index 50), Col AZ is ក្រ២ (index 51)
+  const poor1 = safeCell(50);
+  const poor2 = safeCell(51);
+  let idPoor: 'none' | 'level_1' | 'level_2' | undefined = undefined;
+  if (poor1 && poor1 !== '-' && poor1 !== '0' && poor1 !== 'គ្មាន') {
     idPoor = 'level_1';
-  } else if (poor2 && poor2 !== '-' && poor2 !== '0') {
+  } else if (poor2 && poor2 !== '-' && poor2 !== '0' && poor2 !== 'គ្មាន') {
     idPoor = 'level_2';
+  } else if ((poor1 === 'គ្មាន' || poor1 === '-') || (poor2 === 'គ្មាន' || poor2 === '-')) {
+    idPoor = 'none';
   }
 
   const address = formatKhmerAddress(village, commune, district, province);
