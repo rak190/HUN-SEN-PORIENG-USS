@@ -148,8 +148,8 @@ export default async function StudentStudyPlansPage({ searchParams }: PageProps)
     );
   }
 
-  // 4. Concurrently fetch Class Roster, Published Grades, Teacher Profile, and School Info
-  const [rosterRes, gradesRes, teacherRes, schoolRes] = await Promise.all([
+  // 4. Concurrently fetch Class Roster, Published Grades, Teacher Profile, School Info, and Saved Study Plans
+  const [rosterRes, gradesRes, teacherRes, schoolRes, studyPlansRes] = await Promise.all([
     supabase
       .from('active_class_rosters')
       .select('*')
@@ -174,12 +174,27 @@ export default async function StudentStudyPlansPage({ searchParams }: PageProps)
       .select('name, abbreviation, department, province')
       .eq('id', classroom.school_id || profile.school_id || 'main-school')
       .maybeSingle(),
+    supabase
+      .from('student_study_plans')
+      .select('student_id, subject_targets')
+      .eq('class_id', effectiveClassId)
+      .eq('academic_year_id', activeYear.id),
   ]);
 
   const students = (rosterRes.data as unknown as Student[]) || [];
-  const gradesData = (gradesRes.data as unknown as Array<{ period: string; scores: Record<string, number> }>) || [];
+  const gradesData = (gradesRes.data as unknown as Array<{ period: string; scores: Record<string, number>; student_id?: string }>) || [];
   const teacherInfo = teacherRes.data || { full_name: profile.full_name, phone: profile.phone };
   const schoolInfo = schoolRes.data || undefined;
+
+  // Build lookup map for saved student study plan targets
+  const studyPlansMap: Record<string, Record<string, any>> = {};
+  if (studyPlansRes?.data && Array.isArray(studyPlansRes.data)) {
+    studyPlansRes.data.forEach((row: any) => {
+      if (row.student_id && row.subject_targets) {
+        studyPlansMap[row.student_id] = row.subject_targets;
+      }
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -213,10 +228,12 @@ export default async function StudentStudyPlansPage({ searchParams }: PageProps)
       <StudentStudyPlansClient
         students={students}
         classInfo={classroom}
+        academicYearId={activeYear.id}
         academicYearName={activeYear.name}
         schoolInfo={schoolInfo}
         teacherInfo={teacherInfo}
         gradesData={gradesData}
+        initialStudyPlansMap={studyPlansMap}
       />
     </div>
   );

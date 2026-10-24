@@ -161,12 +161,12 @@ describe('Homeroom Student Study Plan Generator Suite', () => {
     assert.equal(getSubjectGradeLetter(24.9, 50), 'F');
     assert.equal(getSubjectGradeLetter(0, 50), 'F');
 
-    // Dynamic maxScore mapping (e.g., 150 scale maps to 125 scale)
-    assert.equal(getSubjectGradeLetter(115, 150), 'A');
-    assert.equal(getSubjectGradeLetter(105, 150), 'B');
-    assert.equal(getSubjectGradeLetter(90, 150), 'C');
-    assert.equal(getSubjectGradeLetter(78, 150), 'D');
-    assert.equal(getSubjectGradeLetter(65, 150), 'E');
+    // Official Grade 10 150-scale thresholds (A: 135-150, B: 120-134, C: 105-119, D: 90-104, E: 75-89, F: < 75)
+    assert.equal(getSubjectGradeLetter(135, 150), 'A');
+    assert.equal(getSubjectGradeLetter(120, 150), 'B');
+    assert.equal(getSubjectGradeLetter(105, 150), 'C');
+    assert.equal(getSubjectGradeLetter(90, 150), 'D');
+    assert.equal(getSubjectGradeLetter(75, 150), 'E');
     assert.equal(getSubjectGradeLetter(50, 150), 'F');
 
     // Missing / unrecorded values MUST remain empty string (Never fabricated)

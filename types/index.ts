@@ -169,6 +169,7 @@ export interface Student {
   guardian_phone?: string | null;
   emergency_contact_phone?: string | null;
   current_address?: string | null;
+  family_condition?: string | null;
 }
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'permission' | 'P' | 'A' | 'L' | 'E';
