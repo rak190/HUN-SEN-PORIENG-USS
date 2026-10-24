@@ -585,4 +585,221 @@ export async function fetchClassStudentRequestsAction(classId: string) {
   }
 }
 
+export async function batchUpdateStudentProfilesAction(payload: {
+  class_id: string;
+  updates: Array<{
+    id: string;
+    desk_number?: string;
+    room_number?: string;
+    full_name?: string;
+    english_name?: string;
+    gender?: string;
+    date_of_birth?: string;
+    birth_cert_no?: string;
+    student_phone?: string;
+    status?: 'new' | 'repeater' | 'transfer';
+    prev_school?: string;
+    scholarship?: 'yes' | 'no';
+    id_poor?: 'none' | 'level_1' | 'level_2';
+    orphan?: 'yes' | 'no';
+    distance_km?: number;
+    weight_kg?: number;
+    height_m?: number;
+    disability?: 'none' | 'mild' | 'severe';
+    health_issues?: string;
+    father_name?: string;
+    father_job?: string;
+    father_phone?: string;
+    mother_name?: string;
+    mother_job?: string;
+    mother_phone?: string;
+    guardian_name?: string;
+    guardian_job?: string;
+    guardian_phone?: string;
+    siblings_count?: number;
+    income?: number;
+    address?: string;
+    migrant_status?: 'none' | 'parents' | 'student';
+    housing?: string;
+  }>;
+}) {
+  try {
+    if (!payload?.class_id) {
+      return { success: false, error: 'Target class ID is required.' };
+    }
+
+    if (!payload?.updates || !Array.isArray(payload.updates) || payload.updates.length === 0) {
+      return { success: false, error: 'No student updates provided.' };
+    }
+
+    const { getServerAuth, requireClassAccess } = await import('@/lib/auth-server');
+    const { user, profile, role } = await getServerAuth();
+    if (!user || !profile || !role) {
+      return { success: false, error: 'Unauthorized: Authentication required.' };
+    }
+
+    // Security Gate: Ensure caller has legitimate authority over this class roster
+    await requireClassAccess(payload.class_id);
+
+    const supabase = createAdminClient();
+
+    // Verify all target students belong to this class
+    const { data: enrollments, error: enrolErr } = await supabase
+      .from('student_enrollments')
+      .select('student_id, academic_year_id')
+      .eq('class_id', payload.class_id);
+
+    if (enrolErr || !enrollments) {
+      return { success: false, error: enrolErr?.message || 'Failed to verify class enrollment roster.' };
+    }
+
+    const validStudentMap = new Map<string, string>();
+    for (const e of enrollments) {
+      validStudentMap.set(e.student_id, e.academic_year_id);
+    }
+
+    for (const item of payload.updates) {
+      if (!item.id || !validStudentMap.has(item.id)) {
+        return {
+          success: false,
+          error: `Unauthorized mutation: Student ${item.id || 'unknown'} is not enrolled in class ${payload.class_id}.`
+        };
+      }
+    }
+
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Phnom_Penh' }).format(new Date());
+
+    // Execute atomic-like progressive updates
+    let updatedCount = 0;
+    for (const item of payload.updates) {
+      const studentFields: Record<string, any> = {};
+
+      if (item.full_name !== undefined) studentFields.full_name = item.full_name.trim();
+      if (item.english_name !== undefined) studentFields.english_name = item.english_name.trim() || null;
+      if (item.gender !== undefined) {
+        studentFields.gender = item.gender === 'F' || item.gender === 'ស្រី' ? 'F' : 'M';
+      }
+      if (item.date_of_birth !== undefined) studentFields.dob = item.date_of_birth || null;
+      if (item.birth_cert_no !== undefined) studentFields.birth_cert_no = item.birth_cert_no.trim() || null;
+      if (item.student_phone !== undefined) {
+        studentFields.student_phone = item.student_phone.trim() || null;
+        if (!studentFields.parent_phone) studentFields.parent_phone = item.student_phone.trim() || null;
+      }
+      if (item.status !== undefined) studentFields.status = item.status;
+      if (item.prev_school !== undefined) studentFields.prev_school = item.prev_school.trim() || null;
+      if (item.scholarship !== undefined) studentFields.scholarship = item.scholarship === 'yes' ? 'yes' : 'no';
+      if (item.id_poor !== undefined) studentFields.id_poor = item.id_poor;
+      if (item.orphan !== undefined) studentFields.orphan = item.orphan === 'yes' ? 'yes' : 'no';
+      if (item.distance_km !== undefined) studentFields.distance_km = item.distance_km ? Number(item.distance_km) : 0;
+      if (item.disability !== undefined) studentFields.disability = item.disability;
+      if (item.health_issues !== undefined) studentFields.health_note = item.health_issues.trim() || null;
+
+      // BMI & nutrition calculation
+      if (item.weight_kg !== undefined || item.height_m !== undefined) {
+        const w = item.weight_kg !== undefined ? Number(item.weight_kg) : null;
+        const h = item.height_m !== undefined ? Number(item.height_m) : null;
+        if (w !== null) studentFields.weight_kg = w;
+        if (h !== null) studentFields.height_m = h;
+        if (w && h && h > 0) {
+          const bmi = parseFloat((w / (h * h)).toFixed(1));
+          studentFields.bmi = bmi;
+          if (bmi < 18.5) studentFields.nutrition_status = 'ស្គម';
+          else if (bmi >= 25 && bmi < 30) studentFields.nutrition_status = 'លើសទម្ងន់';
+          else if (bmi >= 30) studentFields.nutrition_status = 'ធាត់';
+          else studentFields.nutrition_status = 'ធម្មតា';
+        }
+      }
+
+      if (item.father_name !== undefined) studentFields.father_name = item.father_name.trim() || null;
+      if (item.father_job !== undefined) studentFields.father_job = item.father_job.trim() || null;
+      if (item.father_phone !== undefined) {
+        studentFields.father_phone = item.father_phone.trim() || null;
+        studentFields.parent_phone = item.father_phone.trim() || studentFields.parent_phone || null;
+      }
+      if (item.mother_name !== undefined) studentFields.mother_name = item.mother_name.trim() || null;
+      if (item.mother_job !== undefined) studentFields.mother_job = item.mother_job.trim() || null;
+      if (item.mother_phone !== undefined) {
+        studentFields.mother_phone = item.mother_phone.trim() || null;
+        studentFields.parent_phone = item.mother_phone.trim() || studentFields.parent_phone || null;
+      }
+      if (item.guardian_name !== undefined) studentFields.guardian_name = item.guardian_name.trim() || null;
+      if (item.guardian_job !== undefined) studentFields.guardian_job = item.guardian_job.trim() || null;
+      if (item.guardian_phone !== undefined) studentFields.guardian_phone = item.guardian_phone.trim() || null;
+      if (item.siblings_count !== undefined) studentFields.siblings_count = Number(item.siblings_count) || 0;
+      if (item.income !== undefined) studentFields.income = Number(item.income) || 0;
+      if (item.address !== undefined) studentFields.current_address = item.address.trim() || null;
+      if (item.migrant_status !== undefined) studentFields.migrant_status = item.migrant_status || 'none';
+      if (item.housing !== undefined) studentFields.housing = item.housing.trim() || null;
+
+      // 1. Update students table if any student fields are populated
+      if (Object.keys(studentFields).length > 0) {
+        const { error: studentErr } = await supabase
+          .from('students')
+          .update(studentFields)
+          .eq('id', item.id);
+
+        if (studentErr) {
+          console.error(`[batchUpdateStudentProfilesAction] Error updating student ${item.id}:`, studentErr);
+          throw new Error(`បរាជ័យក្នុងការកែប្រែព័ត៌មានសិស្ស: ${studentErr.message}`);
+        }
+      }
+
+      // 2. Update student_enrollments for desk_number and room_number
+      const enrollmentFields: Record<string, any> = {};
+      if (item.desk_number !== undefined) enrollmentFields.desk_number = item.desk_number.trim() || null;
+      if (item.room_number !== undefined) enrollmentFields.room_number = item.room_number.trim() || null;
+
+      if (Object.keys(enrollmentFields).length > 0) {
+        const { error: enrolUpdateErr } = await supabase
+          .from('student_enrollments')
+          .update(enrollmentFields)
+          .eq('student_id', item.id)
+          .eq('class_id', payload.class_id);
+
+        if (enrolUpdateErr) {
+          console.error(`[batchUpdateStudentProfilesAction] Error updating enrollment for ${item.id}:`, enrolUpdateErr);
+          throw new Error(`បរាជ័យក្នុងការកែប្រែទិន្នន័យថ្នាក់: ${enrolUpdateErr.message}`);
+        }
+      }
+
+      // 3. Update health records if height or weight were modified
+      if (item.weight_kg !== undefined || item.height_m !== undefined || item.health_issues !== undefined || item.disability !== undefined) {
+        const academicYearId = validStudentMap.get(item.id);
+        if (academicYearId) {
+          const heightCm = item.height_m ? Math.round(Number(item.height_m) * 100) : null;
+          const weightKg = item.weight_kg ? Number(item.weight_kg) : null;
+          const bmi = weightKg && heightCm ? parseFloat((weightKg / ((heightCm / 100) * (heightCm / 100))).toFixed(1)) : null;
+
+          await supabase.from('student_health_records').upsert({
+            student_id: item.id,
+            academic_year_id: academicYearId,
+            recorded_date: today,
+            weight_kg: weightKg,
+            height_cm: heightCm,
+            bmi,
+            vision_left: '6/6',
+            vision_right: '6/6',
+            hearing: 'ធម្មតា',
+            dental: 'ធម្មតា',
+            notes: item.health_issues || '',
+          }, { onConflict: 'student_id,recorded_date' });
+        }
+      }
+
+      updatedCount++;
+    }
+
+    revalidatePath('/students');
+    revalidatePath('/homeroom');
+    revalidatePath('/health');
+    revalidatePath('/classes/info');
+
+    return { success: true, count: updatedCount };
+  } catch (err: any) {
+    console.error('[batchUpdateStudentProfilesAction] Caught exception:', err);
+    return { success: false, error: err?.message || 'Failed to batch update student profiles.' };
+  }
+}
+
+
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, AlertCircle, FileSpreadsheet, ChevronDown, Download, Table, UserPlus, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Search, AlertCircle, FileSpreadsheet, ChevronDown, Download, Table, UserPlus, Loader2, Image as ImageIcon, Edit2, Check } from 'lucide-react';
 
 interface StudentFiltersProps {
   totalStudents: number;
@@ -11,6 +11,9 @@ interface StudentFiltersProps {
   isSaving: boolean;
   onDownloadTemplate: () => void;
   onOpenBulkImage: () => void;
+  isEditMode?: boolean;
+  onToggleEditMode?: () => void;
+  unsavedCount?: number;
 }
 
 export default function StudentFilters({
@@ -22,7 +25,10 @@ export default function StudentFilters({
   onDeleteSelected,
   isSaving,
   onDownloadTemplate,
-  onOpenBulkImage
+  onOpenBulkImage,
+  isEditMode = false,
+  onToggleEditMode,
+  unsavedCount = 0
 }: StudentFiltersProps) {
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
 
@@ -46,7 +52,7 @@ export default function StudentFilters({
         </div>
       </div>
       
-      <div className="flex gap-2 relative">
+      <div className="flex gap-2.5 relative items-center">
         {selectedIdsCount > 0 && (
           <button 
             onClick={onDeleteSelected} 
@@ -54,6 +60,31 @@ export default function StudentFilters({
             className="px-4 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors mr-2 disabled:opacity-50"
           >
             <AlertCircle className="w-4 h-4" /> បោះបង់សិស្សដែលជ្រើសរើស ({selectedIdsCount})
+          </button>
+        )}
+
+        {onToggleEditMode && (
+          <button 
+            type="button"
+            onClick={onToggleEditMode} 
+            className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
+              isEditMode 
+                ? 'bg-amber-500 text-white hover:bg-amber-600 ring-2 ring-amber-400/40' 
+                : 'bg-[#155EEF] text-white hover:bg-[#124bbf] shadow-blue-500/20'
+            }`}
+            title="កែសម្រួលទិន្នន័យផ្ទាល់លើតារាង ឬ Copy-Paste ពី Excel"
+          >
+            {isEditMode ? (
+              <>
+                <Check className="w-4 h-4" />
+                <span>របៀបកែសម្រួល (Edit Mode) {unsavedCount > 0 && `• ${unsavedCount} កែប្រែ`}</span>
+              </>
+            ) : (
+              <>
+                <Edit2 className="w-4 h-4" />
+                <span>បើកការកែប្រែ (កែ / Paste ពី Excel)</span>
+              </>
+            )}
           </button>
         )}
         

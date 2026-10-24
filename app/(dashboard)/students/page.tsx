@@ -9,18 +9,20 @@ import { invalidateClassRoster } from '@/lib/cache/client-cache';
 import {
   Users, Search, UserPlus, Download, Edit, MapPin, Heart, FileSpreadsheet, Table,
   Phone, AlertCircle, FileText, UserSquare2, BarChart3, Info, BookOpen, Clock, Activity, TrendingUp, AlertTriangle, LogOut, ChevronDown, Loader2, X, Check,
-  ArrowUpDown, ArrowUp, ArrowDown, Plus, ArrowRightLeft
+  ArrowUpDown, ArrowUp, ArrowDown, Plus, ArrowRightLeft, LayoutGrid
 } from 'lucide-react';
 import StudentTable from '@/components/students/StudentTable';
 import StudentProfileDrawer from '@/components/students/StudentProfileDrawer';
 import StudentFilters from '@/components/students/StudentFilters';
 import BulkImageUploadModal from '@/components/students/BulkImageUploadModal';
-import { saveStudentAction } from './actions';
+import { saveStudentAction, batchUpdateStudentProfilesAction } from './actions';
 import { useStudents } from '@/hooks/useStudents';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 import { MassiveProfilingStudent, DEFAULT_FORM } from './types';
 
 const VIEW_TABS = [
+  { id: 0, label: 'ទិដ្ឋភាពពេញលេញ (Master)', icon: LayoutGrid },
   { id: 1, label: 'មូលដ្ឋាន', icon: UserSquare2 },
   { id: 2, label: 'ការសិក្សា', icon: FileText },
   { id: 3, label: 'សុខភាព', icon: Heart },
@@ -44,12 +46,26 @@ export default function StudentsPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isGridModalOpen, setIsGridModalOpen] = useState(false);
   const [isBulkImageModalOpen, setIsBulkImageModalOpen] = useState(false);
-  const [activeTableView, setActiveTableView] = useState(1);
+  const [activeTableView, setActiveTableView] = useState(0);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [draftUpdates, setDraftUpdates] = useState<Record<string, Partial<MassiveProfilingStudent>>>({});
+  const [isSavingBatch, setIsSavingBatch] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [mainTab, setMainTab] = useState<'list' | 'at-risk' | 'transfer'>('list');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
+
+  const unsavedCount = useMemo(() => {
+    let count = 0;
+    for (const studentId of Object.keys(draftUpdates)) {
+      count += Object.keys(draftUpdates[studentId] || {}).length;
+    }
+    return count;
+  }, [draftUpdates]);
+
+  const isDirty = unsavedCount > 0;
+  useUnsavedChanges(isDirty);
 
   useEffect(() => {
     setMounted(true);
@@ -501,6 +517,11 @@ export default function StudentsPage() {
 
         if (data.id) {
           setStudents(prev => prev.map(s => s.id === data.id ? savedStudent : s));
+          setDraftUpdates(prev => {
+            const next = { ...prev };
+            delete next[data.id!];
+            return next;
+          });
         } else {
           setStudents(prev => [savedStudent, ...prev]);
         }
@@ -517,6 +538,107 @@ export default function StudentsPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleCellChange = (studentId: string, field: string, value: any) => {
+    setDraftUpdates(prev => {
+      const studentDraft = { ...(prev[studentId] || {}) };
+      const originalStudent = students.find(s => s.id === studentId);
+      const originalVal = originalStudent ? (originalStudent as any)[field] : undefined;
+
+      const isReverted = 
+        (originalVal === value) ||
+        ((originalVal === null || originalVal === undefined || originalVal === '') && (value === null || value === undefined || value === ''));
+
+      if (isReverted) {
+        delete (studentDraft as any)[field];
+        if (Object.keys(studentDraft).length === 0) {
+          const next = { ...prev };
+          delete next[studentId];
+          return next;
+        }
+        return { ...prev, [studentId]: studentDraft };
+      }
+
+      return {
+        ...prev,
+        [studentId]: {
+          ...studentDraft,
+          [field]: value
+        }
+      };
+    });
+  };
+
+  const handleBatchDraftChange = (incomingUpdates: Record<string, Partial<MassiveProfilingStudent>>) => {
+    setDraftUpdates(prev => {
+      const next = { ...prev };
+      for (const [studentId, fields] of Object.entries(incomingUpdates)) {
+        next[studentId] = {
+          ...(next[studentId] || {}),
+          ...fields
+        };
+      }
+      return next;
+    });
+  };
+
+  const handleSaveBatchChanges = async () => {
+    if (!activeClass?.id) {
+      alert('សូមជ្រើសរើសថ្នាក់ជាមុនសិន!');
+      return;
+    }
+    const studentIds = Object.keys(draftUpdates);
+    if (studentIds.length === 0) return;
+
+    const updatesPayload = studentIds.map(id => ({
+      id,
+      ...draftUpdates[id]
+    }));
+
+    setIsSavingBatch(true);
+    try {
+      const res = await batchUpdateStudentProfilesAction({
+        class_id: activeClass.id,
+        updates: updatesPayload
+      });
+
+      if (res.success) {
+        // Optimistically apply draft updates to local students state
+        setStudents(prev => prev.map(std => {
+          const patch = draftUpdates[std.id];
+          if (!patch) return std;
+          return { ...std, ...patch };
+        }));
+
+        setDraftUpdates({});
+        invalidateClassRoster(activeClass.id);
+        alert(`បានរក្សាទុកទិន្នន័យសិស្សចំនួន ${res.count || studentIds.length} នាក់ដោយជោគជ័យ!`);
+      } else {
+        alert(`មិនអាចរក្សាទុកទិន្នន័យបានទេ៖ ${res.error || 'សូមព្យាយាមម្តងទៀត'}`);
+      }
+    } catch (err: any) {
+      console.error('Failed to save batch student profiles:', err);
+      alert(`មានបញ្ហាក្នុងការរក្សាទុក៖ ${err?.message || 'សូមព្យាយាមម្តងទៀត'}`);
+    } finally {
+      setIsSavingBatch(false);
+    }
+  };
+
+  const handleDiscardBatchChanges = () => {
+    if (window.confirm('តើអ្នកពិតជាចង់បោះបង់ការផ្លាស់ប្តូរទាំងអស់ដែលមិនទាន់រក្សាទុកមែនទេ?')) {
+      setDraftUpdates({});
+    }
+  };
+
+  const handleToggleEditMode = () => {
+    if (isEditMode && isDirty) {
+      if (!window.confirm('លោកអ្នកមានទិន្នន័យមិនទាន់រក្សាទុក។ តើអ្នកចង់បិទការកែប្រែដោយបោះបង់ការផ្លាស់ប្តូរមែនទេ?')) {
+        return;
+      }
+      setDraftUpdates({});
+    }
+    setIsEditMode(prev => !prev);
   };
 
   const handleBulkSuccess = (newStudents: any[]) => {
@@ -695,9 +817,12 @@ export default function StudentsPage() {
             setSearchQuery={setSearchQuery}
             selectedIdsCount={selectedIds.length}
             onDeleteSelected={handleDeleteSelected}
-            isSaving={isSaving}
+            isSaving={isSaving || isSavingBatch}
             onDownloadTemplate={handleDownloadTemplate}
             onOpenBulkImage={() => setIsBulkImageModalOpen(true)}
+            isEditMode={isEditMode}
+            onToggleEditMode={handleToggleEditMode}
+            unsavedCount={unsavedCount}
           />
 
       {/* Table View Filters */}
@@ -737,6 +862,10 @@ export default function StudentsPage() {
           });
           setIsStatusModalOpen(true);
         }}
+        isEditMode={isEditMode}
+        draftUpdates={draftUpdates}
+        onCellChange={handleCellChange}
+        onBatchDraftChange={handleBatchDraftChange}
       />
       </div>
       )}
@@ -1233,6 +1362,47 @@ export default function StudentsPage() {
           console.log('Bulk image upload completed');
         }}
       />
+
+      {/* Floating Save Bar for Edit Mode */}
+      {isDirty && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md text-white px-6 py-3.5 rounded-2xl shadow-2xl border border-slate-700/80 flex items-center gap-5 animate-in slide-in-from-bottom-5 duration-200">
+          <div className="flex items-center gap-2.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+            <span className="text-xs font-bold text-slate-200">
+              បានកែសម្រួល <strong className="text-amber-400 font-extrabold">{unsavedCount}</strong> ប្រអប់ទិន្នន័យ
+            </span>
+          </div>
+          <div className="h-5 w-px bg-slate-700" />
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              disabled={isSavingBatch}
+              onClick={handleDiscardBatchChanges}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              បោះបង់ (Discard)
+            </button>
+            <button
+              type="button"
+              disabled={isSavingBatch}
+              onClick={handleSaveBatchChanges}
+              className="px-4 py-2 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isSavingBatch ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>កំពុងរក្សាទុក...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>រក្សាទុកការផ្លាស់ប្តូរ (Save All)</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
