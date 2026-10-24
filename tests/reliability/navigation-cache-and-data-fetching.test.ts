@@ -384,4 +384,26 @@ describe('Stage 2: Navigation Performance, Scoped Caching & Data Integrity Suite
       );
     }
   });
+
+  test('Scenario 11: Schema Column Integrity in useStudents — STUDENT_ROSTER_FIELDS alignment', () => {
+    const hookPath = path.join(process.cwd(), 'hooks', 'useStudents.ts');
+    const content = fs.readFileSync(hookPath, 'utf8');
+
+    // Extract STUDENT_ROSTER_FIELDS
+    const match = content.match(/export\s+const\s+STUDENT_ROSTER_FIELDS\s*=\s*['"]([^'"]+)['"]/);
+    assert.ok(match, 'STUDENT_ROSTER_FIELDS must be exported as string literal');
+
+    const fields = match[1].split(',').map((f) => f.trim());
+
+    // Non-existent columns in active_class_rosters must NOT be queried
+    const invalidCols = ['indigenous', 'migrant_status', 'domestic_violence', 'attendance_rate', 'health_issues'];
+    for (const col of invalidCols) {
+      assert.ok(!fields.includes(col), `STUDENT_ROSTER_FIELDS must not query non-existent column: "${col}"`);
+    }
+
+    // Canonical column health_note must be queried and mapped to health_issues
+    assert.ok(fields.includes('health_note'), 'STUDENT_ROSTER_FIELDS must query canonical health_note');
+    assert.ok(content.includes('health_note'), 'useStudents must map health_note to health_issues');
+  });
 });
+

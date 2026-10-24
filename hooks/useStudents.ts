@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { buildCacheKey, getOrFetchScoped, subscribe } from '@/lib/cache/client-cache';
 
 export const STUDENT_ROSTER_FIELDS = 
-  'id, student_id_number, desk_number, room_number, full_name, english_name, photo_url, gender, dob, current_address, enrollment_status, scholarship, id_poor, orphan, indigenous, distance_km, weight_kg, height_m, disability, health_issues, father_name, father_job, father_phone, mother_name, mother_job, mother_phone, guardian_name, guardian_job, guardian_phone, siblings_count, migrant_status, domestic_violence, housing, income, risk_level, attendance_rate';
+  'id, student_id_number, desk_number, room_number, full_name, english_name, photo_url, gender, dob, current_address, enrollment_status, scholarship, id_poor, orphan, distance_km, weight_kg, height_m, disability, health_note, father_name, father_job, father_phone, mother_name, mother_job, mother_phone, guardian_name, guardian_job, guardian_phone, siblings_count, housing, income, risk_level';
 
 export function useStudents(activeClassId: string | undefined) {
   const { user, profile, activeAcademicYear } = useAuth();
@@ -49,13 +49,14 @@ export function useStudents(activeClassId: string | undefined) {
             .order('student_id_number', { ascending: true });
 
           if (error) {
-            console.error('[useStudents] Query failed:', error);
+            console.error('[useStudents] Query failed:', error.message || error.code || error);
             throw error;
           }
 
           return (data || []).map(d => ({
             ...DEFAULT_FORM,
             ...d,
+            health_issues: (d as any).health_note || (d as any).health_issues || '',
             date_of_birth: d.dob,
             address: d.current_address,
             current_status: d.enrollment_status || 'active',
