@@ -32,7 +32,7 @@ const VIEW_TABS = [
 ];
 
 export default function StudentsPage() {
-  const { activeClass, activeAcademicYear } = useAuth();
+  const { activeClass, activeAcademicYear, profile } = useAuth();
   
   const { 
     students, setStudents, 
@@ -866,6 +866,7 @@ export default function StudentsPage() {
           setIsStatusModalOpen(true);
         }}
         isEditMode={isEditMode}
+        isAdmin={profile?.role === 'admin'}
         draftUpdates={draftUpdates}
         onCellChange={handleCellChange}
         onBatchDraftChange={handleBatchDraftChange}

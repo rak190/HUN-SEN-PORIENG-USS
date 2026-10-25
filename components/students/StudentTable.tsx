@@ -8,7 +8,7 @@ import {
   normalizeKhmerDigits,
   normalizePastedCell
 } from '@/app/(dashboard)/students/types';
-import { UserSquare2, Edit, LogOut, ArrowUpDown, ArrowUp, ArrowDown, Heart, AlertCircle, AlertTriangle, Check, Layers } from 'lucide-react';
+import { UserSquare2, Edit, LogOut, ArrowUpDown, ArrowUp, ArrowDown, Heart, AlertCircle, AlertTriangle, Check, Layers, Lock } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 export { normalizeKhmerDigits, normalizePastedCell };
@@ -26,6 +26,7 @@ interface StudentTableProps {
   openStatusModal: (std: MassiveProfilingStudent) => void;
   // In-Place Edit Mode additions
   isEditMode?: boolean;
+  isAdmin?: boolean;
   draftUpdates?: Record<string, Partial<MassiveProfilingStudent>>;
   onCellChange?: (studentId: string, field: string, value: any) => void;
   onBatchDraftChange?: (updates: Record<string, Partial<MassiveProfilingStudent>>) => void;
@@ -43,6 +44,7 @@ export default function StudentTable({
   openEditModal,
   openStatusModal,
   isEditMode = false,
+  isAdmin = false,
   draftUpdates = {},
   onCellChange,
   onBatchDraftChange
@@ -181,6 +183,174 @@ export default function StudentTable({
     return draftVal !== originalVal;
   };
 
+  // Check if a field is editable for the current user
+  const isFieldEditable = (field: string): boolean => {
+    if (!isEditMode) return false;
+    if ((field === 'desk_number' || field === 'room_number') && !isAdmin) {
+      return false;
+    }
+    return true;
+  };
+
+  // Move focus to a target cell by studentIndex and fieldIndex
+  const navigateGrid = (targetRow: number, targetCol: number, direction: 'horizontal' | 'vertical' = 'vertical') => {
+    if (targetRow < 0 || targetRow >= filteredStudents.length) return;
+
+    let col = targetCol;
+    let row = targetRow;
+
+    if (direction === 'horizontal') {
+      if (col < 0) {
+        if (row > 0) {
+          row--;
+          col = visibleFieldKeys.length - 1;
+        } else {
+          return;
+        }
+      } else if (col >= visibleFieldKeys.length) {
+        if (row < filteredStudents.length - 1) {
+          row++;
+          col = 0;
+        } else {
+          return;
+        }
+      }
+      // Skip non-editable columns
+      const step = col >= targetCol ? 1 : -1;
+      while (
+        col >= 0 &&
+        col < visibleFieldKeys.length &&
+        !isFieldEditable(visibleFieldKeys[col])
+      ) {
+        col += step;
+      }
+    } else {
+      // Vertical navigation
+      if (col < 0) col = 0;
+      if (col >= visibleFieldKeys.length) col = visibleFieldKeys.length - 1;
+
+      // If current col is non-editable, try to stay or find nearest editable col
+      if (!isFieldEditable(visibleFieldKeys[col])) {
+        let offset = 1;
+        while (offset < visibleFieldKeys.length) {
+          if (col + offset < visibleFieldKeys.length && isFieldEditable(visibleFieldKeys[col + offset])) {
+            col += offset;
+            break;
+          }
+          if (col - offset >= 0 && isFieldEditable(visibleFieldKeys[col - offset])) {
+            col -= offset;
+            break;
+          }
+          offset++;
+        }
+      }
+    }
+
+    if (col < 0 || col >= visibleFieldKeys.length) return;
+    if (row < 0 || row >= filteredStudents.length) return;
+
+    const selector = `[data-grid-row="${row}"][data-grid-col="${col}"]`;
+    const el = tableRef.current?.querySelector<HTMLElement>(selector);
+    if (el) {
+      el.focus();
+      if (el instanceof HTMLInputElement && el.type !== 'date') {
+        el.select();
+      }
+    }
+  };
+
+  const handleCellKeyDown = (
+    e: React.KeyboardEvent<HTMLElement>,
+    studentIndex: number,
+    fieldIndex: number,
+    type: 'text' | 'number' | 'date' | 'select' = 'text'
+  ) => {
+    if (!isEditMode) return;
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const nextRow = e.shiftKey ? studentIndex - 1 : studentIndex + 1;
+      navigateGrid(nextRow, fieldIndex, 'vertical');
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      if (type === 'select' && (e.altKey || e.ctrlKey)) return;
+      e.preventDefault();
+      navigateGrid(studentIndex + 1, fieldIndex, 'vertical');
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      if (type === 'select' && (e.altKey || e.ctrlKey)) return;
+      e.preventDefault();
+      navigateGrid(studentIndex - 1, fieldIndex, 'vertical');
+      return;
+    }
+
+    if (e.key === 'ArrowRight') {
+      if (e.target instanceof HTMLInputElement && type !== 'select' && type !== 'date') {
+        const input = e.target;
+        const isAtEnd = input.selectionEnd === input.value.length;
+        const isAllSelected = input.selectionStart === 0 && input.selectionEnd === input.value.length;
+        if (!isAtEnd && !isAllSelected) return;
+      }
+      e.preventDefault();
+      let nextCol = fieldIndex + 1;
+      while (nextCol < visibleFieldKeys.length && !isFieldEditable(visibleFieldKeys[nextCol])) {
+        nextCol++;
+      }
+      navigateGrid(studentIndex, nextCol, 'horizontal');
+      return;
+    }
+
+    if (e.key === 'ArrowLeft') {
+      if (e.target instanceof HTMLInputElement && type !== 'select' && type !== 'date') {
+        const input = e.target;
+        const isAtStart = input.selectionStart === 0;
+        const isAllSelected = input.selectionStart === 0 && input.selectionEnd === input.value.length;
+        if (!isAtStart && !isAllSelected) return;
+      }
+      e.preventDefault();
+      let prevCol = fieldIndex - 1;
+      while (prevCol >= 0 && !isFieldEditable(visibleFieldKeys[prevCol])) {
+        prevCol--;
+      }
+      navigateGrid(studentIndex, prevCol, 'horizontal');
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const step = e.shiftKey ? -1 : 1;
+      let targetCol = fieldIndex + step;
+      let targetRow = studentIndex;
+      if (targetCol >= visibleFieldKeys.length) {
+        targetCol = 0;
+        targetRow++;
+      } else if (targetCol < 0) {
+        targetCol = visibleFieldKeys.length - 1;
+        targetRow--;
+      }
+      while (
+        targetRow >= 0 &&
+        targetRow < filteredStudents.length &&
+        !isFieldEditable(visibleFieldKeys[targetCol])
+      ) {
+        targetCol += step;
+        if (targetCol >= visibleFieldKeys.length) {
+          targetCol = 0;
+          targetRow++;
+        } else if (targetCol < 0) {
+          targetCol = visibleFieldKeys.length - 1;
+          targetRow--;
+        }
+      }
+      navigateGrid(targetRow, targetCol, 'horizontal');
+      return;
+    }
+  };
+
   const renderEditableCell = (
     std: MassiveProfilingStudent,
     studentIndex: number,
@@ -191,6 +361,7 @@ export default function StudentTable({
   ) => {
     const val = getCellValue(std, field);
     const modified = isCellModified(std, field);
+    const fieldIndex = visibleFieldKeys.indexOf(field);
 
     if (!isEditMode) {
       // Clean read-only rendering
@@ -201,11 +372,27 @@ export default function StudentTable({
       return val ? String(val) : <span className="text-slate-300">-</span>;
     }
 
+    // Role check: desk_number and room_number can only be edited by admins
+    if ((field === 'desk_number' || field === 'room_number') && !isAdmin) {
+      return (
+        <div 
+          className="flex items-center justify-center gap-1.5 py-1 px-2 rounded-md bg-slate-100/80 border border-slate-200 text-slate-400 font-bold text-xs select-none"
+          title="ទាមទារសិទ្ធិ Admin ដើម្បីកែប្រែ"
+        >
+          <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+          <span>{val ? String(val) : '-'}</span>
+        </div>
+      );
+    }
+
     if (type === 'select' && options) {
       return (
         <select
+          data-grid-row={studentIndex}
+          data-grid-col={fieldIndex}
           value={String(val || '')}
           onChange={(e) => onCellChange?.(std.id, field, e.target.value)}
+          onKeyDown={(e) => handleCellKeyDown(e, studentIndex, fieldIndex, 'select')}
           className={`w-full py-1 px-1.5 rounded-md text-xs font-bold outline-none transition-all cursor-pointer border ${
             modified 
               ? 'bg-amber-50/80 border-amber-400 text-amber-900 ring-1 ring-amber-300' 
@@ -221,12 +408,15 @@ export default function StudentTable({
 
     return (
       <input
+        data-grid-row={studentIndex}
+        data-grid-col={fieldIndex}
         type={type === 'number' ? 'number' : type === 'date' ? 'date' : 'text'}
         value={val ?? ''}
         placeholder={placeholder}
         step={field === 'height_m' ? '0.01' : undefined}
         onChange={(e) => onCellChange?.(std.id, field, type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
         onPaste={(e) => handleCellPaste(e, studentIndex, field)}
+        onKeyDown={(e) => handleCellKeyDown(e, studentIndex, fieldIndex, type)}
         className={`w-full py-1 px-2 rounded-md text-xs outline-none transition-all border ${
           modified 
             ? 'bg-amber-50/80 border-amber-400 text-amber-950 font-black ring-1 ring-amber-300' 
@@ -243,7 +433,7 @@ export default function StudentTable({
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wide">
               {/* Sticky Column 1: Checkbox */}
-              <th className="p-3.5 w-12 text-center sticky left-0 bg-slate-50 z-30 shadow-[1px_0_0_0_#e2e8f0]">
+              <th className="p-3.5 w-12 text-center sticky left-0 bg-white z-30 shadow-[1px_0_0_0_#e2e8f0]">
                 <input 
                   type="checkbox" 
                   className="w-4 h-4 rounded text-[#155EEF] cursor-pointer" 
@@ -253,10 +443,10 @@ export default function StudentTable({
               </th>
 
               {/* Sticky Column 2: Student ID */}
-              {renderSortHeader('អត្តលេខ', 'student_id_number', 'left', 'sticky left-12 bg-slate-50 z-30 shadow-[1px_0_0_0_#e2e8f0] w-28')}
+              {renderSortHeader('អត្តលេខ', 'student_id_number', 'left', 'sticky left-12 bg-white z-30 shadow-[1px_0_0_0_#e2e8f0] w-28')}
 
               {/* Sticky Column 3: Full Name */}
-              {renderSortHeader('គោត្តនាម-នាម', 'full_name', 'left', 'sticky left-40 bg-slate-50 z-30 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.08)] min-w-[170px]')}
+              {renderSortHeader('គោត្តនាម-នាម', 'full_name', 'left', 'sticky left-40 bg-white z-30 border-r-2 border-slate-200/90 shadow-[4px_0_12px_-2px_rgba(0,0,0,0.12)] min-w-[170px]')}
 
               {/* Dynamic Columns by Tab */}
               {activeTableView === 0 && (
@@ -375,7 +565,7 @@ export default function StudentTable({
               return (
                 <tr 
                   key={std.id} 
-                  className={`transition-colors ${
+                  className={`group transition-colors ${
                     isRowModified 
                       ? 'bg-amber-50/40' 
                       : selectedIds.includes(std.id) 
@@ -386,7 +576,13 @@ export default function StudentTable({
                   }`}
                 >
                   {/* Sticky Column 1: Checkbox & Index */}
-                  <td className="p-3.5 text-center sticky left-0 z-10 bg-inherit shadow-[1px_0_0_0_#e2e8f0]">
+                  <td className={`p-3.5 text-center sticky left-0 z-20 shadow-[1px_0_0_0_#e2e8f0] ${
+                    isRowModified 
+                      ? 'bg-[#fefce8]' 
+                      : selectedIds.includes(std.id) 
+                      ? 'bg-[#eff6ff]' 
+                      : 'bg-white group-hover:bg-[#f8fafc]'
+                  }`}>
                     <div className="flex items-center justify-center gap-1.5">
                       <input 
                         type="checkbox" 
@@ -399,12 +595,24 @@ export default function StudentTable({
                   </td>
 
                   {/* Sticky Column 2: Student ID */}
-                  <td className="p-3.5 font-mono text-slate-500 sticky left-12 z-10 bg-inherit shadow-[1px_0_0_0_#e2e8f0]">
+                  <td className={`p-3.5 font-mono text-slate-500 sticky left-12 z-20 shadow-[1px_0_0_0_#e2e8f0] ${
+                    isRowModified 
+                      ? 'bg-[#fefce8]' 
+                      : selectedIds.includes(std.id) 
+                      ? 'bg-[#eff6ff]' 
+                      : 'bg-white group-hover:bg-[#f8fafc]'
+                  }`}>
                     {std.student_id_number || '-'}
                   </td>
 
                   {/* Sticky Column 3: Full Name */}
-                  <td className="p-3.5 sticky left-40 z-10 bg-inherit shadow-[3px_0_6px_-2px_rgba(0,0,0,0.08)]">
+                  <td className={`p-3.5 sticky left-40 z-20 border-r-2 border-slate-200/90 shadow-[4px_0_12px_-2px_rgba(0,0,0,0.12)] ${
+                    isRowModified 
+                      ? 'bg-[#fefce8]' 
+                      : selectedIds.includes(std.id) 
+                      ? 'bg-[#eff6ff]' 
+                      : 'bg-white group-hover:bg-[#f8fafc]'
+                  }`}>
                     <div className="flex items-center gap-2">
                       <span className="text-slate-900 font-black whitespace-nowrap">{std.full_name}</span>
                       {std.risk_level === 'high' && <span className="bg-rose-100 text-rose-700 text-[10px] px-1.5 py-0.5 rounded font-bold">ហានិភ័យ</span>}
