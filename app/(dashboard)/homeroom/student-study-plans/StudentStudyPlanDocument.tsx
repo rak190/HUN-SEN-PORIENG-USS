@@ -5,9 +5,11 @@ import { Classroom, Student } from '@/types';
 import { getCurriculumSchemaForClass } from '@/lib/curriculum';
 
 export interface SubjectPlanTarget {
-  initial?: string; // Beginning of year goal (A-F)
+  initial?: string; // Beginning of year baseline diagnostic grade (A-F)
   plan?: Record<string, string>; // Monthly goals keyed by month ID (nov, dec, ...) -> A-F
   end_plan?: string; // End of year goal (A-F)
+  actual?: Record<string, string>; // Provisional/manual actual grades keyed by month ID (nov, dec, ...) -> A-F
+  end_actual?: string; // Provisional/manual end of year actual grade (A-F)
 }
 
 export interface StudentStudyPlanRecord {
@@ -804,7 +806,10 @@ export default function StudentStudyPlanDocument({
                   {/* 10 Monthly Columns (Target & Actual) */}
                   {STUDY_PLAN_MONTHS.map((m) => {
                     const monthScore = getScore(m.id);
-                    const monthActualLetter = getSubjectGradeLetter(monthScore, maxScore, gradeLevelNum);
+                    const officialActualLetter = getSubjectGradeLetter(monthScore, maxScore, gradeLevelNum);
+                    const provisionalActualLetter = target.actual?.[m.id] || '';
+                    const monthActualLetter = officialActualLetter || provisionalActualLetter;
+                    const isProvisional = !officialActualLetter && Boolean(provisionalActualLetter);
                     const monthTargetLetter = target.plan?.[m.id] || '';
 
                     return (
@@ -813,8 +818,13 @@ export default function StudentStudyPlanDocument({
                         <td className="border border-black p-0.5 text-center font-bold text-slate-900">
                           {monthTargetLetter}
                         </td>
-                        {/* Actual Col (Real published grade - rendered in bold red font) */}
-                        <td className="border border-black p-0.5 text-center font-bold text-red-600">
+                        {/* Actual Col (Real published grade in bold solid red, or provisional grade in italic red) */}
+                        <td
+                          className={`border border-black p-0.5 text-center font-bold text-red-600 ${
+                            isProvisional ? 'italic font-medium' : ''
+                          }`}
+                          title={isProvisional ? 'លទ្ធផលជាក់ស្តែងបណ្តោះអាសន្ន (Provisional)' : undefined}
+                        >
                           {monthActualLetter}
                         </td>
                       </React.Fragment>
@@ -827,8 +837,13 @@ export default function StudentStudyPlanDocument({
                   </td>
 
                   {/* End of Year Result (លទ្ធផលជាក់ស្តែង) */}
-                  <td className="border border-black p-0.5 text-center font-bold text-red-600">
-                    {annualLetter || ''}
+                  <td
+                    className={`border border-black p-0.5 text-center font-bold text-red-600 ${
+                      !annualLetter && target.end_actual ? 'italic font-medium' : ''
+                    }`}
+                    title={!annualLetter && target.end_actual ? 'លទ្ធផលជាក់ស្តែងបណ្តោះអាសន្ន' : undefined}
+                  >
+                    {annualLetter || target.end_actual || ''}
                   </td>
                 </tr>
               );

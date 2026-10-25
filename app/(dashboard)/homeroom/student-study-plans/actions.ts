@@ -1,9 +1,13 @@
 'use server';
 
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 import { getServerAuth, requireClassAccess } from '@/lib/auth-server';
 import { revalidatePath } from 'next/cache';
-import { SubjectPlanTarget } from './types';
+import {
+  SubjectPlanTarget,
+  SaveStudyPlanPayloadSchema,
+  BatchSaveStudyPlanPayloadSchema,
+} from './types';
 
 export interface SaveStudyPlanPayload {
   student_id: string;
@@ -23,13 +27,19 @@ export interface BatchSaveStudyPlanPayload {
 
 /**
  * Saves or updates planned goal levels for a single student in a class.
- * Enforces strict server-side authorization and class enrollment verification.
+ * Enforces strict server-side authorization and atomic RPC persistence.
  */
-export async function saveStudentStudyPlanAction(payload: SaveStudyPlanPayload) {
+export async function saveStudentStudyPlanAction(
+  payload: SaveStudyPlanPayload
+): Promise<{ success: boolean; error?: string; warning?: string }> {
   try {
-    if (!payload?.student_id || !payload?.class_id || !payload?.academic_year_id) {
-      return { success: false, error: 'ព័ត៌មានមិនពេញលេញ (Missing student, class, or year)' };
+    const parseResult = SaveStudyPlanPayloadSchema.safeParse(payload);
+    if (!parseResult.success) {
+      const issue = parseResult.error.issues[0]?.message || 'Invalid study plan payload';
+      return { success: false, error: `ទិន្នន័យមិនត្រឹមត្រូវ៖ ${issue}` };
     }
+
+    const validData = parseResult.data;
 
     // 1. Authoritative Server-Side Authentication
     const { user, profile, role } = await getServerAuth();
@@ -37,48 +47,38 @@ export async function saveStudentStudyPlanAction(payload: SaveStudyPlanPayload) 
       return { success: false, error: 'Unauthorized: Authentication required.' };
     }
 
-    // 2. Strict Class Access Authorization
+    // 2. Strict Class Access Authorization (requires class membership)
     await requireClassAccess(payload.class_id);
 
-    const supabase = createAdminClient();
+    const supabase = await createClient();
 
-    // 3. Verify student is legitimately enrolled in this class
-    const { data: enrollment, error: enrollError } = await supabase
-      .from('student_enrollments')
-      .select('id')
-      .eq('student_id', payload.student_id)
-      .eq('class_id', payload.class_id)
-      .maybeSingle();
-
-    if (enrollError || !enrollment) {
-      return { success: false, error: 'សិស្សមិនមានឈ្មោះក្នុងបញ្ជីថ្នាក់រៀននេះទេ' };
-    }
-
-    // 4. Upsert into student_study_plans
-    const { error: upsertError } = await supabase
-      .from('student_study_plans')
-      .upsert(
-        {
-          student_id: payload.student_id,
-          class_id: payload.class_id,
-          academic_year_id: payload.academic_year_id,
-          subject_targets: payload.subject_targets || {},
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'student_id,academic_year_id' }
-      );
-
-    if (upsertError) {
-      console.warn('[saveStudentStudyPlanAction] Upsert error:', upsertError);
-      // Resilient handling if table not yet deployed in remote schema cache
-      if (upsertError.code === '42P01' || upsertError.code === 'PGRST205') {
-        return {
-          success: false,
-          warning: 'តារាងរក្សាទុកផែនការសិក្សា student_study_plans មិនទាន់ត្រូវបានដាក់ដំណើរការលើ Server (Pending Migration 085)',
-          error: 'Database table pending migration',
-        };
+    // 3. Delegate to Atomic Database RPC (Migration 091: validates student_enrollments, upserts student_study_plans)
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      'save_student_study_plans_atomic',
+      {
+        p_class_id: validData.class_id,
+        p_academic_year_id: validData.academic_year_id,
+        p_plans: [
+          {
+            student_id: validData.student_id,
+            subject_targets: validData.subject_targets,
+          },
+        ],
       }
-      return { success: false, error: upsertError.message || 'Failed to save student study plan' };
+    );
+
+    if (rpcError) {
+      console.warn('[saveStudentStudyPlanAction] RPC error:', rpcError);
+      if (rpcError.code === '23503') {
+        return { success: false, error: 'សិស្សមិនមានឈ្មោះក្នុងបញ្ជីថ្នាក់រៀនសម្រាប់ឆ្នាំសិក្សានេះទេ' };
+      }
+      if (rpcError.code === '55000') {
+        return { success: false, error: 'ឆ្នាំសិក្សានេះត្រូវបានចាក់សោ ឬបិទបញ្ចប់ មិនអាចកែប្រែបានទេ' };
+      }
+      if (rpcError.code === '42501') {
+        return { success: false, error: 'លោកគ្រូ/អ្នកគ្រូ គ្មានសិទ្ធិកែប្រែផែនការសិក្សាក្នុងថ្នាក់នេះទេ' };
+      }
+      return { success: false, error: rpcError.message || 'Failed to save student study plan' };
     }
 
     revalidatePath('/homeroom/student-study-plans');
@@ -91,62 +91,61 @@ export async function saveStudentStudyPlanAction(payload: SaveStudyPlanPayload) 
 
 /**
  * Batch saves or updates planned goal levels for multiple students in a class.
+ * Enforces fail-closed validation: all students must be legitimately enrolled.
  */
-export async function batchSaveStudentStudyPlansAction(payload: BatchSaveStudyPlanPayload) {
+export async function batchSaveStudentStudyPlansAction(
+  payload: BatchSaveStudyPlanPayload
+): Promise<{ success: boolean; error?: string; warning?: string; count?: number }> {
   try {
-    if (!payload?.class_id || !payload?.academic_year_id || !Array.isArray(payload.plans)) {
-      return { success: false, error: 'Invalid batch payload' };
+    const parseResult = BatchSaveStudyPlanPayloadSchema.safeParse(payload);
+    if (!parseResult.success) {
+      const issue = parseResult.error.issues[0]?.message || 'Invalid batch study plan payload';
+      return { success: false, error: `ទិន្នន័យមិនត្រឹមត្រូវ៖ ${issue}` };
     }
 
+    const validData = parseResult.data;
+
+    // 1. Authoritative Server-Side Authentication
     const { user, profile, role } = await getServerAuth();
     if (!user || !profile || !role) {
       return { success: false, error: 'Unauthorized: Authentication required.' };
     }
 
-    await requireClassAccess(payload.class_id);
+    // 2. Strict Class Access Authorization
+    await requireClassAccess(validData.class_id);
 
-    const supabase = createAdminClient();
+    const supabase = await createClient();
 
-    // Verify all students are enrolled in this class
-    const { data: validEnrollments } = await supabase
-      .from('student_enrollments')
-      .select('student_id')
-      .eq('class_id', payload.class_id);
+    // 3. Delegate to Atomic Database RPC (Migration 091)
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      'save_student_study_plans_atomic',
+      {
+        p_class_id: validData.class_id,
+        p_academic_year_id: validData.academic_year_id,
+        p_plans: validData.plans,
+      }
+    );
 
-    const validStudentIds = new Set((validEnrollments || []).map((e: any) => e.student_id));
-
-    const recordsToUpsert = payload.plans
-      .filter((p) => validStudentIds.has(p.student_id))
-      .map((p) => ({
-        student_id: p.student_id,
-        class_id: payload.class_id,
-        academic_year_id: payload.academic_year_id,
-        subject_targets: p.subject_targets || {},
-        updated_at: new Date().toISOString(),
-      }));
-
-    if (recordsToUpsert.length === 0) {
-      return { success: false, error: 'គ្មានសិស្សត្រឹមត្រូវណាមួយត្រូវបានរកឃើញក្នុងថ្នាក់នេះទេ' };
-    }
-
-    const { error: upsertError } = await supabase
-      .from('student_study_plans')
-      .upsert(recordsToUpsert, { onConflict: 'student_id,academic_year_id' });
-
-    if (upsertError) {
-      console.warn('[batchSaveStudentStudyPlansAction] Upsert error:', upsertError);
-      if (upsertError.code === '42P01' || upsertError.code === 'PGRST205') {
+    if (rpcError) {
+      console.warn('[batchSaveStudentStudyPlansAction] RPC error:', rpcError);
+      if (rpcError.code === '23503') {
         return {
           success: false,
-          warning: 'តារាងរក្សាទុកផែនការសិក្សា student_study_plans មិនទាន់ត្រូវបានដាក់ដំណើរការលើ Server (Pending Migration 085)',
-          error: 'Database table pending migration',
+          error: 'មានសិស្សមួយចំនួនមិនមានឈ្មោះក្នុងបញ្ជីថ្នាក់រៀនសម្រាប់ឆ្នាំសិក្សានេះ (Validation Failed: un-enrolled students)',
         };
       }
-      return { success: false, error: upsertError.message || 'Failed to batch save study plans' };
+      if (rpcError.code === '55000') {
+        return { success: false, error: 'ឆ្នាំសិក្សានេះត្រូវបានចាក់សោ ឬបិទបញ្ចប់ មិនអាចកែប្រែបានទេ' };
+      }
+      if (rpcError.code === '42501') {
+        return { success: false, error: 'លោកគ្រូ/អ្នកគ្រូ គ្មានសិទ្ធិកែប្រែផែនការសិក្សាក្នុងថ្នាក់នេះទេ' };
+      }
+      return { success: false, error: rpcError.message || 'Failed to batch save study plans' };
     }
 
+    const updatedCount = rpcData?.updated_count ?? validData.plans.length;
     revalidatePath('/homeroom/student-study-plans');
-    return { success: true, count: recordsToUpsert.length };
+    return { success: true, count: updatedCount };
   } catch (err: any) {
     console.error('[batchSaveStudentStudyPlansAction] Caught exception:', err);
     return { success: false, error: err?.message || 'Unexpected server error' };

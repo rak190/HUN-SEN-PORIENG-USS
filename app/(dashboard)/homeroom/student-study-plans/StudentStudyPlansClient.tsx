@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Classroom, Student } from '@/types';
 import StudentStudyPlanDocument, {
   StudyPlanSchoolInfo,
@@ -13,6 +13,7 @@ import {
   SubjectPlanTarget,
 } from './types';
 import { saveStudentStudyPlanAction } from './actions';
+import StudentStudyPlanGridModal from './StudentStudyPlanGridModal';
 import {
   Printer,
   Download,
@@ -21,6 +22,7 @@ import {
   Square,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   User,
   FileText,
   Calendar,
@@ -102,6 +104,24 @@ export default function StudentStudyPlansClient({
   const [studyPlansMap, setStudyPlansMap] = useState<
     Record<string, Record<string, SubjectPlanTarget>>
   >(initialStudyPlansMap);
+
+  // Full-Class Multi-Student Grid Workspace State
+  const [isGridModalOpen, setIsGridModalOpen] = useState(false);
+
+  // Consolidated Export Dropdown State
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setIsExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Goal Setting Modal State
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
@@ -630,104 +650,151 @@ export default function StudentStudyPlansClient({
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons Toolbar: Primary Bulk Entry, Secondary Edit Current, Consolidated Export Dropdown */}
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Goal Setting Button */}
+            {/* Primary Action: Bulk Grade Entry Workspace */}
             <button
+              type="button"
+              onClick={() => setIsGridModalOpen(true)}
+              className="px-4 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+              title="បើកផ្ទាំងតារាងបញ្ចូលពិន្ទុ និងលទ្ធផលរំពឹងទុកសម្រាប់សិស្សទាំងអស់ក្នុងថ្នាក់"
+            >
+              <Sparkles className="w-4 h-4 text-blue-200" />
+              <span>🎯 បញ្ចូលពិន្ទុច្រើននាក់ (Bulk Grade Entry)</span>
+            </button>
+
+            {/* Secondary Action: Edit Current Student Plan */}
+            <button
+              type="button"
               onClick={handleOpenGoalModal}
               disabled={!activeStudent}
               className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-black rounded-xl shadow-2xs flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
               title="កំណត់កម្រិតពិន្ទុគ្រោងសម្រាប់សិស្សនេះ"
             >
               <Target className="w-4 h-4 text-amber-700" />
-              <span>កំណត់ផែនការគ្រោង (Edit Goals)</span>
+              <span>✏️ កែផែនការសិស្សនេះ (កំណត់ផែនការគ្រោង)</span>
             </button>
 
-            {/* Single Print */}
-            <button
-              onClick={handlePrintSingle}
-              disabled={isPreparingPrint || !activeStudent}
-              className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-black rounded-xl shadow-2xs flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              <Printer className="w-4 h-4 text-slate-500" />
-              <span>បោះពុម្ពសិស្សនេះ</span>
-            </button>
-
-            {/* Single PDF */}
-            <button
-              onClick={handleExportSinglePdf}
-              disabled={isExportingPdf || !activeStudent}
-              className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-black rounded-xl shadow-2xs flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              {isExportingPdf && !exportProgress ? (
-                <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
-              ) : (
+            {/* Consolidated Export Dropdown */}
+            <div className="relative" ref={exportMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsExportMenuOpen((prev) => !prev)}
+                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-black rounded-xl shadow-2xs flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+                title="ជម្រើសបោះពុម្ព និងទាញយកជា PDF ឬ Excel"
+              >
                 <Download className="w-4 h-4 text-slate-500" />
-              )}
-              <span>ទាញយក PDF សិស្សនេះ</span>
-            </button>
+                <span>📤 នាំចេញ (Export)</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
 
-            {/* Single Excel */}
-            <button
-              onClick={handleExportSingleExcel}
-              disabled={isExportingExcel || !activeStudent}
-              className="px-4 py-2.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-800 text-xs font-black rounded-xl shadow-2xs flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-              title="ទាញយកឯកសារ Excel (.xlsx) សម្រាប់សិស្សនេះ"
-            >
-              {isExportingExcel && !excelProgress ? (
-                <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
-              ) : (
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              )}
-              <span>ទាញយក Excel សិស្សនេះ</span>
-            </button>
+              {isExportMenuOpen && (
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200/80 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  {/* Current Student Section */}
+                  <div className="px-3.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    សិស្សបច្ចុប្បន្ន ({activeStudent?.full_name || 'គ្មាន'})
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      handlePrintSingle();
+                    }}
+                    disabled={isPreparingPrint || !activeStudent}
+                    className="w-full px-4 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer disabled:opacity-40"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-slate-400" />
+                    <span>បោះពុម្ពសិស្សនេះ (Print)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      handleExportSinglePdf();
+                    }}
+                    disabled={isExportingPdf || !activeStudent}
+                    className="w-full px-4 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer disabled:opacity-40"
+                  >
+                    {isExportingPdf && !exportProgress ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5 text-slate-400" />
+                    )}
+                    <span>ទាញយក PDF សិស្សនេះ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      handleExportSingleExcel();
+                    }}
+                    disabled={isExportingExcel || !activeStudent}
+                    className="w-full px-4 py-2 text-left text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2.5 cursor-pointer disabled:opacity-40"
+                  >
+                    {isExportingExcel && !excelProgress ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    ) : (
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                    )}
+                    <span>ទាញយក Excel សិស្សនេះ (.xlsx)</span>
+                  </button>
 
-            {/* Batch Print */}
-            <button
-              onClick={handlePrintBatch}
-              disabled={isPreparingPrint || selectedStudents.length === 0}
-              className="px-4 py-2.5 bg-[#155EEF] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              <Printer className="w-4 h-4 text-white" />
-              <span>បោះពុម្ពទាំងថ្នាក់ ({toKhmerDigits(selectedStudents.length)})</span>
-            </button>
+                  <div className="my-1.5 border-t border-slate-100" />
 
-            {/* Batch PDF */}
-            <button
-              onClick={handleExportBatchPdf}
-              disabled={isExportingPdf || selectedStudents.length === 0}
-              className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-            >
-              {exportProgress ? (
-                <Loader2 className="w-4 h-4 animate-spin text-white" />
-              ) : (
-                <Download className="w-4 h-4 text-white" />
+                  {/* Batch / Selected Students Section */}
+                  <div className="px-3.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                    <span>សិស្សដែលបានជ្រើសរើស</span>
+                    <span className="bg-blue-100 text-blue-700 font-extrabold px-1.5 py-0.2 rounded-full text-[10px]">
+                      {toKhmerDigits(selectedStudents.length)} / {toKhmerDigits(students.length)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      handlePrintBatch();
+                    }}
+                    disabled={isPreparingPrint || selectedStudents.length === 0}
+                    className="w-full px-4 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer disabled:opacity-40"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-blue-600" />
+                    <span>បោះពុម្ពជាបណ្តុំ ({toKhmerDigits(selectedStudents.length)})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      handleExportBatchPdf();
+                    }}
+                    disabled={isExportingPdf || selectedStudents.length === 0}
+                    className="w-full px-4 py-2 text-left text-xs font-bold text-purple-700 hover:bg-purple-50 flex items-center gap-2.5 cursor-pointer disabled:opacity-40"
+                  >
+                    {exportProgress ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5 text-purple-600" />
+                    )}
+                    <span>ទាញយក PDF ជាបណ្តុំ ({toKhmerDigits(selectedStudents.length)})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      handleExportBatchExcel();
+                    }}
+                    disabled={isExportingExcel || selectedStudents.length === 0}
+                    className="w-full px-4 py-2 text-left text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2.5 cursor-pointer disabled:opacity-40"
+                  >
+                    {excelProgress ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    ) : (
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                    )}
+                    <span>ទាញយក Excel ទាំងថ្នាក់ ({toKhmerDigits(selectedStudents.length)})</span>
+                  </button>
+                </div>
               )}
-              <span>
-                {exportProgress
-                  ? `កំពុងដំណើរការ (${exportProgress.current}/${exportProgress.total})`
-                  : `ទាញយក PDF ទាំងថ្នាក់ (${toKhmerDigits(selectedStudents.length)})`}
-              </span>
-            </button>
-
-            {/* Batch Excel */}
-            <button
-              onClick={handleExportBatchExcel}
-              disabled={isExportingExcel || selectedStudents.length === 0}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-              title="ទាញយកសៀវភៅ Excel (.xlsx) ទាំងថ្នាក់ ដែលមានសន្លឹកកិច្ចការដាច់ដោយឡែកសម្រាប់សិស្សម្នាក់ៗ"
-            >
-              {excelProgress ? (
-                <Loader2 className="w-4 h-4 animate-spin text-white" />
-              ) : (
-                <FileSpreadsheet className="w-4 h-4 text-white" />
-              )}
-              <span>
-                {excelProgress
-                  ? `កំពុងបង្កើត Excel (${excelProgress.current}/${excelProgress.total})`
-                  : `ទាញយក Excel ទាំងថ្នាក់ (${toKhmerDigits(selectedStudents.length)})`}
-              </span>
-            </button>
+            </div>
           </div>
         </div>
 
@@ -1133,6 +1200,24 @@ export default function StudentStudyPlansClient({
           </div>
         </div>
       )}
+
+      {/* ----------------- FULL-CLASS MULTI-STUDENT SPREADSHEET WORKSPACE MODAL ----------------- */}
+      <StudentStudyPlanGridModal
+        isOpen={isGridModalOpen}
+        onClose={() => setIsGridModalOpen(false)}
+        students={students}
+        classInfo={classInfo}
+        academicYearId={academicYearId}
+        academicYearName={academicYearName}
+        studyPlansMap={studyPlansMap}
+        gradesData={gradesData}
+        onSaveSuccess={(updatedMap) => {
+          setStudyPlansMap((prev) => ({
+            ...prev,
+            ...updatedMap,
+          }));
+        }}
+      />
 
       {/* ----------------- HIDDEN PRINT CONTAINERS (Activated during window.print()) ----------------- */}
       <div className="hidden print:block">

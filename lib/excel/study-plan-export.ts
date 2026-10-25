@@ -521,7 +521,8 @@ export function generateStudyPlanWorkbook(options: GenerateStudyPlanWorkbookOpti
 
         const monthTargetLetter = target.plan?.[m.id] || '';
         const monthScore = getScore(m.id);
-        const monthActualLetter = getSubjectGradeLetter(monthScore, maxScore, gradeLevelNum);
+        const officialActual = getSubjectGradeLetter(monthScore, maxScore, gradeLevelNum);
+        const monthActualLetter = officialActual || target.actual?.[m.id] || '';
 
         // Plan Cell (Black font)
         const pCell = ws.getCell(rowNum, planCol);
@@ -547,7 +548,7 @@ export function generateStudyPlanWorkbook(options: GenerateStudyPlanWorkbookOpti
 
       // Col 24: End of Year Actual (Bold Red font)
       const endActCell = ws.getCell(rowNum, 24);
-      endActCell.value = annualLetter || '';
+      endActCell.value = annualLetter || target.end_actual || '';
       endActCell.font = { name: 'Khmer OS Siemreap', size: 9.5, bold: true, color: { argb: 'FFFF0000' } };
       endActCell.alignment = { horizontal: 'center', vertical: 'middle' };
       endActCell.border = thinBorder;
