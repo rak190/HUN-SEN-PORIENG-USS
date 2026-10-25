@@ -396,10 +396,16 @@ describe('Stage 2: Navigation Performance, Scoped Caching & Data Integrity Suite
     const fields = match[1].split(',').map((f) => f.trim());
 
     // Non-existent columns in active_class_rosters must NOT be queried
-    const invalidCols = ['indigenous', 'migrant_status', 'domestic_violence', 'attendance_rate', 'health_issues'];
+    const invalidCols = ['domestic_violence', 'attendance_rate', 'health_issues'];
     for (const col of invalidCols) {
       assert.ok(!fields.includes(col), `STUDENT_ROSTER_FIELDS must not query non-existent column: "${col}"`);
     }
+    // Migration 084 introduced indigenous; 087 repairs the previously undeclared migrant_status.
+    const profileMigration = fs.readFileSync(path.join(process.cwd(), 'supabase/migrations/084_add_missing_student_profiling_columns.sql'), 'utf8');
+    const gridMigration = fs.readFileSync(path.join(process.cwd(), 'supabase/migrations/087_homeroom_student_grid.sql'), 'utf8');
+    assert.ok(profileMigration.includes('ADD COLUMN IF NOT EXISTS indigenous TEXT'));
+    assert.ok(gridMigration.includes('ADD COLUMN IF NOT EXISTS migrant_status TEXT'));
+    assert.ok(fields.includes('indigenous') && fields.includes('migrant_status'));
 
     // Canonical column health_note must be queried and mapped to health_issues
     assert.ok(fields.includes('health_note'), 'STUDENT_ROSTER_FIELDS must query canonical health_note');

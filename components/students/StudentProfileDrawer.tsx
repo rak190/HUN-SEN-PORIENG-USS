@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { MassiveProfilingStudent, DEFAULT_FORM, calculateProfileCompleteness } from '@/app/(dashboard)/students/types';
-import { UserSquare2, FileText, Heart, Users, MapPin, X, Loader2, Check, Camera, AlertCircle } from 'lucide-react';
+import { UserSquare2, FileText, Heart, Users, MapPin, X, Loader2, Check, Camera, AlertCircle, Lock } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { parseStudentDob, formatDobForDisplay } from '@/lib/utils/student-date';
+import { deriveStudentProfile } from '@/lib/students/derived-profile';
+import { GRID_COLUMNS, normalizeGridCell } from '@/lib/students/grid';
 
 const VIEW_TABS = [
   { id: 1, label: 'មូលដ្ឋាន', icon: UserSquare2 },
@@ -43,6 +45,8 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  const derived = useMemo(() => deriveStudentProfile(formData as Record<string, unknown>), [formData]);
 
   const isDirty = useMemo(() => {
     if (!isOpen || !initialData) return false;
@@ -167,51 +171,14 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
     }
   }, [isOpen, initialData, activeTab]);
 
-  const handleWeightChange = (val: number) => {
-    const h = formData.height_m || 0;
-    let bmi = 0;
-    let nutrition_status = 'ធម្មតា';
-    if (val > 0 && h > 0) {
-      bmi = parseFloat((val / (h * h)).toFixed(1));
-      if (bmi < 18.5) nutrition_status = 'ស្គម';
-      else if (bmi >= 25 && bmi < 30) nutrition_status = 'លើសទម្ងន់';
-      else if (bmi >= 30) nutrition_status = 'ធាត់';
-    }
-    setFormData(prev => ({ ...prev, weight_kg: val, bmi, nutrition_status }));
-  };
-
-  const handleHeightChange = (val: number) => {
-    const w = formData.weight_kg || 0;
-    let bmi = 0;
-    let nutrition_status = 'ធម្មតា';
-    if (w > 0 && val > 0) {
-      bmi = parseFloat((w / (val * val)).toFixed(1));
-      if (bmi < 18.5) nutrition_status = 'ស្គម';
-      else if (bmi >= 25 && bmi < 30) nutrition_status = 'លើសទម្ងន់';
-      else if (bmi >= 30) nutrition_status = 'ធាត់';
-    }
-    setFormData(prev => ({ ...prev, height_m: val, bmi, nutrition_status }));
-  };
-
-  useEffect(() => {
-    if (formData.weight_kg && formData.height_m && formData.height_m > 0) {
-      const bmi = parseFloat((formData.weight_kg / (formData.height_m * formData.height_m)).toFixed(1));
-      let status = 'ធម្មតា';
-      if (bmi < 17) status = 'ស្គម';
-      else if (bmi < 18.5) status = 'ខ្វះគីឡូ';
-      else if (bmi >= 25 && bmi < 30) status = 'លើសគីឡូ';
-      else if (bmi >= 30) status = 'ធាត់';
-      
-      if (formData.bmi !== bmi || formData.nutrition_status !== status) {
-        setFormData(prev => ({ ...prev, bmi, nutrition_status: status }));
-      }
-    }
-  }, [formData.weight_kg, formData.height_m]);
+  const handleWeightChange = (value: string) => setFormData(prev => ({ ...prev, weight_kg: value === '' ? undefined : Number(value) }));
+  const handleHeightChange = (value: string) => setFormData(prev => ({ ...prev, height_m: value === '' ? undefined : Number(value) }));
 
   const handleSaveInternal = async () => {
     setIsSaving(true);
-    await onSave(formData);
-    setIsSaving(false);
+    try {
+      await onSave({ ...formData, age: derived.age ?? undefined, bmi: derived.bmi ?? undefined, nutrition_status: derived.nutrition_status ?? undefined });
+    } finally { setIsSaving(false); }
   };
 
   const handleSubmitCorrection = async () => {
@@ -342,11 +309,11 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
 
                 <label className="block text-xs font-bold text-slate-700 relative">
                   អត្តលេខ {(!isAdmin && formData.student_id_number) && <button type="button" onClick={() => setCorrectionField({ field: 'student_id_number', label: 'អត្តលេខ', oldValue: formData.student_id_number || '' })} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
-                  <input type="text" value={formData.student_id_number || ''} disabled={!isAdmin && !!formData.student_id_number} onChange={e=>setFormData({...formData, student_id_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500" />
+                  <input type="text" value={formData.student_id_number || ''} disabled={!isAdmin} onChange={e=>setFormData({...formData, student_id_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700 relative">
                   ឈ្មោះពេញ (Khmer) {(!isAdmin && formData.full_name) && <button type="button" onClick={() => setCorrectionField({ field: 'full_name', label: 'ឈ្មោះពេញ (Khmer)', oldValue: formData.full_name || '' })} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
-                  <input type="text" value={formData.full_name || ''} disabled={!isAdmin && !!formData.full_name} onChange={e=>setFormData({...formData, full_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500" />
+                  <input type="text" value={formData.full_name || ''} disabled={!isAdmin} onChange={e=>setFormData({...formData, full_name:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
                   ឈ្មោះឡាតាំង (English)
@@ -354,7 +321,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
                 </label>
                 <label className="block text-xs font-bold text-slate-700 relative">
                   ភេទ {(!isAdmin && formData.gender) && <button type="button" onClick={() => setCorrectionField({ field: 'gender', label: 'ភេទ', oldValue: formData.gender || '' })} className="ml-2 text-indigo-500 hover:text-indigo-700 font-bold">ស្នើសុំកែប្រែ</button>}
-                  <select value={formData.gender || 'M'} disabled={!isAdmin && !!formData.gender} onChange={e=>setFormData({...formData, gender:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500">
+                  <select value={formData.gender || 'M'} disabled={!isAdmin} onChange={e=>setFormData({...formData, gender:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF] disabled:bg-slate-100 disabled:text-slate-500">
                     <option value="M">ប្រុស</option>
                     <option value="F">ស្រី</option>
                   </select>
@@ -364,18 +331,18 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
                   <input 
                     type="text" 
                     placeholder="22 01 2008" 
-                    value={formData.date_of_birth ? formatDobForDisplay(formData.date_of_birth) : ''} 
+                    value={formData.date_of_birth ? (/^\d{4}-\d{2}-\d{2}$/.test(formData.date_of_birth) && parseStudentDob(formData.date_of_birth) === formData.date_of_birth ? formatDobForDisplay(formData.date_of_birth) : formData.date_of_birth) : ''}
                     onChange={e => {
                       const val = e.target.value;
-                      const parsed = parseStudentDob(val);
-                      setFormData({ ...formData, date_of_birth: parsed || val });
+                      const parsed = normalizeGridCell(GRID_COLUMNS.find(c => c.key === 'date_of_birth')!, val);
+                      setFormData({ ...formData, date_of_birth: parsed === null ? '' : String(parsed) });
                     }} 
                     className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" 
                   />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
                   អាយុ
-                  <input type="number" value={formData.age || ''} onChange={e=>setFormData({...formData, age:Number(e.target.value)})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                  <input type="text" aria-label="អាយុ" title="គណនាស្វ័យប្រវត្តិពីថ្ងៃកំណើត" readOnly value={derived.age ?? ''} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
                   លេខសំបុត្រកំណើត
@@ -383,11 +350,11 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
                   លេខតុ (Desk Number)
-                  <input type="text" placeholder="A-01" value={formData.desk_number || ''} onChange={e=>setFormData({...formData, desk_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                  <input type="text" placeholder="A-01" disabled={!isAdmin} title="ព័ត៌មានការពារ ឬផ្លាស់ប្តូរតាមសំណើរដ្ឋបាល" value={formData.desk_number || ''} onChange={e=>setFormData({...formData, desk_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
                   លេខបន្ទប់ប្រឡង (Exam Room)
-                  <input type="text" placeholder="បន្ទប់ ១" value={formData.room_number || ''} onChange={e=>setFormData({...formData, room_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                  <input type="text" placeholder="បន្ទប់ ១" disabled={!isAdmin} title="ព័ត៌មានការពារ ឬផ្លាស់ប្តូរតាមសំណើរដ្ឋបាល" value={formData.room_number || ''} onChange={e=>setFormData({...formData, room_number:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
               </>
             )}
@@ -397,7 +364,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
                   ស្ថានភាព
                   <select value={formData.status||'new'} onChange={e=>setFormData({...formData, status:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
                     <option value="new">ថ្មី</option>
-                    <option value="repeater">ត្រួត</option>
+                    <option value="repeater">ត្រួត</option><option value="transfer">ផ្ទេរចូល</option>
                   </select>
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
@@ -436,19 +403,19 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
               <>
                 <label className="block text-xs font-bold text-slate-700">
                   ទម្ងន់ (គ.ក្រ)
-                  <input type="number" value={formData.weight_kg||0} onChange={e=>handleWeightChange(Number(e.target.value))} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                  <input type="number" value={formData.weight_kg ?? ''} onChange={e=>handleWeightChange(e.target.value)} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
                   កម្ពស់ (ម៉ែត្រ ឧ. 1.55)
-                  <input type="number" step="0.01" value={formData.height_m||0} onChange={e=>handleHeightChange(Number(e.target.value))} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                  <input type="number" step="0.01" value={formData.height_m ?? ''} onChange={e=>handleHeightChange(e.target.value)} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
                 </label>
                 <div className="sm:col-span-2 p-4 bg-emerald-50 border border-emerald-200/80 rounded-2xl flex justify-between items-center shadow-xs">
                   <div>
-                    <span className="text-xs font-bold text-emerald-800">សន្ទស្សន៍ម៉ាសរាងកាយ (BMI)</span>
-                    <div className="text-lg font-black text-emerald-950">{formData.bmi || 0}</div>
+                    <span className="text-xs font-bold text-emerald-800">សន្ទស្សន៍ម៉ាសរាងកាយ (BMI) <Lock className="w-3 h-3 inline" aria-label="គណនាស្វ័យប្រវត្តិ" /></span>
+                    <div className="text-lg font-black text-emerald-950"><output aria-label="BMI">{derived.bmi ?? '—'}</output></div>
                   </div>
-                  <span className={`px-4 py-1.5 rounded-full text-xs font-black shadow-xs ${formData.nutrition_status==='ធម្មតា'?'bg-emerald-600 text-white':'bg-rose-500 text-white'}`}>
-                    {formData.nutrition_status || 'ធម្មតា'}
+                  <span className={`px-4 py-1.5 rounded-full text-xs font-black shadow-xs ${derived.nutrition_status==='ធម្មតា'?'bg-emerald-600 text-white':'bg-rose-500 text-white'}`}>
+                    {derived.nutrition_status || '—'}
                   </span>
                 </div>
                 <label className="block text-xs font-bold text-slate-700">
@@ -512,7 +479,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
                   ស្ថានភាពចុងក្រោយ
-                  <select value={formData.current_status||'active'} onChange={e=>setFormData({...formData, current_status:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
+                  <select disabled={!isAdmin} title="ព័ត៌មានការពារ ឬផ្លាស់ប្តូរតាមសំណើរដ្ឋបាល" value={formData.current_status||'active'} onChange={e=>setFormData({...formData, current_status:e.target.value as any})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#155EEF]">
                     <option value="active">កំពុងរៀន</option>
                     <option value="dropout">បោះបង់</option>
                   </select>

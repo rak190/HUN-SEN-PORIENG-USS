@@ -12,6 +12,8 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, Plus, ArrowRightLeft, LayoutGrid
 } from 'lucide-react';
 import StudentTable from '@/components/students/StudentTable';
+import StudentSpreadsheet from '@/components/students/StudentSpreadsheet';
+import { buildTeacherProfileUpdate } from '@/lib/students/teacher-profile';
 import StudentProfileDrawer from '@/components/students/StudentProfileDrawer';
 import StudentFilters from '@/components/students/StudentFilters';
 import BulkImageUploadModal from '@/components/students/BulkImageUploadModal';
@@ -37,6 +39,8 @@ export default function StudentsPage() {
   const { 
     students, setStudents, 
     isLoading, 
+    loadError,
+    unavailableFields,
     searchQuery, setSearchQuery, 
     sortState, handleSort, 
     filteredStudents,
@@ -44,6 +48,8 @@ export default function StudentsPage() {
   } = useStudents(activeClass?.id);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [gridDirty, setGridDirty] = useState(false);
+  const [gridSaving, setGridSaving] = useState(false);
   const [profileDrawerData, setProfileDrawerData] = useState<Partial<MassiveProfilingStudent> | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExcelImportModalOpen, setIsExcelImportModalOpen] = useState(false);
@@ -68,7 +74,13 @@ export default function StudentsPage() {
   }, [draftUpdates]);
 
   const isDirty = unsavedCount > 0;
-  useUnsavedChanges(isDirty);
+  useUnsavedChanges(isDirty || gridDirty);
+
+  const changeMainTab = (tab: 'list' | 'at-risk' | 'transfer') => {
+    if (gridSaving) return;
+    if (tab !== mainTab && gridDirty && !window.confirm('មានការកែប្រែមិនទាន់រក្សាទុក។ បោះបង់ និងប្តូរផ្ទាំងមែនទេ?')) return;
+    setMainTab(tab);
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -499,7 +511,10 @@ export default function StudentsPage() {
   const handleSave = async (data: Partial<MassiveProfilingStudent>) => {
     setIsSaving(true);
     
-    const payload = {
+    const payload = profile?.role === 'teacher' ? {
+      ...buildTeacherProfileUpdate(data as Record<string, unknown>, (profileDrawerData || {}) as Record<string, unknown>),
+      class_id: activeClass?.id, academic_year_id: activeAcademicYear?.id,
+    } : {
       ...data,
       class_id: activeClass?.id,
       academic_year_id: activeAcademicYear?.id,
@@ -789,20 +804,20 @@ export default function StudentsPage() {
       {/* Main Tabs Navigation */}
       <div className="flex space-x-2 border-b border-slate-200 pb-px overflow-x-auto">
         <button
-          onClick={() => setMainTab('list')}
+          onClick={() => changeMainTab('list')}
           className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'list' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
           <Users className="w-4 h-4" /> បញ្ជីរាយនាមសិស្ស
         </button>
 
         <button
-          onClick={() => setMainTab('at-risk')}
+          onClick={() => changeMainTab('at-risk')}
           className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'at-risk' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
           <AlertTriangle className="w-4 h-4" /> សិស្សប្រឈម
         </button>
         <button
-          onClick={() => setMainTab('transfer')}
+          onClick={() => changeMainTab('transfer')}
           className={`flex items-center gap-2 px-6 py-3 font-black text-sm border-b-2 whitespace-nowrap transition-colors ${mainTab === 'transfer' ? 'border-[#155EEF] text-[#155EEF]' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
         >
           <LogOut className="w-4 h-4" /> ផ្ទេរ / បោះបង់ (Transfer / Dropout)
@@ -810,7 +825,24 @@ export default function StudentsPage() {
       </div>
 
       {/* Tab 1: Student List (Existing Table) */}
-      {mainTab === 'list' && (
+      {mainTab === 'list' && profile?.role === 'teacher' && (activeClass ? <StudentSpreadsheet
+        key={`${activeClass.id}:${activeAcademicYear?.id || activeClass.academic_year_id}`}
+        students={students}
+        classId={activeClass.id}
+        yearId={activeAcademicYear?.id || activeClass.academic_year_id || ''}
+        className={activeClass.name}
+        grade={activeClass.grade}
+        yearName={activeAcademicYear?.name || ''}
+        loading={isLoading}
+        loadError={loadError}
+        unavailableFields={unavailableFields}
+        refresh={fetchStudents}
+        onProfile={openEditModal}
+        onPhotos={() => setIsBulkImageModalOpen(true)}
+        onDirtyChange={setGridDirty}
+        onBusyChange={setGridSaving}
+      /> : <p className="p-8 text-center text-slate-500">សូមជ្រើសរើសថ្នាក់ដែលបានចាត់តាំងជាមុនសិន។</p>)}
+      {mainTab === 'list' && profile?.role !== 'teacher' && (
         <div className="space-y-6 animate-fadeIn">
           {/* Toolbar & Add Button */}
           <StudentFilters 

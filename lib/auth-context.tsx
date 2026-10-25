@@ -445,7 +445,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isDemoMode,
         login,
         logout,
-        setActiveClass,
+        setActiveClass: (nextClass) => {
+          if (nextClass?.id !== activeClass?.id && typeof window !== 'undefined') {
+            const event = new Event('student-context-change', { cancelable: true });
+            if (!window.dispatchEvent(event)) return;
+          }
+          setActiveClass(nextClass);
+        },
         refreshClasses,
         activeAcademicYear,
         retryAuth,

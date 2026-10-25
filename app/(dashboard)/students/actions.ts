@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { formatKhmerAddress } from './types';
+import { saveTeacherStudentProfiles } from './grid-actions';
 
 const StudentSchema = z.object({
   id: z.string().optional(),
@@ -56,8 +57,6 @@ export type SaveStudentPayload = z.infer<typeof StudentSchema>;
 
 export async function saveStudentAction(payload: SaveStudentPayload) {
   try {
-    const validatedPayload = StudentSchema.parse(payload);
-    
     const { getServerAuth, requireClassAccess, requireAdmin, requireStudentAccess } = await import('@/lib/auth-server');
     const { user, profile, role } = await getServerAuth();
     if (!user || !profile || !role) {
@@ -67,6 +66,23 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
     if (!['admin', 'principal', 'teacher'].includes(role)) {
       return { success: false, error: 'Forbidden: Insufficient role privileges.' };
     }
+
+    if (['teacher'].includes(role)) {
+      const result = await saveTeacherStudentProfiles({
+        class_id: payload.class_id || '', academic_year_id: payload.academic_year_id,
+        updates: [payload],
+      });
+      if (!result.success) return { ...result, student: undefined };
+      const { createClient } = await import('@/lib/supabase/server');
+      const session = await createClient();
+      const { data: row } = await session.from('active_class_rosters').select('*').eq('id', String(payload.id)).eq('enrollment_class_id', payload.class_id || '').maybeSingle();
+      return { success: true, student: { ...payload, ...row, id: String(payload.id),
+        date_of_birth: row?.dob, address: row?.current_address, health_issues: row?.health_note,
+        enrollment_status: String(row?.current_enrollment_status || 'active'),
+      } };
+    }
+
+    const validatedPayload = StudentSchema.parse(payload);
 
     if (validatedPayload.class_id) {
       await requireClassAccess(validatedPayload.class_id);
@@ -610,8 +626,10 @@ export async function fetchClassStudentRequestsAction(classId: string) {
 
 export async function batchUpdateStudentProfilesAction(payload: {
   class_id: string;
+  academic_year_id?: string;
   updates: Array<{
     id: string;
+    original?: Record<string, string | number | null>;
     desk_number?: string;
     room_number?: string;
     full_name?: string;
@@ -669,6 +687,11 @@ export async function batchUpdateStudentProfilesAction(payload: {
 
     // Security Gate: Ensure caller has legitimate authority over this class roster
     await requireClassAccess(payload.class_id);
+
+    if (role === 'teacher') return saveTeacherStudentProfiles({
+      class_id: payload.class_id, academic_year_id: payload.academic_year_id,
+      updates: payload.updates as unknown as Record<string, unknown>[],
+    });
 
     const supabase = createAdminClient();
 

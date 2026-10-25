@@ -1,4 +1,6 @@
 import ExcelJS from 'exceljs';
+import { parseStudentAddress } from '../students/address';
+import { appendStudentRoleSheet } from './student-role-sheet';
 
 export interface SchoolInfoExportData {
   name?: string | null;
@@ -28,6 +30,13 @@ export interface StudentRosterRecord {
   dob?: string | null;
   pob?: string | null;
   prev_school?: string | null;
+  primary_school?: string | null;
+  secondary_school?: string | null;
+  ethnicity?: string | null;
+  scholarship_program?: string | null;
+  scholarship_materials?: string | null;
+  scholarship_funding?: string | null;
+  scholarship_other?: string | null;
   room_number?: string | null;
   desk_number?: string | null;
   exam_grade?: string | null;
@@ -67,43 +76,14 @@ export interface GenerateRosterExportOptions {
  * Parses a combined Khmer address string into 4 distinct components:
  * ភូមិ (Village), ឃុំ/សង្កាត់ (Commune), ស្រុក/ក្រុង/ខណ្ឌ (District), ខេត្ត/រាជធានី (Province)
  */
-export function parseKhmerAddressParts(addr?: string | null): {
-  village: string;
-  commune: string;
-  district: string;
-  province: string;
-} {
-  if (!addr || !addr.trim()) {
-    return { village: '', commune: '', district: '', province: '' };
-  }
+export const parseKhmerAddressParts = parseStudentAddress;
 
-  const raw = addr.trim();
-
-  // Pattern matching for standard Cambodian address markers
-  // Example: "ភូមិព្រៃស្រឡៅ ឃុំពោធិ៍រៀង ស្រុកពោធិ៍រៀង ខេត្តព្រៃវែង"
-  let village = '';
-  let commune = '';
-  let district = '';
-  let province = '';
-
-  const vMatch = raw.match(/ភូមិ\s*([^,\s]+(?:\s+[^,\s]+)*?)(?=\s*(?:ឃុំ|សង្កាត់|ស្រុក|ក្រុង|ខណ្ឌ|ខេត្ត|រាជធានី|$))/);
-  if (vMatch) village = vMatch[1].trim();
-
-  const cMatch = raw.match(/(?:ឃុំ|សង្កាត់)\s*([^,\s]+(?:\s+[^,\s]+)*?)(?=\s*(?:ស្រុក|ក្រុង|ខណ្ឌ|ខេត្ត|រាជធានី|$))/);
-  if (cMatch) commune = cMatch[1].trim();
-
-  const dMatch = raw.match(/(?:ស្រុក|ក្រុង|ខណ្ឌ)\s*([^,\s]+(?:\s+[^,\s]+)*?)(?=\s*(?:ខេត្ត|រាជធានី|$))/);
-  if (dMatch) district = dMatch[1].trim();
-
-  const pMatch = raw.match(/(?:ខេត្ត|រាជធានី)\s*([^,\s]+(?:\s+[^,\s]+)*?)(?=\s*$)/);
-  if (pMatch) province = pMatch[1].trim();
-
-  // Fallback: if no keywords matched, keep entire string in village for visibility
-  if (!village && !commune && !district && !province) {
-    village = raw;
-  }
-
-  return { village, commune, district, province };
+const schoolRoleNames = ['ក្រុមប្រឹក្សាកុមារ', 'ក្រុមប្រឹក្សាយុវជន', 'កាកបាទក្រហម', 'កាយរិទ្ធិ', 'សសយក', 'ផ្សេងៗ'];
+function populateStudentRoles(values: unknown[], start: number, roles?: string | null) {
+  const selected = (roles || '').split(/[,;\n]+/).map(value => value.trim()).filter(Boolean);
+  schoolRoleNames.forEach((name, index) => { values[start + index] = selected.includes(name) ? '✔' : ''; });
+  const other = selected.filter(value => !schoolRoleNames.includes(value));
+  if (other.length) values[start + 5] = other.join(', ');
 }
 
 /**
@@ -132,12 +112,6 @@ export function isUpperSecondary(classInfo: ClassInfoExportData): boolean {
   return false;
 }
 
-// 20 Standard Subject headers
-const SCORE_SUBJECT_HEADERS = [
-  'តែង', 'សរសេរ', 'សីល', 'ភូមិ', 'ប្រវត្តិ', 'គណិត', 'ផែន', 'រូប', 'គីមី', 'ជីវៈ',
-  'គេហ', 'សិល្បៈ', 'កសិកម្ម', 'អង់', 'បារាំង', 'អប់រំកាយ', 'ព័ត៌មាន', 'ពិ.សរុប', 'មធ្យម', 'និទ្ទេស'
-];
-
 /**
  * Generates an official, beautifully styled Excel workbook mirroring:
  * គំរូ_បញ្ជីឈ្មោះសិស្ស_គ្រូ_ឆ្នាំសិក្សា_2026_2027 (2).xlsx
@@ -153,7 +127,7 @@ export async function generateOfficialSchoolRosterWorkbook(
   workbook.created = new Date();
 
   const sheetName = isUpper ? 'បញ្ជីឈ្មោះសិស្ស 10-12' : 'បញ្ជីឈ្មោះសិស្ស7-9';
-  const totalCols = isUpper ? 62 : 59;
+  const totalCols = isUpper ? 42 : 39;
 
   const ws = workbook.addWorksheet(sheetName, {
     views: [{ showGridLines: true }],
@@ -204,7 +178,7 @@ export async function generateOfficialSchoolRosterWorkbook(
 
   if (!isUpper) {
     // ==========================================
-    // GRADE 7–9 TEMPLATE (59 Columns)
+    // GRADE 7–9 TEMPLATE (39 Columns)
     // ==========================================
 
     // Column widths matching sheet 'បញ្ជីឈ្មោះសិស្ស7-9'
@@ -214,13 +188,11 @@ export async function generateOfficialSchoolRosterWorkbook(
       14.0, 11.5, // S-T Student Phone, Indigenous (19-20)
       6.0, 7.0, 7.0, 7.0, // U-X Scholarship (21-24)
       9.0, 5.0, 4.0, // Y-AA Disability, Grade, Month (25-27)
-      // AB-AU Scores (28-47) - 20 subjects
-      4.0, 5.5, 4.5, 4.0, 4.5, 5.5, 4.0, 3.5, 4.0, 4.0, 4.5, 5.5, 6.5, 4.0, 5.0, 7.0, 6.5, 6.0, 5.0, 5.5,
-      7.0, 6.5, // AV-AW Absences (48-49)
-      8.0, // AX Elective (50)
-      10.0, 10.0, // AY-AZ Poverty (51-52)
-      16.5, 10.0, 10.0, 10.0, 10.0, 10.0, // BA-BF Roles (53-58)
-      10.0, // BG Other (59)
+      7.0, 6.5,
+      8.0,
+      10.0, 10.0,
+      16.5, 10.0, 10.0, 10.0, 10.0, 10.0,
+      10.0,
     ];
 
     colWidths.forEach((w, idx) => {
@@ -294,8 +266,8 @@ export async function generateOfficialSchoolRosterWorkbook(
       { col: 25, text: 'លក្ខណៈពិសេស (ពិការភាព)' },
       { col: 26, text: 'ថ្នាក់ទី' },
       { col: 27, text: 'ខែ' },
-      { col: 50, text: 'មុខវិជ្ជាជ្រើសរើស' },
-      { col: 59, text: 'ផ្សេងៗ' },
+      { col: 30, text: 'មុខវិជ្ជាជ្រើសរើស' },
+      { col: 39, text: 'ផ្សេងៗ' },
     ];
 
     singleHeadersG7.forEach(h => {
@@ -320,25 +292,19 @@ export async function generateOfficialSchoolRosterWorkbook(
       },
       {
         startCol: 28,
-        endCol: 47,
-        title: 'ពិន្ទុ',
-        subs: SCORE_SUBJECT_HEADERS,
-      },
-      {
-        startCol: 48,
-        endCol: 49,
+        endCol: 29,
         title: 'អវត្តមាន',
         subs: ['មានច្បាប់', 'អត់ច្បាប់'],
       },
       {
-        startCol: 51,
-        endCol: 52,
+        startCol: 31,
+        endCol: 32,
         title: 'ស្ថានភាពជីវភាពគ្រួសារ',
         subs: ['ក្រ១', 'ក្រ២'],
       },
       {
-        startCol: 53,
-        endCol: 58,
+        startCol: 33,
+        endCol: 38,
         title: 'តួនាទីសិស្សក្នុងសាលារៀន',
         subs: ['ក្រុមប្រឹក្សាកុមារ', 'ក្រុមប្រឹក្សាយុវជន', 'កាកបាទក្រហម', 'កាយរិទ្ធិ', 'សសយក', 'ផ្សេងៗ'],
       },
@@ -381,43 +347,43 @@ export async function generateOfficialSchoolRosterWorkbook(
       // Scholarship check
       const hasScholarship = std.scholarship === 'yes' || (std.scholarship_status && std.scholarship_status !== 'none');
 
-      // Values array for 59 columns
+      // Values array for the compact roster
       const rowValues: any[] = new Array(totalCols).fill('');
 
-      rowValues[0] = idx + 1; // A: ល.រ
-      rowValues[1] = std.student_id_number || ''; // B: អត្តលេខ
-      rowValues[2] = std.full_name || ''; // C: គោត្តនាម និងនាម
-      rowValues[3] = genderText; // D: ភេទ
-      rowValues[4] = std.date_of_birth || std.dob || ''; // E: ថ្ងៃ ខែ ឆ្នាំ កំណើត
-      rowValues[5] = std.pob || ''; // F: ទីកន្លែងកំណើត
-      rowValues[6] = std.prev_school || ''; // G: មកពីសាលាបឋមសិក្សា
-      rowValues[7] = ''; // H: មកពីសាលាមធ្យមសិក្សា (typically blank for G7)
-      rowValues[8] = std.father_name || ''; // I: ឈ្មោះឪពុក
-      rowValues[9] = std.father_job || ''; // J: មុខរបរ
-      rowValues[10] = std.father_phone || ''; // K: លេខទូសព្ទ
-      rowValues[11] = std.mother_name || ''; // L: ឈ្មោះម្តាយ
-      rowValues[12] = std.mother_job || ''; // M: មុខរបរ
-      rowValues[13] = std.mother_phone || ''; // N: លេខទូសព្ទ
-      rowValues[14] = addr.village; // O: ភូមិ
-      rowValues[15] = addr.commune; // P: ឃុំ
-      rowValues[16] = addr.district; // Q: ស្រុក
-      rowValues[17] = addr.province; // R: ខេត្ត
-      rowValues[18] = std.student_phone || ''; // S: លេខទូសព្ទសិស្ស
-      rowValues[19] = std.indigenous === 'yes' ? 'បាទ/ចាស' : std.indigenous || ''; // T: ជនជាតិ
-      rowValues[20] = hasScholarship ? '✔' : ''; // U: អាហារូបករណ៏ - គម្រោង
-      rowValues[21] = ''; // V: សម្ភារៈ
-      rowValues[22] = ''; // W: ថវិកា
-      rowValues[23] = ''; // X: ផ្សេងៗ
-      rowValues[24] = std.disability && std.disability !== 'none' ? (std.assistive_device || std.disability) : ''; // Y: ពិការភាព
-      rowValues[25] = classInfo.name || ''; // Z: ថ្នាក់ទី
-      rowValues[26] = ''; // AA: ខែ
-      // AB-AU (Cols 28-47) remain empty for score entry
-      // AV-AW (Cols 48-49) remain empty for absence entry
-      rowValues[49] = std.elective_subject || ''; // AX: មុខវិជ្ជាជ្រើសរើស
-      rowValues[50] = isPoor1 ? '✔' : ''; // AY: ក្រ១
-      rowValues[51] = isPoor2 ? '✔' : ''; // AZ: ក្រ២
-      // BA-BF (Cols 53-58) Student roles
-      rowValues[58] = std.notes || std.health_issues || ''; // BG: ផ្សេងៗ
+      rowValues[0] = idx + 1;
+      rowValues[1] = std.student_id_number || '';
+      rowValues[2] = std.full_name || '';
+      rowValues[3] = genderText;
+      rowValues[4] = std.date_of_birth || std.dob || '';
+      rowValues[5] = std.pob || '';
+      rowValues[6] = std.primary_school || std.prev_school || '';
+      rowValues[7] = std.secondary_school || '';
+      rowValues[8] = std.father_name || '';
+      rowValues[9] = std.father_job || '';
+      rowValues[10] = std.father_phone || '';
+      rowValues[11] = std.mother_name || '';
+      rowValues[12] = std.mother_job || '';
+      rowValues[13] = std.mother_phone || '';
+      rowValues[14] = addr.village;
+      rowValues[15] = addr.commune;
+      rowValues[16] = addr.district;
+      rowValues[17] = addr.province;
+      rowValues[18] = std.student_phone || '';
+      rowValues[19] = std.ethnicity || (std.indigenous === 'yes' ? 'បាទ/ចាស' : std.indigenous || '');
+      rowValues[20] = std.scholarship_program || (hasScholarship ? '✔' : '');
+      rowValues[21] = std.scholarship_materials || '';
+      rowValues[22] = std.scholarship_funding || '';
+      rowValues[23] = std.scholarship_other || '';
+      rowValues[24] = std.disability && std.disability !== 'none' ? (std.assistive_device || std.disability) : '';
+      rowValues[25] = classInfo.name || '';
+      rowValues[26] = '';
+
+      rowValues[29] = std.elective_subject || '';
+      rowValues[30] = isPoor1 ? '✔' : '';
+      rowValues[31] = isPoor2 ? '✔' : '';
+
+      populateStudentRoles(rowValues, 32, std.student_roles);
+      rowValues[38] = std.notes || std.health_issues || '';
 
       // Write values & apply styling
       for (let c = 1; c <= totalCols; c++) {
@@ -430,7 +396,7 @@ export async function generateOfficialSchoolRosterWorkbook(
           color: { argb: 'FF000000' },
         };
         // Alignment: Center for numbers, IDs, gender, dates; Left for names and addresses
-        if ([1, 2, 4, 5, 11, 14, 19, 21, 22, 23, 24, 25, 26, 27, 51, 52].includes(c)) {
+        if ([1, 2, 4, 5, 11, 14, 19, 21, 22, 23, 24, 25, 26, 27, 31, 32].includes(c)) {
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         } else {
           cell.alignment = { horizontal: 'left', vertical: 'middle' };
@@ -442,7 +408,7 @@ export async function generateOfficialSchoolRosterWorkbook(
 
   } else {
     // ==========================================
-    // GRADE 10–12 TEMPLATE (62 Columns)
+    // GRADE 10–12 TEMPLATE (42 Columns)
     // ==========================================
 
     // Column widths matching sheet 'បញ្ជីឈ្មោះសិស្ស 10-12'
@@ -455,13 +421,11 @@ export async function generateOfficialSchoolRosterWorkbook(
       15.5, 20.0, // V-W Student Phone, Indigenous (22-23)
       6.0, 7.5, 7.0, 8.0, // X-AA Scholarship (24-27)
       9.0, 5.0, 4.0, // AB-AD Disability, Grade, Month (28-30)
-      // AE-AX Scores (31-50) - 20 subjects
-      4.0, 5.5, 4.5, 4.0, 4.5, 5.5, 4.0, 3.5, 4.0, 4.0, 4.5, 5.5, 6.5, 4.0, 5.0, 7.0, 6.5, 6.0, 5.0, 5.5,
-      7.0, 6.5, // AY-AZ Absences (51-52)
-      12.0, // BA Elective (53)
-      14.0, 10.0, // BB-BC Poverty (54-55)
-      14.0, 16.0, 10.5, 9.5, 9.5, 9.5, // BD-BI Roles (56-61)
-      9.5, // BJ Other (62)
+      7.0, 6.5,
+      12.0,
+      14.0, 10.0,
+      14.0, 16.0, 10.5, 9.5, 9.5, 9.5,
+      9.5,
     ];
 
     colWidths10.forEach((w, idx) => {
@@ -541,8 +505,8 @@ export async function generateOfficialSchoolRosterWorkbook(
       { col: 28, text: 'លក្ខណៈពិសេស (ពិការភាព)' },
       { col: 29, text: 'ថ្នាក់ទី' },
       { col: 30, text: 'ខែ' },
-      { col: 53, text: 'មុខវិជ្ជាជ្រើសរើស' },
-      { col: 62, text: 'ផ្សេងៗ' },
+      { col: 33, text: 'មុខវិជ្ជាជ្រើសរើស' },
+      { col: 42, text: 'ផ្សេងៗ' },
     ];
 
     singleHeadersG10.forEach(h => {
@@ -572,25 +536,19 @@ export async function generateOfficialSchoolRosterWorkbook(
       },
       {
         startCol: 31,
-        endCol: 50,
-        title: 'ពិន្ទុ',
-        subs: SCORE_SUBJECT_HEADERS,
-      },
-      {
-        startCol: 51,
-        endCol: 52,
+        endCol: 32,
         title: 'អវត្តមាន',
         subs: ['មានច្បាប់', 'អត់ច្បាប់'],
       },
       {
-        startCol: 54,
-        endCol: 55,
+        startCol: 34,
+        endCol: 35,
         title: 'ស្ថានភាពជីវភាពគ្រួសារ',
         subs: ['ក្រ១', 'ក្រ២'],
       },
       {
-        startCol: 56,
-        endCol: 61,
+        startCol: 36,
+        endCol: 41,
         title: 'តួនាទីសិស្សក្នុងសាលារៀន',
         subs: ['ក្រុមប្រឹក្សាកុមារ', 'ក្រុមប្រឹក្សាយុវជន', 'កាកបាទក្រហម', 'កាយរិទ្ធិ', 'សសយក', 'ផ្សេងៗ'],
       },
@@ -632,44 +590,44 @@ export async function generateOfficialSchoolRosterWorkbook(
 
       const rowValues: any[] = new Array(totalCols).fill('');
 
-      rowValues[0] = idx + 1; // A: ល.រ
-      rowValues[1] = std.student_id_number || ''; // B: អត្តលេខ
-      rowValues[2] = std.full_name || ''; // C: គោត្តនាម និងនាម
-      rowValues[3] = genderText; // D: ភេទ
-      rowValues[4] = std.date_of_birth || std.dob || ''; // E: ថ្ងៃ ខែ ឆ្នាំ កំណើត
-      rowValues[5] = std.pob || ''; // F: ទីកន្លែងកំណើត
-      rowValues[6] = std.prev_school || ''; // G: មកពីសាលាបឋមសិក្សា
+      rowValues[0] = idx + 1;
+      rowValues[1] = std.student_id_number || '';
+      rowValues[2] = std.full_name || '';
+      rowValues[3] = genderText;
+      rowValues[4] = std.date_of_birth || std.dob || '';
+      rowValues[5] = std.pob || '';
+      rowValues[6] = std.primary_school || std.prev_school || '';
       // H-K: ប្រឡងសញ្ញាបត្រមធ្យមសិក្សាបឋមភូមិ
-      rowValues[7] = std.room_number || ''; // H: លេខបន្ទប់
-      rowValues[8] = std.desk_number || ''; // I: លេខតុ
-      rowValues[9] = std.exam_grade || ''; // J: និទ្ទេស
-      rowValues[10] = std.prev_school || ''; // K: មកពីសាលាមធ្យមសិក្សា
-      rowValues[11] = std.father_name || ''; // L: ឈ្មោះឪពុក
-      rowValues[12] = std.father_job || ''; // M: មុខរបរ
-      rowValues[13] = std.father_phone || ''; // N: លេខទូសព្ទ
-      rowValues[14] = std.mother_name || ''; // O: ឈ្មោះម្តាយ
-      rowValues[15] = std.mother_job || ''; // P: មុខរបរ
-      rowValues[16] = std.mother_phone || ''; // Q: លេខទូសព្ទ
-      rowValues[17] = addr.village; // R: ភូមិ
-      rowValues[18] = addr.commune; // S: ឃុំ
-      rowValues[19] = addr.district; // T: ស្រុក
-      rowValues[20] = addr.province; // U: ខេត្ត
-      rowValues[21] = std.student_phone || ''; // V: លេខទូសព្ទសិស្ស
-      rowValues[22] = std.indigenous === 'yes' ? 'បាទ/ចាស' : std.indigenous || ''; // W: ជនជាតិ
-      rowValues[23] = hasScholarship ? '✔' : ''; // X: អាហារូបករណ៏ - គម្រោង
-      rowValues[24] = ''; // Y: សម្ភារៈ
-      rowValues[25] = ''; // Z: ថវិកា
-      rowValues[26] = ''; // AA: ផ្សេងៗ
-      rowValues[27] = std.disability && std.disability !== 'none' ? (std.assistive_device || std.disability) : ''; // AB: ពិការភាព
-      rowValues[28] = classInfo.name || ''; // AC: ថ្នាក់ទី
-      rowValues[29] = ''; // AD: ខែ
-      // AE-AX (Cols 31-50) remain empty for score entry
-      // AY-AZ (Cols 51-52) remain empty for absence entry
-      rowValues[52] = std.elective_subject || ''; // BA: មុខវិជ្ជាជ្រើសរើស
-      rowValues[53] = isPoor1 ? '✔' : ''; // BB: ក្រ១
-      rowValues[54] = isPoor2 ? '✔' : ''; // BC: ក្រ២
-      // BD-BI (Cols 56-61) Student roles
-      rowValues[61] = std.notes || std.health_issues || ''; // BJ: ផ្សេងៗ
+      rowValues[7] = std.room_number || '';
+      rowValues[8] = std.desk_number || '';
+      rowValues[9] = std.exam_grade || '';
+      rowValues[10] = std.secondary_school || std.prev_school || '';
+      rowValues[11] = std.father_name || '';
+      rowValues[12] = std.father_job || '';
+      rowValues[13] = std.father_phone || '';
+      rowValues[14] = std.mother_name || '';
+      rowValues[15] = std.mother_job || '';
+      rowValues[16] = std.mother_phone || '';
+      rowValues[17] = addr.village;
+      rowValues[18] = addr.commune;
+      rowValues[19] = addr.district;
+      rowValues[20] = addr.province;
+      rowValues[21] = std.student_phone || '';
+      rowValues[22] = std.ethnicity || (std.indigenous === 'yes' ? 'បាទ/ចាស' : std.indigenous || '');
+      rowValues[23] = std.scholarship_program || (hasScholarship ? '✔' : '');
+      rowValues[24] = std.scholarship_materials || '';
+      rowValues[25] = std.scholarship_funding || '';
+      rowValues[26] = std.scholarship_other || '';
+      rowValues[27] = std.disability && std.disability !== 'none' ? (std.assistive_device || std.disability) : '';
+      rowValues[28] = classInfo.name || '';
+      rowValues[29] = '';
+
+      rowValues[32] = std.elective_subject || '';
+      rowValues[33] = isPoor1 ? '✔' : '';
+      rowValues[34] = isPoor2 ? '✔' : '';
+
+      populateStudentRoles(rowValues, 35, std.student_roles);
+      rowValues[41] = std.notes || std.health_issues || '';
 
       for (let c = 1; c <= totalCols; c++) {
         const cell = row.getCell(c);
@@ -680,7 +638,7 @@ export async function generateOfficialSchoolRosterWorkbook(
           size: c === 3 ? 10 : 9,
           color: { argb: 'FF000000' },
         };
-        if ([1, 2, 4, 5, 8, 9, 10, 14, 17, 22, 24, 25, 26, 27, 28, 29, 30, 54, 55].includes(c)) {
+        if ([1, 2, 4, 5, 8, 9, 10, 14, 17, 22, 24, 25, 26, 27, 28, 29, 30, 34, 35].includes(c)) {
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         } else {
           cell.alignment = { horizontal: 'left', vertical: 'middle' };
@@ -691,5 +649,9 @@ export async function generateOfficialSchoolRosterWorkbook(
     });
   }
 
+  appendStudentRoleSheet(workbook, ws, {
+    upper: isUpper, studentCount: students.length, className: classInfo.name || gradeLabel,
+    yearName, departmentName, schoolName,
+  });
   return workbook;
 }

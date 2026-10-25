@@ -1,16 +1,19 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { MassiveProfilingStudent, DEFAULT_FORM } from '@/app/(dashboard)/students/types';
+import { MassiveProfilingStudent } from '@/app/(dashboard)/students/types';
+import { fetchSchemaCompatibleRoster, unavailableProfileFields } from '@/lib/students/roster';
+import type { GridRow } from '@/lib/students/grid';
 import { useAuth } from '@/lib/auth-context';
 import { buildCacheKey, getOrFetchScoped, subscribe } from '@/lib/cache/client-cache';
 
 export const STUDENT_ROSTER_FIELDS = 
-  'id, student_id_number, desk_number, room_number, full_name, english_name, photo_url, gender, dob, current_address, enrollment_status, scholarship, id_poor, orphan, distance_km, weight_kg, height_m, bmi, nutrition_status, disability, health_note, father_name, father_job, father_phone, mother_name, mother_job, mother_phone, guardian_name, guardian_job, guardian_phone, siblings_count, housing, income, parent_phone, risk_level';
+  'id, student_id_number, desk_number, room_number, full_name, english_name, photo_url, gender, dob, current_address, enrollment_status, current_enrollment_status, academic_year_id, status, pob, primary_school, secondary_school, exam_grade, ethnicity, scholarship_program, scholarship_materials, scholarship_funding, scholarship_other, elective_subject, student_roles, notes, student_phone, prev_school, indigenous, birth_cert_no, assistive_device, migrant_status, scholarship, id_poor, orphan, distance_km, weight_kg, height_m, bmi, nutrition_status, disability, health_note, father_name, father_job, father_phone, mother_name, mother_job, mother_phone, guardian_name, guardian_job, guardian_phone, siblings_count, housing, income, parent_phone, risk_level';
 
 export function useStudents(activeClassId: string | undefined) {
   const { user, profile, activeAcademicYear } = useAuth();
   const [students, setStudents] = useState<MassiveProfilingStudent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortState, setSortState] = useState<{ field: string | null; direction: 'asc' | 'desc' | null }>({
     field: null,
@@ -19,6 +22,7 @@ export function useStudents(activeClassId: string | undefined) {
 
   const classSeqRef = useRef(0);
   const supabase = createClient();
+  const activeYearId = activeAcademicYear?.id;
 
   const fetchStudents = useCallback(async (forceRefresh = false) => {
     if (!activeClassId) {
@@ -28,12 +32,13 @@ export function useStudents(activeClassId: string | undefined) {
     }
 
     const seq = ++classSeqRef.current;
+    setLoadError('');
 
     const cacheKey = buildCacheKey({
       userId: user?.id,
       role: profile?.role,
       schoolId: profile?.school_id,
-      academicYearId: activeAcademicYear?.id,
+      academicYearId: activeYearId,
       classId: activeClassId,
       resource: 'roster',
     });
@@ -42,24 +47,14 @@ export function useStudents(activeClassId: string | undefined) {
       const result = await getOrFetchScoped<MassiveProfilingStudent[]>(
         cacheKey,
         async () => {
-          const { data, error } = await supabase
-            .from('active_class_rosters')
-            .select(STUDENT_ROSTER_FIELDS)
-            .eq('enrollment_class_id', activeClassId)
-            .order('student_id_number', { ascending: true });
-
-          if (error) {
-            console.error('[useStudents] Query failed:', error.message || error.code || error);
-            throw error;
-          }
+          const data = await fetchSchemaCompatibleRoster(supabase, activeClassId, activeYearId, STUDENT_ROSTER_FIELDS);
 
           return (data || []).map(d => ({
-            ...DEFAULT_FORM,
             ...d,
-            health_issues: (d as any).health_note || (d as any).health_issues || '',
+            health_issues: d.health_note || '',
             date_of_birth: d.dob,
             address: d.current_address,
-            current_status: d.enrollment_status || 'active',
+            current_status: d.current_enrollment_status || 'active',
           } as MassiveProfilingStudent));
         },
         { ttlMs: 120_000, forceRefresh, allowStale: true }
@@ -72,12 +67,15 @@ export function useStudents(activeClassId: string | undefined) {
       }
     } catch (err) {
       if (seq === classSeqRef.current) {
+        setLoadError(err instanceof Error ? err.message : 'មិនអាចទាញយកបញ្ជីសិស្សបានទេ។ សូមផ្ទុកទិន្នន័យថ្មី។');
         setIsLoading(false);
       }
     }
-  }, [activeClassId, user?.id, profile?.role, profile?.school_id, activeAcademicYear?.id, supabase]);
+  }, [activeClassId, user?.id, profile?.role, profile?.school_id, activeYearId, supabase]);
 
   useEffect(() => {
+    classSeqRef.current++;
+    setStudents([]);
     setIsLoading(true);
     fetchStudents(false);
 
@@ -90,6 +88,7 @@ export function useStudents(activeClassId: string | undefined) {
 
     return () => {
       unsubscribe();
+      classSeqRef.current++;
     };
   }, [activeClassId, fetchStudents]);
 
@@ -131,10 +130,14 @@ export function useStudents(activeClassId: string | undefined) {
     return result;
   }, [students, searchQuery, sortState]);
 
+  const unavailableFields = useMemo(() => unavailableProfileFields(students as unknown as GridRow[]), [students]);
+
   return {
     students,
     setStudents,
     isLoading,
+    loadError,
+    unavailableFields,
     searchQuery,
     setSearchQuery,
     sortState,

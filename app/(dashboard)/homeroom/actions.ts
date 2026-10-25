@@ -205,8 +205,7 @@ export async function massProfileUpdateAction(studentData: any[]) {
         distance_km: s.distance_km,
         weight_kg: s.weight_kg,
         height_m: s.height_m,
-        bmi: s.bmi,
-        nutrition_status: s.nutrition_status,
+        // Calculated from the saved height/weight by the database profile guard.
         disability: s.disability,
         assistive_device: s.assistive_device,
         health_issues: s.health_issues,

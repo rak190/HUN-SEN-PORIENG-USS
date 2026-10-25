@@ -111,7 +111,7 @@ describe('Official School Excel Student Roster Export Suite', () => {
   });
 
   describe('Lower Secondary Template Generation (Grade 7–9)', () => {
-    it('Scenario 3A: Generates sheet titled "បញ្ជីឈ្មោះសិស្ស7-9" with exactly 59 columns', async () => {
+    it('Scenario 3A: Generates sheet titled "បញ្ជីឈ្មោះសិស្ស7-9" with exactly 39 columns', async () => {
       const wb = await generateOfficialSchoolRosterWorkbook({
         students: sampleStudents,
         classInfo: { id: 'c1', name: '៧ក', grade: 7 },
@@ -121,7 +121,7 @@ describe('Official School Excel Student Roster Export Suite', () => {
 
       const ws = wb.getWorksheet('បញ្ជីឈ្មោះសិស្ស7-9');
       assert.ok(ws, 'Worksheet "បញ្ជីឈ្មោះសិស្ស7-9" must exist');
-      assert.equal(ws.actualColumnCount, 59, 'G7-9 sheet must have exactly 59 columns');
+      assert.equal(ws.actualColumnCount, 39, 'G7-9 sheet must have exactly 39 columns');
 
       // Verify Kingdom Motto and Title Banners
       assert.equal(ws.getCell('A1').value, 'ព្រះរាជាណាចក្រកម្ពុជា');
@@ -164,25 +164,22 @@ describe('Official School Excel Student Roster Export Suite', () => {
       assert.equal(r9.getCell(18).value, 'ព្រៃវែង'); // Address: Province
       assert.equal(r9.getCell(19).value, '088123456'); // Student Phone
       assert.equal(r9.getCell(21).value, '✔'); // Scholarship
-      assert.equal(r9.getCell(51).value, '✔'); // ក្រ១ (Poor Level 1)
-      assert.equal(r9.getCell(52).value, ''); // ក្រ២ (Poor Level 2 is blank)
+      assert.equal(r9.getCell(31).value, '✔'); // ក្រ១ (Poor Level 1)
+      assert.equal(r9.getCell(32).value, ''); // ក្រ២ (Poor Level 2 is blank)
 
       // Student 2 (Row 10) - Poor Level 2
       const r10 = ws.getRow(10);
       assert.equal(r10.getCell(3).value, 'គឹម សុផល');
       assert.equal(r10.getCell(4).value, 'ស្រី');
-      assert.equal(r10.getCell(51).value, ''); // ក្រ១ is blank
-      assert.equal(r10.getCell(52).value, '✔'); // ក្រ២ (Poor Level 2)
+      assert.equal(r10.getCell(31).value, ''); // ក្រ១ is blank
+      assert.equal(r10.getCell(32).value, '✔'); // ក្រ២ (Poor Level 2)
 
-      // Scores (Cols 28-47) must be blank formatted cells ready for entry
-      for (let c = 28; c <= 47; c++) {
-        assert.equal(r9.getCell(c).value, '', `Score column ${c} must remain blank`);
-      }
+
     });
   });
 
   describe('Upper Secondary Template Generation (Grade 10–12)', () => {
-    it('Scenario 4A: Generates sheet titled "បញ្ជីឈ្មោះសិស្ស 10-12" with exactly 62 columns and Lower Secondary Exam headers', async () => {
+    it('Scenario 4A: Generates sheet titled "បញ្ជីឈ្មោះសិស្ស 10-12" with exactly 42 columns and Lower Secondary Exam headers', async () => {
       const wb = await generateOfficialSchoolRosterWorkbook({
         students: sampleStudents,
         classInfo: { id: 'c2', name: '១០ក', grade: 10 },
@@ -192,7 +189,7 @@ describe('Official School Excel Student Roster Export Suite', () => {
 
       const ws = wb.getWorksheet('បញ្ជីឈ្មោះសិស្ស 10-12');
       assert.ok(ws, 'Worksheet "បញ្ជីឈ្មោះសិស្ស 10-12" must exist');
-      assert.equal(ws.actualColumnCount, 62, 'G10-12 sheet must have exactly 62 columns');
+      assert.equal(ws.actualColumnCount, 42, 'G10-12 sheet must have exactly 42 columns');
 
       // Verify Lower Secondary Diploma Exam Group Headers at Row 10 & 11
       const examGroupHeader = ws.getCell(10, 8);
@@ -212,12 +209,9 @@ describe('Official School Excel Student Roster Export Suite', () => {
       assert.equal(r12.getCell(11).value, 'បឋមសិក្សាពោធិ៍រៀង'); // Secondary school
       assert.equal(r12.getCell(12).value, 'សុខ គង់'); // Father
       assert.equal(r12.getCell(18).value, 'ព្រៃស្រឡៅ'); // Address: Village
-      assert.equal(r12.getCell(54).value, '✔'); // ក្រ១ (Col 54 in G10-12)
+      assert.equal(r12.getCell(34).value, '✔'); // ក្រ១ (Col 54 in G10-12)
 
-      // Score columns in G10-12 are Cols 31-50, must remain blank
-      for (let c = 31; c <= 50; c++) {
-        assert.equal(r12.getCell(c).value, '', `Score column ${c} must remain blank`);
-      }
+
     });
 
     it('Scenario 4B: Generates valid binary xlsx buffer that parses cleanly in ExcelJS', async () => {
@@ -234,7 +228,7 @@ describe('Official School Excel Student Roster Export Suite', () => {
       // Verify the buffer can be re-read cleanly
       const reReadWb = new ExcelJS.Workbook();
       await reReadWb.xlsx.load(buffer as any);
-      assert.equal(reReadWb.worksheets.length, 1);
+      assert.equal(reReadWb.worksheets.length, 2);
       assert.equal(reReadWb.worksheets[0].name, 'បញ្ជីឈ្មោះសិស្ស 10-12');
     });
   });
