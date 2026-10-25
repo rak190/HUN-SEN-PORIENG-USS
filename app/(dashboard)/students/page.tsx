@@ -39,7 +39,8 @@ export default function StudentsPage() {
     isLoading, 
     searchQuery, setSearchQuery, 
     sortState, handleSort, 
-    filteredStudents 
+    filteredStudents,
+    fetchStudents,
   } = useStudents(activeClass?.id);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -1361,9 +1362,12 @@ export default function StudentsPage() {
         isOpen={isBulkImageModalOpen}
         onClose={() => setIsBulkImageModalOpen(false)}
         students={students}
-        onComplete={() => {
-          // Re-fetch or just let the local state update handle it
-          console.log('Bulk image upload completed');
+        classId={activeClass?.id}
+        onComplete={async () => {
+          if (activeClass?.id) {
+            invalidateClassRoster(activeClass.id);
+          }
+          await fetchStudents(true);
         }}
       />
 

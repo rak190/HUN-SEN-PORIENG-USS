@@ -600,17 +600,23 @@ export default function StudentStudyPlansClient({
                       </button>
 
                       {/* Photo Thumbnail */}
-                      <div className="w-8 h-10 rounded-xs border border-slate-200 overflow-hidden bg-slate-100 shrink-0 flex items-center justify-center">
+                      <div className="w-8 h-10 rounded-xs border border-slate-200 overflow-hidden bg-slate-100 shrink-0 flex items-center justify-center relative">
                         {std.photo_url ? (
                           <img
                             src={std.photo_url}
                             alt=""
                             className="w-full h-full object-cover"
                             crossOrigin="anonymous"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              const fallback = e.currentTarget.parentElement?.querySelector('.thumb-fallback');
+                              if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                            }}
                           />
-                        ) : (
+                        ) : null}
+                        <div className={`thumb-fallback w-full h-full flex items-center justify-center ${std.photo_url ? 'hidden' : 'flex'}`}>
                           <User className="w-4 h-4 text-slate-300" />
-                        )}
+                        </div>
                       </div>
 
                       {/* Info */}

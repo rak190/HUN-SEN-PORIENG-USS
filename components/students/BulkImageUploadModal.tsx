@@ -8,6 +8,7 @@ interface BulkImageUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   students: MassiveProfilingStudent[];
+  classId?: string;
   onComplete: () => void;
 }
 
@@ -20,7 +21,7 @@ interface FileWithPreview {
   status: 'pending' | 'uploading' | 'success' | 'error';
 }
 
-export default function BulkImageUploadModal({ isOpen, onClose, students, onComplete }: BulkImageUploadModalProps) {
+export default function BulkImageUploadModal({ isOpen, onClose, students, classId, onComplete }: BulkImageUploadModalProps) {
   const [mounted, setMounted] = useState(false);
   const [step, setStep] = useState<'upload' | 'map' | 'processing'>('upload');
   const [files, setFiles] = useState<FileWithPreview[]>([]);
@@ -112,6 +113,7 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, onComp
     if (matchedFiles.length === 0) return;
     setStep('processing');
     let completed = 0;
+    const successfulUpdates: Array<{ studentId: string; photoUrl: string }> = [];
 
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
@@ -130,7 +132,10 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, onComp
           })
         });
 
-        if (!res.ok) throw new Error('Failed to get presigned URL');
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody.error || 'Failed to get presigned URL');
+        }
         const { presignedUrl, publicUrl } = await res.json();
 
         const uploadRes = await fetch(presignedUrl, {
@@ -139,14 +144,16 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, onComp
           headers: { 'Content-Type': 'image/webp' }
         });
 
-        if (!uploadRes.ok) throw new Error('Failed to upload image to R2');
+        if (!uploadRes.ok) throw new Error('Failed to upload image blob');
 
-        const { error } = await supabase.from('students').update({ photo_url: publicUrl }).eq('id', f.matchedStudentId);
-        if (error) throw error;
+        successfulUpdates.push({
+          studentId: f.matchedStudentId,
+          photoUrl: publicUrl,
+        });
 
         setFiles(prev => prev.map(x => x.id === f.id ? { ...x, status: 'success' } : x));
       } catch (error) {
-        console.error(error);
+        console.error('Photo upload failed for file:', f.name, error);
         setFiles(prev => prev.map(x => x.id === f.id ? { ...x, status: 'error' } : x));
       }
 
@@ -154,10 +161,26 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, onComp
       setProgress((completed / matchedFiles.length) * 100);
     }
 
+    // Authoritatively persist all uploaded photo URLs in the database
+    if (successfulUpdates.length > 0) {
+      try {
+        const { batchUpdateStudentPhotosAction } = await import('@/app/(dashboard)/students/actions');
+        const actionRes = await batchUpdateStudentPhotosAction({
+          classId,
+          updates: successfulUpdates,
+        });
+        if (!actionRes.success) {
+          console.error('[BulkImageUploadModal] batchUpdateStudentPhotosAction error:', actionRes.error);
+        }
+      } catch (dbErr) {
+        console.error('[BulkImageUploadModal] Failed to call batchUpdateStudentPhotosAction:', dbErr);
+      }
+    }
+
     setTimeout(() => {
       onComplete();
       onClose();
-    }, 1500);
+    }, 1200);
   };
 
   return createPortal(

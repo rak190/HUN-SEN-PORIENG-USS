@@ -140,6 +140,7 @@ export function useStudents(activeClassId: string | undefined) {
     sortState,
     handleSort,
     filteredStudents,
+    fetchStudents,
     refresh: fetchStudents,
   };
 }

@@ -654,19 +654,27 @@ export default function StudentStudyPlanDocument({
           </div>
 
           {/* Right: Student Photo Frame (Passport 3x4 ratio) */}
-          <div className="w-[102px] h-[132px] shrink-0 border border-slate-400 bg-slate-50 p-0.5 rounded-xs overflow-hidden flex items-center justify-center shadow-2xs">
+          <div className="w-[102px] h-[132px] shrink-0 border border-slate-400 bg-slate-50 p-0.5 rounded-xs overflow-hidden flex items-center justify-center shadow-2xs relative">
             {student.photo_url ? (
               <img
                 src={student.photo_url}
                 alt={student.full_name}
                 className="w-full h-full object-cover rounded-xs"
                 crossOrigin="anonymous"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const fallback = e.currentTarget.parentElement?.querySelector('.photo-fallback');
+                  if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                }}
               />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 border border-dashed border-slate-300 rounded-xs bg-slate-100/50">
-                <span className="text-[10px] font-bold text-slate-400">រូបថត 3x4</span>
-              </div>
-            )}
+            ) : null}
+            <div 
+              className={`photo-fallback w-full h-full flex flex-col items-center justify-center text-slate-400 border border-dashed border-slate-300 rounded-xs bg-slate-100/50 ${
+                student.photo_url ? 'hidden' : 'flex'
+              }`}
+            >
+              <span className="text-[10px] font-bold text-slate-400">រូបថត 3x4</span>
+            </div>
           </div>
         </div>
 

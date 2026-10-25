@@ -193,6 +193,12 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
     if (validatedPayload.guardian_phone !== undefined) dbRecord.guardian_phone = validatedPayload.guardian_phone || null;
     if (validatedPayload.birth_cert_no !== undefined) dbRecord.birth_cert_no = validatedPayload.birth_cert_no || null;
     if (validatedPayload.migrant_status !== undefined) dbRecord.migrant_status = validatedPayload.migrant_status || null;
+    const rawPhoto = (validatedPayload as any).photo_url;
+    if (rawPhoto !== undefined) {
+      dbRecord.photo_url = typeof rawPhoto === 'string' && rawPhoto.trim().length > 0 
+        ? rawPhoto.trim() 
+        : null;
+    }
 
     // Resolve academic_year_id if not explicitly provided
     let targetYearId = validatedPayload.academic_year_id;
@@ -266,9 +272,25 @@ export async function saveStudentAction(payload: SaveStudentPayload) {
       };
     }
 
-    const savedStudent = { ...payload, ...dbRecord, id: atomicResult.student_id };
+    // Ensure photo_url is persisted to public.students
+    const targetStudentId = atomicResult.student_id;
+    if (rawPhoto !== undefined && targetStudentId) {
+      const photoUrlToSave = typeof rawPhoto === 'string' && rawPhoto.trim().length > 0
+        ? rawPhoto.trim()
+        : null;
+      await supabase
+        .from('students')
+        .update({ photo_url: photoUrlToSave, updated_at: new Date().toISOString() })
+        .eq('id', targetStudentId);
+      dbRecord.photo_url = photoUrlToSave;
+    }
+
+    const savedStudent = { ...payload, ...dbRecord, id: targetStudentId };
 
     revalidatePath('/students');
+    revalidatePath('/homeroom/student-study-plans');
+    revalidatePath('/homeroom/profiling');
+    revalidatePath('/homeroom');
     revalidatePath('/health');
     revalidatePath('/classes/info');
 
@@ -877,3 +899,156 @@ export async function batchUpdateStudentProfilesAction(payload: {
     return { success: false, error: err?.message || 'Failed to batch update student profiles.' };
   }
 }
+
+/**
+ * Authoritatively updates a single student's photo_url with class authorization check.
+ */
+export async function updateStudentPhotoAction(payload: {
+  studentId: string;
+  photoUrl: string | null;
+  classId?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { getServerAuth, requireClassAccess } = await import('@/lib/auth-server');
+    const { user, profile, role } = await getServerAuth();
+    if (!user || !profile || !role) {
+      return { success: false, error: 'Unauthorized: Authentication required.' };
+    }
+
+    if (!payload.studentId) {
+      return { success: false, error: 'Student ID is required.' };
+    }
+
+    if (role === 'teacher') {
+      if (!payload.classId) {
+        return { success: false, error: 'Class ID is required for teacher photo updates.' };
+      }
+      await requireClassAccess(payload.classId);
+    } else if (role !== 'admin' && role !== 'principal') {
+      return { success: false, error: 'Forbidden: Insufficient permissions.' };
+    }
+
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    // Verify student belongs to caller's scope
+    if (role === 'teacher' && payload.classId) {
+      const { data: enrollment } = await supabase
+        .from('student_enrollments')
+        .select('id')
+        .eq('student_id', payload.studentId)
+        .eq('class_id', payload.classId)
+        .maybeSingle();
+
+      if (!enrollment) {
+        return { success: false, error: 'Forbidden: Student does not belong to this class roster.' };
+      }
+    }
+
+    const cleanPhotoUrl = payload.photoUrl && payload.photoUrl.trim().length > 0 ? payload.photoUrl.trim() : null;
+
+    const { error: updateErr } = await supabase
+      .from('students')
+      .update({
+        photo_url: cleanPhotoUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', payload.studentId);
+
+    if (updateErr) {
+      console.error('[updateStudentPhotoAction] Update error:', updateErr);
+      return { success: false, error: updateErr.message || 'Failed to update student photo.' };
+    }
+
+    revalidatePath('/students');
+    revalidatePath('/homeroom/student-study-plans');
+    revalidatePath('/homeroom/profiling');
+    revalidatePath('/homeroom');
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[updateStudentPhotoAction] Caught exception:', err);
+    return { success: false, error: err?.message || 'Failed to update student photo.' };
+  }
+}
+
+/**
+ * Authoritatively batch updates multiple students' photo_urls with class-level authorization.
+ */
+export async function batchUpdateStudentPhotosAction(payload: {
+  classId?: string;
+  updates: Array<{ studentId: string; photoUrl: string | null }>;
+}): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    const { getServerAuth, requireClassAccess } = await import('@/lib/auth-server');
+    const { user, profile, role } = await getServerAuth();
+    if (!user || !profile || !role) {
+      return { success: false, error: 'Unauthorized: Authentication required.' };
+    }
+
+    if (!payload.updates || !Array.isArray(payload.updates) || payload.updates.length === 0) {
+      return { success: false, error: 'No photo updates provided.' };
+    }
+
+    if (role === 'teacher') {
+      if (!payload.classId) {
+        return { success: false, error: 'Class ID is required for teacher photo updates.' };
+      }
+      await requireClassAccess(payload.classId);
+    } else if (role !== 'admin' && role !== 'principal') {
+      return { success: false, error: 'Forbidden: Insufficient permissions.' };
+    }
+
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+
+    // Verify all students belong to the authorized class roster if teacher
+    if (role === 'teacher' && payload.classId) {
+      const { data: enrollments } = await supabase
+        .from('student_enrollments')
+        .select('student_id')
+        .eq('class_id', payload.classId);
+
+      const enrolledIds = new Set((enrollments || []).map((e: any) => e.student_id));
+      for (const item of payload.updates) {
+        if (!enrolledIds.has(item.studentId)) {
+          return {
+            success: false,
+            error: `Forbidden: Student ${item.studentId} does not belong to this class roster.`,
+          };
+        }
+      }
+    }
+
+    let updatedCount = 0;
+    const nowIso = new Date().toISOString();
+
+    for (const item of payload.updates) {
+      const cleanPhotoUrl = item.photoUrl && item.photoUrl.trim().length > 0 ? item.photoUrl.trim() : null;
+      const { error } = await supabase
+        .from('students')
+        .update({
+          photo_url: cleanPhotoUrl,
+          updated_at: nowIso,
+        })
+        .eq('id', item.studentId);
+
+      if (!error) {
+        updatedCount++;
+      } else {
+        console.warn(`[batchUpdateStudentPhotosAction] Failed to update photo for ${item.studentId}:`, error);
+      }
+    }
+
+    revalidatePath('/students');
+    revalidatePath('/homeroom/student-study-plans');
+    revalidatePath('/homeroom/profiling');
+    revalidatePath('/homeroom');
+
+    return { success: true, count: updatedCount };
+  } catch (err: any) {
+    console.error('[batchUpdateStudentPhotosAction] Caught exception:', err);
+    return { success: false, error: err?.message || 'Failed to batch update student photos.' };
+  }
+}
+
