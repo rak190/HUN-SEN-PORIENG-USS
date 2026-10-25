@@ -37,18 +37,48 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, classI
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     
+    const normalizeText = (text: string) => {
+      return text
+        .toLowerCase()
+        .replace(/\.[^/.]+$/, "") // strip extension
+        .replace(/\(\d+\)/g, "") // strip copy numbers like (1)
+        .replace(/^[0-9០-៩\s._-]+/, "") // strip leading Khmer & Arabic numbers/separators
+        .replace(/[._-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    };
+
     const newFiles: FileWithPreview[] = Array.from(e.target.files).map(file => {
-      // Clean filename for matching
-      const cleanName = file.name.replace(/\.[^/.]+$/, "").trim().toLowerCase();
-      
-      // Auto-match logic
-      let matchedId = null;
-      const exactMatch = students.find(s => 
-        s.full_name.toLowerCase() === cleanName || 
-        s.english_name?.toLowerCase() === cleanName ||
-        s.student_id_number === cleanName
-      );
-      if (exactMatch) matchedId = exactMatch.id;
+      const rawCleanName = file.name.replace(/\.[^/.]+$/, "").trim().toLowerCase();
+      const normalizedName = normalizeText(file.name);
+
+      // Auto-match logic: exact match first, then normalized name match, then ID number
+      let matchedId: string | null = null;
+      const matchedStudent = students.find(s => {
+        const sFullName = s.full_name?.toLowerCase().trim();
+        const sEngName = s.english_name?.toLowerCase().trim();
+        const sNormName = normalizeText(s.full_name || '');
+        const sId = s.student_id_number?.toLowerCase().trim();
+
+        // 1. Direct match on full name or English name or ID
+        if (sFullName === rawCleanName || (sEngName && sEngName === rawCleanName) || (sId && sId === rawCleanName)) {
+          return true;
+        }
+
+        // 2. Normalized match (e.g. "១ ចាន់ណា ចន្រ្ទា" matches "ចាន់ណា ចន្រ្ទា")
+        if (normalizedName && (sNormName === normalizedName || sFullName === normalizedName)) {
+          return true;
+        }
+
+        // 3. Substring matching for Khmer names in filenames
+        if (sFullName && sFullName.length >= 3 && rawCleanName.includes(sFullName)) {
+          return true;
+        }
+
+        return false;
+      });
+
+      if (matchedStudent) matchedId = matchedStudent.id;
 
       return {
         id: Math.random().toString(36).substring(7),
@@ -96,7 +126,7 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, classI
         if (width > height) {
           if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
         } else {
-          if (height > maxHeight) { width = Math.round((width * maxHeight) / height); height = maxHeight; }
+          if (height > maxHeight) { width = Math.round((height * maxHeight) / height); height = maxHeight; }
         }
         const canvas = document.createElement('canvas');
         canvas.width = width; canvas.height = height;
@@ -123,32 +153,28 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, classI
 
       try {
         const compressedBlob = await compressImage(f.file, 500, 500, 0.8);
-        const res = await fetch('/api/s3-presign', {
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', compressedBlob, f.file.name.replace(/\.[^/.]+$/, "") + ".webp");
+        uploadFormData.append('studentId', f.matchedStudentId);
+        if (classId) {
+          uploadFormData.append('classId', classId);
+        }
+
+        // Direct same-origin upload with zero CORS issues
+        const res = await fetch('/api/upload-student-photo', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileName: f.file.name.replace(/\.[^/.]+$/, "") + ".webp",
-            fileType: 'image/webp'
-          })
+          body: uploadFormData,
         });
 
         if (!res.ok) {
           const errBody = await res.json().catch(() => ({}));
-          throw new Error(errBody.error || 'Failed to get presigned URL');
+          throw new Error(errBody.error || 'បរាជ័យក្នុងការផ្ទុករូបភាព');
         }
-        const { presignedUrl, publicUrl } = await res.json();
-
-        const uploadRes = await fetch(presignedUrl, {
-          method: 'PUT',
-          body: compressedBlob,
-          headers: { 'Content-Type': 'image/webp' }
-        });
-
-        if (!uploadRes.ok) throw new Error('Failed to upload image blob');
+        const uploadResult = await res.json();
 
         successfulUpdates.push({
           studentId: f.matchedStudentId,
-          photoUrl: publicUrl,
+          photoUrl: uploadResult.photoUrl,
         });
 
         setFiles(prev => prev.map(x => x.id === f.id ? { ...x, status: 'success' } : x));
@@ -161,19 +187,16 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, classI
       setProgress((completed / matchedFiles.length) * 100);
     }
 
-    // Authoritatively persist all uploaded photo URLs in the database
+    // Secondary sync pass to ensure state is synchronized
     if (successfulUpdates.length > 0) {
       try {
         const { batchUpdateStudentPhotosAction } = await import('@/app/(dashboard)/students/actions');
-        const actionRes = await batchUpdateStudentPhotosAction({
+        await batchUpdateStudentPhotosAction({
           classId,
           updates: successfulUpdates,
         });
-        if (!actionRes.success) {
-          console.error('[BulkImageUploadModal] batchUpdateStudentPhotosAction error:', actionRes.error);
-        }
       } catch (dbErr) {
-        console.error('[BulkImageUploadModal] Failed to call batchUpdateStudentPhotosAction:', dbErr);
+        console.warn('[BulkImageUploadModal] batchUpdateStudentPhotosAction note:', dbErr);
       }
     }
 

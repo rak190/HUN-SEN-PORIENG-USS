@@ -660,7 +660,6 @@ export default function StudentStudyPlanDocument({
                 src={student.photo_url}
                 alt={student.full_name}
                 className="w-full h-full object-cover rounded-xs"
-                crossOrigin="anonymous"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   const fallback = e.currentTarget.parentElement?.querySelector('.photo-fallback');

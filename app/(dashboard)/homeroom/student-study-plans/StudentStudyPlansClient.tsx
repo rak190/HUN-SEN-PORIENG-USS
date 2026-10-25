@@ -606,7 +606,6 @@ export default function StudentStudyPlansClient({
                             src={std.photo_url}
                             alt=""
                             className="w-full h-full object-cover"
-                            crossOrigin="anonymous"
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
                               const fallback = e.currentTarget.parentElement?.querySelector('.thumb-fallback');

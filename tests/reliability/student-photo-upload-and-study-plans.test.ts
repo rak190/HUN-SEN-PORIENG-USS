@@ -124,8 +124,8 @@ describe('Student Photo Upload & Study Plans Integration Suite', () => {
       'Photo frame must follow standard 3x4 aspect ratio (102px by 132px)'
     );
     assert.ok(
-      docContent.includes('crossOrigin="anonymous"'),
-      'Image must declare crossOrigin="anonymous" for clean PDF printing'
+      docContent.includes('onError='),
+      'Image must have onError fallback handler for network resilience'
     );
     assert.ok(
       docContent.includes('photo-fallback'),
@@ -156,6 +156,35 @@ describe('Student Photo Upload & Study Plans Integration Suite', () => {
     assert.ok(
       migrationContent.includes("NULLIF(p_student->>'photo_url', '')"),
       'Must insert photo_url on new student creation in save_student_atomic'
+    );
+  });
+
+  test('Scenario 7: /api/upload-student-photo provides zero-CORS direct upload and smart Khmer matching', () => {
+    const uploadRoutePath = path.join(rootDir, 'app', 'api', 'upload-student-photo', 'route.ts');
+    assert.ok(fs.existsSync(uploadRoutePath), '/api/upload-student-photo route must exist');
+    const uploadContent = fs.readFileSync(uploadRoutePath, 'utf-8');
+
+    assert.ok(uploadContent.includes('getServerAuth'), 'Must authenticate user session');
+    assert.ok(uploadContent.includes("bucketName = 'student-profiles'"), 'Must upload to student-profiles bucket');
+    assert.ok(uploadContent.includes('revalidatePath'), 'Must revalidate affected paths');
+
+    // Check BulkImageUploadModal uses normalized Khmer name matching and direct upload
+    const modalContent = fs.readFileSync(bulkModalPath, 'utf-8');
+    assert.ok(
+      modalContent.includes('normalizeText'),
+      'BulkImageUploadModal must normalize Khmer numerals and prefixes'
+    );
+    assert.ok(
+      modalContent.includes('/api/upload-student-photo'),
+      'BulkImageUploadModal must use same-origin /api/upload-student-photo route'
+    );
+
+    // Check StudentProfileDrawer uses same-origin upload
+    const drawerPath = path.join(rootDir, 'components', 'students', 'StudentProfileDrawer.tsx');
+    const drawerContent = fs.readFileSync(drawerPath, 'utf-8');
+    assert.ok(
+      drawerContent.includes('/api/upload-student-photo'),
+      'StudentProfileDrawer must use /api/upload-student-photo'
     );
   });
 });

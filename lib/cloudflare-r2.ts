@@ -18,4 +18,4 @@ export const r2Client = new S3Client({
   },
 });
 
-export const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'kru-ai-storage';
+export const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'porieng-uss-storage';

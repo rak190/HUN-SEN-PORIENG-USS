@@ -207,38 +207,30 @@ export default function AdminEditStudentModal({
     try {
       let finalPhotoUrl = photoUrl;
 
-      // 1. Upload Staged Photo to R2 if selected
+      // 1. Upload Staged Photo if selected
       if (stagedPhotoFile) {
         setIsUploadingPhoto(true);
         try {
           const compressedBlob = await compressImage(stagedPhotoFile);
-          const presignRes = await fetch('/api/s3-presign', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fileName: `${studentIdNumber.trim() || 'student'}-${Date.now()}.webp`,
-              fileType: 'image/webp',
-            }),
-          });
-
-          if (!presignRes.ok) {
-            const errData = await presignRes.json().catch(() => ({}));
-            throw new Error(errData.error || 'បរាជ័យក្នុងការស្នើសុំសិទ្ធិផ្ទុករូបភាព');
+          const uploadFormData = new FormData();
+          uploadFormData.append('file', compressedBlob, `${studentIdNumber.trim() || 'student'}-${Date.now()}.webp`);
+          uploadFormData.append('studentId', student.id);
+          if (student?.class_id) {
+            uploadFormData.append('classId', student.class_id);
           }
 
-          const { presignedUrl, publicUrl } = await presignRes.json();
-
-          const uploadRes = await fetch(presignedUrl, {
-            method: 'PUT',
-            body: compressedBlob,
-            headers: { 'Content-Type': 'image/webp' },
+          const uploadRes = await fetch('/api/upload-student-photo', {
+            method: 'POST',
+            body: uploadFormData,
           });
 
           if (!uploadRes.ok) {
-            throw new Error('បរាជ័យក្នុងការផ្ទុករូបភាពទៅកាន់ Cloudflare R2');
+            const errData = await uploadRes.json().catch(() => ({}));
+            throw new Error(errData.error || 'បរាជ័យក្នុងការផ្ទុករូបភាព');
           }
 
-          finalPhotoUrl = publicUrl;
+          const { photoUrl: uploadedUrl } = await uploadRes.json();
+          finalPhotoUrl = uploadedUrl;
         } catch (uploadErr: any) {
           console.warn('Student photo upload failed:', uploadErr);
           setErrorMsg(`ការផ្ទុករូបភាពបរាជ័យ៖ ${uploadErr.message || 'សូមពិនិត្យការតភ្ជាប់ប្រព័ន្ធផ្ទុកឯកសារ'}`);

@@ -177,8 +177,11 @@ describe('Admin Student Profile Editing Suite', () => {
     assert.ok(content.includes('scholarship'), 'Must include scholarship select/state');
     assert.ok(content.includes('orphan'), 'Must include orphan select/state');
 
-    // Photo presign & WebP compression
-    assert.ok(content.includes('/api/s3-presign'), 'Must use /api/s3-presign for presigned S3/R2 upload');
+    // Photo upload & WebP compression
+    assert.ok(
+      content.includes('/api/upload-student-photo') || content.includes('/api/s3-presign'),
+      'Must use /api/upload-student-photo or /api/s3-presign for photo upload'
+    );
     assert.ok(content.includes('image/webp'), 'Must compress images to WebP format');
     assert.ok(
       content.includes('updateAdminStudentProfileAction'),

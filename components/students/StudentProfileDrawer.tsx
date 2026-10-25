@@ -125,36 +125,34 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
       // 1. Client-side compression with Canvas
       const compressedBlob = await compressImage(file, 500, 500, 0.8);
 
-      // 2. Request Presigned URL
-      const res = await fetch('/api/s3-presign', {
+      // 2. Direct same-origin upload (zero CORS, dual storage)
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', compressedBlob, file.name.replace(/\.[^/.]+$/, "") + ".webp");
+      if (formData.id) {
+        uploadFormData.append('studentId', formData.id);
+      }
+      if (formData.class_id) {
+        uploadFormData.append('classId', formData.class_id);
+      }
+
+      const res = await fetch('/api/upload-student-photo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: file.name.replace(/\.[^/.]+$/, "") + ".webp", // force webp extension
-          fileType: 'image/webp'
-        })
+        body: uploadFormData,
       });
 
-      if (!res.ok) throw new Error('Failed to get presigned URL');
-      const { presignedUrl, publicUrl } = await res.json();
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'បរាជ័យក្នុងការបញ្ចូលរូបភាព');
+      }
 
-      // 3. Upload directly to Cloudflare R2
-      const uploadRes = await fetch(presignedUrl, {
-        method: 'PUT',
-        body: compressedBlob,
-        headers: {
-          'Content-Type': 'image/webp',
-        }
-      });
+      const { photoUrl } = await res.json();
 
-      if (!uploadRes.ok) throw new Error('Failed to upload image to R2');
+      // 3. Update local form state
+      setFormData(prev => ({ ...prev, photo_url: photoUrl }));
 
-      // 4. Update local form state
-      setFormData(prev => ({ ...prev, photo_url: publicUrl }));
-
-    } catch (err) {
-      console.error(err);
-      alert('បរាជ័យក្នុងការបញ្ចូលរូបភាព។ សូមសាកល្បងម្តងទៀត។');
+    } catch (err: any) {
+      console.error('Image upload error:', err);
+      alert(`បរាជ័យក្នុងការបញ្ចូលរូបភាព៖ ${err?.message || 'សូមសាកល្បងម្តងទៀត'}`);
     } finally {
       setIsUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
