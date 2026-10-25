@@ -549,133 +549,130 @@ export default function StudentStudyPlanDocument({
       className={`study-plan-page w-[1122px] min-h-[765px] shrink-0 bg-white p-5 text-black shadow-lg rounded-sm border border-slate-300 print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:h-full flex flex-col justify-between font-siemreap select-none ${className}`}
       style={{ boxSizing: 'border-box' }}
     >
-      {/* ----------------- TOP HEADER SECTION ----------------- */}
       <div>
-        <div className="flex justify-between items-start leading-tight">
-          {/* Top Left: School & Provincial Ministry */}
-          <div className="text-left">
-            <p className="text-[12px] font-bold text-slate-800">{departmentName}</p>
-            <p className="text-[14px] font-moul font-bold text-[#155EEF] tracking-wide mt-0.5">
-              {schoolName}
-            </p>
-          </div>
-
-          {/* Top Right: Kingdom Motto & Royal Ribbon */}
-          <div className="text-center pr-28">
-            <p className="text-[13px] font-moul font-bold text-slate-900 leading-snug">
-              ព្រះរាជាណាចក្រកម្ពុជា
-            </p>
-            <p className="text-[13px] font-moul font-bold text-slate-900 leading-snug">
-              ជាតិ សាសនា ព្រះមហាក្សត្រ
-            </p>
-            <p className="text-[12px] text-amber-600 tracking-widest mt-0.5 font-serif select-none">
-              
-            </p>
+        {/* ----------------- TOP HEADER SECTION (Aligned with ផែនការសិស្ស 8-12.xlsx) ----------------- */}
+        <div className="relative">
+        {/* Right: Student 3x4 Photo Frame (Cells U2:X7 in Excel) */}
+        <div className="absolute top-1 right-0 w-[102px] h-[132px] shrink-0 border border-slate-400 bg-slate-50 p-0.5 rounded-xs overflow-hidden flex items-center justify-center shadow-2xs z-10">
+          {student.photo_url ? (
+            <img
+              src={student.photo_url}
+              alt={student.full_name}
+              className="w-full h-full object-cover rounded-xs"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                const fallback = e.currentTarget.parentElement?.querySelector('.photo-fallback');
+                if (fallback) (fallback as HTMLElement).style.display = 'flex';
+              }}
+            />
+          ) : null}
+          <div 
+            className={`photo-fallback w-full h-full flex flex-col items-center justify-center text-slate-400 border border-dashed border-slate-300 rounded-xs bg-slate-100/50 ${
+              student.photo_url ? 'hidden' : 'flex'
+            }`}
+          >
+            <span className="text-[10px] font-bold text-slate-400">រូបថត 3x4</span>
           </div>
         </div>
 
-        {/* Document Title Banner */}
-        <div className="text-center mt-1 mb-2">
+        {/* Row 1 & 2: Centered Kingdom Motto */}
+        <div className="text-center leading-tight">
+          <p className="text-[13px] font-moul font-bold text-slate-900 leading-snug">
+            ព្រះរាជាណាចក្រកម្ពុជា
+          </p>
+          <p className="text-[13px] font-moul font-bold text-slate-900 leading-snug">
+            ជាតិ សាសនា ព្រះមហាក្សត្រ
+          </p>
+          <p className="text-[11px] text-amber-600 tracking-widest font-serif select-none -mt-0.5 mb-1">
+            
+          </p>
+        </div>
+
+        {/* Row 3 & 4: School & Provincial Ministry on Left */}
+        <div className="text-left -mt-8 pr-28">
+          <p className="text-[12px] font-bold text-slate-800 leading-tight">{departmentName}</p>
+          <p className="text-[13.5px] font-moul font-bold text-[#155EEF] tracking-wide mt-0.5 leading-tight">
+            {schoolName}
+          </p>
+        </div>
+
+        {/* Row 5: Document Title Banner (Purple #7030A0) */}
+        <div className="text-center mt-2 mb-2 pr-28">
           <h1 className="text-[15px] font-moul text-[#7030A0] tracking-wide">
             ផែនការសិក្សារបស់សិស្ស ឆ្នាំសិក្សា{toKhmerDigits(academicYearName)}{' '}
             <span className="text-[#7030A0] font-bold">{gradeSubtitle}</span>
           </h1>
         </div>
 
-        {/* Student Photo and Identity Grid */}
-        <div className="flex items-start justify-between gap-4 mt-2">
-          {/* Left Metadata Grid */}
-          <div className="flex-1 grid grid-cols-12 gap-y-1 text-[12px] font-semibold text-slate-900 leading-relaxed">
-            {/* Row 1 */}
-            <div className="col-span-8 flex items-center flex-wrap gap-x-4">
-              <span className="whitespace-nowrap">
-                ឈ្មោះសិស្ស ៖{' '}
-                <strong className="font-moul text-[13px] text-slate-900 ml-1">
-                  {student.full_name || '..................................'}
-                </strong>
-              </span>
-              <span className="whitespace-nowrap">
-                ភេទ ៖ <strong className="font-bold">{genderText}</strong>
-              </span>
-              <span className="whitespace-nowrap">
-                ថ្នាក់ទី៖{' '}
-                <strong className="font-bold text-[#155EEF]">
-                  {toKhmerDigits(classInfo.name)}
-                </strong>
-              </span>
-            </div>
-            <div className="col-span-4 text-left">
-              <span>
-                ស្ថានភាពគ្រួសារ ៖{' '}
-                <strong className="font-bold text-slate-900">{familyCondition}</strong>
-              </span>
-            </div>
-
-            {/* Row 2 */}
-            <div className="col-span-8">
-              <span>
-                សាលារៀន ៖{' '}
-                <strong className="font-bold text-slate-900">{schoolAbbr}</strong>
-              </span>
-            </div>
-            <div className="col-span-4 text-left">
-              <span>
-                ខេត្ត ៖ <strong className="font-bold text-slate-900">{provinceName}</strong>
-              </span>
-            </div>
-
-            {/* Row 3 */}
-            <div className="col-span-8">
-              <span>
-                ឈ្មោះមាតាបិតា ៖{' '}
-                <strong className="font-bold text-slate-900">{parentsName}</strong>
-              </span>
-            </div>
-            <div className="col-span-4 text-left">
-              <span>
-                លេខទូរស័ព្ទ ៖{' '}
-                <strong className="font-bold text-slate-900">{toKhmerDigits(parentPhone)}</strong>
-              </span>
-            </div>
-
-            {/* Row 4 */}
-            <div className="col-span-8">
-              <span>
-                ឈ្មោះគ្រូបន្ទុកថ្នាក់ ៖{' '}
-                <strong className="font-bold text-slate-900">{teacherName}</strong>
-              </span>
-            </div>
-            <div className="col-span-4 text-left">
-              <span>
-                លេខទូរស័ព្ទ ៖{' '}
-                <strong className="font-bold text-slate-900">{toKhmerDigits(teacherPhone)}</strong>
-              </span>
-            </div>
+        {/* Rows 6 to 9: Student Identity Grid */}
+        <div className="pr-28 grid grid-cols-12 gap-y-1 text-[12px] font-semibold text-slate-900 leading-relaxed mt-1">
+          {/* Row 1 */}
+          <div className="col-span-8 flex items-center flex-wrap gap-x-4">
+            <span className="whitespace-nowrap">
+              ឈ្មោះសិស្ស ៖{' '}
+              <strong className="font-moul text-[13px] text-slate-900 ml-1">
+                {student.full_name || '..................................'}
+              </strong>
+            </span>
+            <span className="whitespace-nowrap">
+              ភេទ ៖ <strong className="font-bold">{genderText}</strong>
+            </span>
+            <span className="whitespace-nowrap">
+              ថ្នាក់ទី៖{' '}
+              <strong className="font-bold text-[#155EEF]">
+                {toKhmerDigits(classInfo.name)}
+              </strong>
+            </span>
+          </div>
+          <div className="col-span-4 text-left">
+            <span>
+              ស្ថានភាពគ្រួសារ ៖{' '}
+              <strong className="font-bold text-slate-900">{familyCondition}</strong>
+            </span>
           </div>
 
-          {/* Right: Student Photo Frame (Passport 3x4 ratio) */}
-          <div className="w-[102px] h-[132px] shrink-0 border border-slate-400 bg-slate-50 p-0.5 rounded-xs overflow-hidden flex items-center justify-center shadow-2xs relative">
-            {student.photo_url ? (
-              <img
-                src={student.photo_url}
-                alt={student.full_name}
-                className="w-full h-full object-cover rounded-xs"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  const fallback = e.currentTarget.parentElement?.querySelector('.photo-fallback');
-                  if (fallback) (fallback as HTMLElement).style.display = 'flex';
-                }}
-              />
-            ) : null}
-            <div 
-              className={`photo-fallback w-full h-full flex flex-col items-center justify-center text-slate-400 border border-dashed border-slate-300 rounded-xs bg-slate-100/50 ${
-                student.photo_url ? 'hidden' : 'flex'
-              }`}
-            >
-              <span className="text-[10px] font-bold text-slate-400">រូបថត 3x4</span>
-            </div>
+          {/* Row 2 */}
+          <div className="col-span-8">
+            <span>
+              សាលារៀន ៖{' '}
+              <strong className="font-bold text-slate-900">{schoolAbbr}</strong>
+            </span>
+          </div>
+          <div className="col-span-4 text-left">
+            <span>
+              ខេត្ត ៖ <strong className="font-bold text-slate-900">{provinceName}</strong>
+            </span>
+          </div>
+
+          {/* Row 3 */}
+          <div className="col-span-8">
+            <span>
+              ឈ្មោះមាតាបិតា ៖{' '}
+              <strong className="font-bold text-slate-900">{parentsName}</strong>
+            </span>
+          </div>
+          <div className="col-span-4 text-left">
+            <span>
+              លេខទូរស័ព្ទ ៖{' '}
+              <strong className="font-bold text-slate-900">{toKhmerDigits(parentPhone)}</strong>
+            </span>
+          </div>
+
+          {/* Row 4 */}
+          <div className="col-span-8">
+            <span>
+              ឈ្មោះគ្រូបន្ទុកថ្នាក់ ៖{' '}
+              <strong className="font-bold text-slate-900">{teacherName}</strong>
+            </span>
+          </div>
+          <div className="col-span-4 text-left">
+            <span>
+              លេខទូរស័ព្ទ ៖{' '}
+              <strong className="font-bold text-slate-900">{toKhmerDigits(teacherPhone)}</strong>
+            </span>
           </div>
         </div>
+      </div>
 
         {/* Dynamic Grade-Specific Score Bands Legend with 'C' highlighted in Red */}
         <div className="mt-2.5 mb-1.5 text-[10px] font-siemreap leading-tight text-slate-900 space-y-0.5 border-t border-slate-200 pt-1.5">

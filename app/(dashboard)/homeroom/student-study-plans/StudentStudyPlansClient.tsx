@@ -209,8 +209,8 @@ export default function StudentStudyPlansClient({
     setIsExportingPdf(true);
     try {
       const dataUrl = await toJpeg(previewDocRef.current, {
-        quality: 0.95,
-        pixelRatio: 2,
+        quality: 0.98,
+        pixelRatio: 2.5,
         backgroundColor: '#ffffff',
       });
 
@@ -261,8 +261,8 @@ export default function StudentStudyPlansClient({
         const node = studentNodes[i];
 
         const dataUrl = await toJpeg(node, {
-          quality: 0.92,
-          pixelRatio: 1.8,
+          quality: 0.96,
+          pixelRatio: 2.5,
           backgroundColor: '#ffffff',
         });
 
@@ -1071,7 +1071,7 @@ export default function StudentStudyPlansClient({
         }}
       >
         {selectedStudents.map((std) => (
-          <div key={`pdf-${std.id}`} className="w-[1122px] h-[792px] bg-white mb-8">
+          <div key={`pdf-${std.id}`} className="w-[1122px] min-h-[765px] bg-white mb-8 overflow-hidden">
             <StudentStudyPlanDocument
               student={std}
               classInfo={classInfo}
