@@ -4,6 +4,7 @@ import React from 'react';
 import { FileText, Printer } from 'lucide-react';
 import { Student, AcademicYear } from '@/types';
 import Modal from '@/components/ui/Modal';
+import { formatDobForDisplay } from '@/lib/utils/student-date';
 
 interface ClassRosterExportModalProps {
   isOpen: boolean;
@@ -52,7 +53,7 @@ export function ClassRosterExportModal({
     );
 
     // Headers
-    const headers = ['ល.រ', 'អត្តលេខ', 'គោត្តនាម និងនាម', 'ភេទ', 'ថ្ងៃខែឆ្នាំកំណើត', 'ទីកន្លែងកំណើត / អាស័យដ្ឋានបច្ចុប្បន្ន', 'ឈ្មោះអាណាព្យាបាល', 'លេខទូរស័ព្ទ', 'បណ្ណក្រីក្រ', 'ផ្សេងៗ'];
+    const headers = ['ល.រ', 'អត្តលេខ', 'គោត្តនាម និងនាម', 'ភេទ', 'ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)', 'ទីកន្លែងកំណើត / អាស័យដ្ឋានបច្ចុប្បន្ន', 'ឈ្មោះអាណាព្យាបាល', 'លេខទូរស័ព្ទ', 'បណ្ណក្រីក្រ', 'ផ្សេងៗ'];
     const headerRow = worksheet.getRow(startRow);
     headers.forEach((h, i) => {
       headerRow.getCell(i + 1).value = h;
@@ -65,7 +66,7 @@ export function ClassRosterExportModal({
       row.getCell(2).value = std.student_id_number || '-';
       row.getCell(3).value = std.full_name;
       row.getCell(4).value = std.gender === 'F' || std.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស';
-      row.getCell(5).value = std.date_of_birth ? new Date(std.date_of_birth).toLocaleDateString('en-GB') : '-';
+      row.getCell(5).value = std.date_of_birth ? formatDobForDisplay(std.date_of_birth) : '-';
       row.getCell(6).value = std.current_address || '-';
       row.getCell(7).value = std.guardian_name || std.father_name || std.mother_name || '-';
       row.getCell(8).value = std.guardian_phone || std.father_phone || std.mother_phone || '-';
@@ -91,7 +92,7 @@ export function ClassRosterExportModal({
         <td style="border: 1px solid #000; padding: 6px; text-align: center;">${std.student_id_number || '-'}</td>
         <td style="border: 1px solid #000; padding: 6px;">${std.full_name}</td>
         <td style="border: 1px solid #000; padding: 6px; text-align: center;">${std.gender === 'F' || std.gender === 'ស្រី' ? 'ស្រី' : 'ប្រុស'}</td>
-        <td style="border: 1px solid #000; padding: 6px; text-align: center;">${std.date_of_birth ? new Date(std.date_of_birth).toLocaleDateString('en-GB') : '-'}</td>
+        <td style="border: 1px solid #000; padding: 6px; text-align: center;">${std.date_of_birth ? formatDobForDisplay(std.date_of_birth) : '-'}</td>
         <td style="border: 1px solid #000; padding: 6px;">${std.current_address || '-'}</td>
         <td style="border: 1px solid #000; padding: 6px;">${std.guardian_name || std.father_name || std.mother_name || '-'}</td>
         <td style="border: 1px solid #000; padding: 6px; text-align: center;">${std.guardian_phone || std.father_phone || std.mother_phone || '-'}</td>

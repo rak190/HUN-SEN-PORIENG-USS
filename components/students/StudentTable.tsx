@@ -10,6 +10,7 @@ import {
 } from '@/app/(dashboard)/students/types';
 import { UserSquare2, Edit, LogOut, ArrowUpDown, ArrowUp, ArrowDown, Heart, AlertCircle, AlertTriangle, Check, Layers, Lock } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { formatDobForDisplay } from '@/lib/utils/student-date';
 
 export { normalizeKhmerDigits, normalizePastedCell };
 
@@ -369,6 +370,10 @@ export default function StudentTable({
         const matched = options.find(o => o.value === String(val));
         return matched ? matched.label : String(val || '-');
       }
+      if (field === 'date_of_birth' || field === 'dob') {
+        const formatted = formatDobForDisplay(String(val || ''));
+        return formatted ? formatted : <span className="text-slate-300">-</span>;
+      }
       return val ? String(val) : <span className="text-slate-300">-</span>;
     }
 
@@ -500,7 +505,7 @@ export default function StudentTable({
                   {renderSortHeader('ភេទ', 'gender', 'center', 'w-20')}
                   {renderSortHeader('លេខតុ', 'desk_number', 'center', 'w-24')}
                   {renderSortHeader('លេខបន្ទប់', 'room_number', 'center', 'w-28')}
-                  {renderSortHeader('ថ្ងៃខែឆ្នាំកំណើត', 'date_of_birth', 'left', 'w-36')}
+                  {renderSortHeader('ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)', 'date_of_birth', 'left', 'w-40')}
                   {renderSortHeader('អាយុ', 'age', 'center', 'w-20')}
                   <th className="p-3.5 w-32">សំបុត្រកំណើត</th>
                   <th className="p-3.5 w-36">ទូរស័ព្ទសិស្ស</th>

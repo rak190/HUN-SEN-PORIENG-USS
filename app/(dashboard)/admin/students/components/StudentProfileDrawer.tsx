@@ -7,6 +7,7 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { HomeVisit } from '@/types';
 import AdminEditStudentModal from './AdminEditStudentModal';
+import { formatDobForDisplay } from '@/lib/utils/student-date';
 
 interface StudentProfileDrawerProps {
   isOpen: boolean;
@@ -204,18 +205,9 @@ export default function StudentProfileDrawer({ isOpen, onClose, student, onUpdat
                 <p className="font-bold text-slate-800">{current.student_id_number || '-'}</p>
               </div>
               <div>
-                <p className="text-slate-400 font-semibold mb-0.5">ថ្ងៃខែឆ្នាំកំណើត</p>
+                <p className="text-slate-400 font-semibold mb-0.5">ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)</p>
                 <p className="font-bold text-slate-800">
-                  {dobDisplay ? (
-                    (() => {
-                      try {
-                        const d = new Date(dobDisplay);
-                        return isNaN(d.getTime()) ? dobDisplay : d.toLocaleDateString('km-KH');
-                      } catch {
-                        return dobDisplay;
-                      }
-                    })()
-                  ) : '-'}
+                  {dobDisplay ? formatDobForDisplay(dobDisplay) : '-'}
                 </p>
               </div>
             </div>

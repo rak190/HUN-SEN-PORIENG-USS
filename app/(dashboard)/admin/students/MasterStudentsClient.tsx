@@ -24,6 +24,7 @@ import StudentGoogleSheetGrid from './components/StudentGoogleSheetGrid';
 import AdminStudentRequestsQueue from './components/AdminStudentRequestsDrawer';
 import QuickSeatingUpdateModal from '@/components/admin/QuickSeatingUpdateModal';
 import { fetchExportData, getPendingStudentRequests, batchRegisterBasicStudents, bulkArchiveStudents } from './actions';
+import { formatDobForDisplay } from '@/lib/utils/student-date';
 
 interface MasterStudentsClientProps {
   initialStudents: any[];
@@ -313,6 +314,7 @@ export default function MasterStudentsClient({
         'អត្តលេខ': s.student_id_number || '',
         'គោត្តនាម និងនាម': s.full_name,
         'ភេទ': s.gender,
+        'ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)': s.dob ? formatDobForDisplay(s.dob) : (s.date_of_birth ? formatDobForDisplay(s.date_of_birth) : ''),
         'ថ្នាក់': s.class_name,
         'គ្រូបន្ទុកថ្នាក់': s.homeroom_teacher,
         'លេខតុ': s.desk_number || '',
@@ -327,9 +329,11 @@ export default function MasterStudentsClient({
         { wch: 15 }, // ID
         { wch: 30 }, // Name
         { wch: 10 }, // Gender
+        { wch: 18 }, // ថ្ងៃខែឆ្នាំកំណើត
         { wch: 15 }, // Class
         { wch: 25 }, // Teacher
         { wch: 15 }, // Desk Number
+        { wch: 15 }, // Room Number
         { wch: 15 }, // Status
       ];
 
@@ -365,14 +369,15 @@ export default function MasterStudentsClient({
 
     // 2. Data Template Sheet
     const wsData = [{
-      'អត្តលេខ': '',
-      'នាមត្រកូល': '',
-      'នាមខ្លួន': '',
-      'ភេទ': '',
-      'ថ្នាក់': '',
-      'ឆ្នាំសិក្សា': '',
-      'លេខតុ': '',
-      'បន្ទប់ប្រឡង': ''
+      'អត្តលេខ': '00101',
+      'នាមត្រកូល': 'ចាន់',
+      'នាមខ្លួន': 'សុខា',
+      'ភេទ': 'ស្រី',
+      'ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)': '15 04 2008',
+      'ថ្នាក់': '7A',
+      'ឆ្នាំសិក្សា': '2024-2025',
+      'លេខតុ': '01',
+      'បន្ទប់ប្រឡង': '01'
     }];
 
     const ws = XLSX.utils.json_to_sheet(wsData);
@@ -383,6 +388,7 @@ export default function MasterStudentsClient({
       { wch: 20 }, // នាមត្រកូល
       { wch: 20 }, // នាមខ្លួន
       { wch: 10 }, // ភេទ
+      { wch: 20 }, // ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)
       { wch: 15 }, // ថ្នាក់
       { wch: 15 }, // ឆ្នាំសិក្សា
       { wch: 10 }, // លេខតុ

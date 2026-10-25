@@ -1,3 +1,5 @@
+import { parseStudentDob } from '@/lib/utils/student-date';
+
 export type MissingValueBehavior = 'preserve' | 'null' | 'empty_string' | 'validate_error' | 'boolean_false';
 
 export interface ImportSchemaField {
@@ -26,25 +28,7 @@ function preserveText(val: any): string {
 }
 
 function normalizeDate(dob: any): string | null {
-  if (!dob) return null;
-  if (typeof dob === 'number') {
-    const excelEpoch = new Date(1899, 11, 30);
-    const parsedDate = new Date(excelEpoch.getTime() + dob * 86400000);
-    return parsedDate.toISOString().split('T')[0];
-  }
-  if (typeof dob === 'string') {
-    const str = dob.trim();
-    if (str.includes('/')) {
-      const parts = str.split('/');
-      if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    } else if (str.includes('-')) {
-      const parts = str.split('-');
-      if (parts.length === 3) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    }
-    const d = new Date(str);
-    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
-  }
-  return null;
+  return parseStudentDob(dob);
 }
 
 // Map the 99-column spreadsheet strictly to DB fields
@@ -138,7 +122,15 @@ export const studentImportSchema: ImportSchemaField[] = [
   {
     canonicalField: 'dob',
     dbField: 'dob',
-    headers: ['(DD/MM/YYYY) 22/01/2001', 'ថ្ងៃខែឆ្នាំកំណើត (DD/MM/YYYY)', 'ថ្ងៃខែឆ្នាំកំណើត'],
+    headers: [
+      'ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)',
+      '(DD MM YYYY) 22 01 2001',
+      '(DD/MM/YYYY) 22/01/2001',
+      'ថ្ងៃខែឆ្នាំកំណើត (DD/MM/YYYY)',
+      'ថ្ងៃខែឆ្នាំកំណើត',
+      'ថ្ងៃខែឆ្នាំកំណើត (YYYY-MM-DD)',
+      'DOB'
+    ],
     type: 'date',
     required: false,
     missingValueBehavior: 'null',

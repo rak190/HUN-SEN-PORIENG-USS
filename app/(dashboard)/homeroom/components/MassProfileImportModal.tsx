@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { X, Upload, Loader2, FileSpreadsheet, Check, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { massProfileUpdateAction } from '../actions';
+import { parseStudentDob, formatDobForDisplay } from '@/lib/utils/student-date';
 
 interface MassProfileImportModalProps {
   isOpen: boolean;
@@ -35,7 +36,7 @@ export default function MassProfileImportModal({
       'អត្តលេខ': s.student_id_number || '',
       'ឈ្មោះពេញ': s.full_name || '',
       'ភេទ': s.gender || '',
-      'ថ្ងៃខែឆ្នាំកំណើត (YYYY-MM-DD)': s.date_of_birth || '',
+      'ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)': s.date_of_birth ? formatDobForDisplay(s.date_of_birth) : '',
       'ទូរស័ព្ទសិស្ស': s.student_phone || '',
       'ស្ថានភាព (new/repeater)': s.status || 'new',
       'ទម្ងន់ (Kg)': s.weight_kg || '',
@@ -81,7 +82,7 @@ export default function MassProfileImportModal({
           id: row['ID (Do Not Change)'],
           student_id_number: row['អត្តលេខ'],
           full_name: row['ឈ្មោះពេញ'],
-          date_of_birth: row['ថ្ងៃខែឆ្នាំកំណើត (YYYY-MM-DD)'],
+          date_of_birth: parseStudentDob(row['ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)'] || row['ថ្ងៃខែឆ្នាំកំណើត (YYYY-MM-DD)'] || row['ថ្ងៃខែឆ្នាំកំណើត'] || row['DOB']) || undefined,
           student_phone: row['ទូរស័ព្ទសិស្ស'],
           status: row['ស្ថានភាព (new/repeater)'],
           weight_kg: parseFloat(row['ទម្ងន់ (Kg)']) || undefined,

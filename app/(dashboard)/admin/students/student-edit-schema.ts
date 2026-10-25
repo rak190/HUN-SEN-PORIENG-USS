@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseStudentDob } from '@/lib/utils/student-date';
 
 export const AdminUpdateStudentSchema = z.object({
   studentId: z.string().uuid({ message: 'លេខសម្គាល់សិស្សមិនត្រឹមត្រូវ (Invalid Student UUID)' }),
@@ -6,7 +7,9 @@ export const AdminUpdateStudentSchema = z.object({
   student_id_number: z.string().trim().min(1, { message: 'សូមបញ្ចូលអត្តលេខសិស្ស' }).max(50),
   english_name: z.string().trim().max(100).optional().nullable(),
   gender: z.enum(['M', 'F', 'ប្រុស', 'ស្រី'], { message: 'ភេទត្រូវតែជា ប្រុស ឬ ស្រី (M or F)' }),
-  dob: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'ទម្រង់ថ្ងៃខែឆ្នាំកំណើតត្រូវតែជា ឆ្នាំ-ខែ-ថ្ងៃ (YYYY-MM-DD)' }),
+  dob: z.string().trim().transform(val => parseStudentDob(val) || val).pipe(
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'ទម្រង់ថ្ងៃខែឆ្នាំកំណើតមិនត្រឹមត្រូវ (សូមបញ្ចូលជា DD MM YYYY ឬ YYYY-MM-DD)' })
+  ),
   photo_url: z.string().trim().optional().nullable().or(z.literal('')),
   parent_phone: z.string().trim().max(30).optional().nullable(),
   emergency_contact_phone: z.string().trim().max(30).optional().nullable(),

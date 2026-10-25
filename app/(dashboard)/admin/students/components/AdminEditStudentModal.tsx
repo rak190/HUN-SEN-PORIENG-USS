@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { updateAdminStudentProfileAction } from '../actions';
 import type { AdminUpdateStudentPayload } from '../student-edit-schema';
+import { parseStudentDob, formatDobForDisplay } from '@/lib/utils/student-date';
 
 interface AdminEditStudentModalProps {
   isOpen: boolean;
@@ -36,6 +37,8 @@ export default function AdminEditStudentModal({
   const [englishName, setEnglishName] = useState('');
   const [gender, setGender] = useState<'M' | 'F'>('M');
   const [dob, setDob] = useState('');
+  const [dobInput, setDobInput] = useState('');
+  const datePickerRef = useRef<HTMLInputElement>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [stagedPhotoFile, setStagedPhotoFile] = useState<File | null>(null);
@@ -79,7 +82,9 @@ export default function AdminEditStudentModal({
     
     // Resolve DOB from dob or date_of_birth
     const rawDob = student.dob || student.date_of_birth || '';
-    setDob(rawDob ? rawDob.slice(0, 10) : '');
+    const iso = rawDob ? rawDob.slice(0, 10) : '';
+    setDob(iso);
+    setDobInput(formatDobForDisplay(iso));
 
     setPhotoUrl(student.photo_url || null);
     setPhotoPreview(student.photo_url || null);
@@ -196,8 +201,9 @@ export default function AdminEditStudentModal({
       return;
     }
 
-    if (!dob.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(dob.trim())) {
-      setErrorMsg('សូមជ្រើសរើសថ្ងៃខែឆ្នាំកំណើតឱ្យបានត្រឹមត្រូវ (YYYY-MM-DD)');
+    const parsedDob = parseStudentDob(dobInput || dob);
+    if (!parsedDob) {
+      setErrorMsg('សូមបញ្ចូលថ្ងៃខែឆ្នាំកំណើតឱ្យបានត្រឹមត្រូវ (ឧ. 22 01 2008 ឬ 22/01/2008)');
       setActiveTab('identity');
       return;
     }
@@ -249,7 +255,7 @@ export default function AdminEditStudentModal({
         student_id_number: studentIdNumber.trim(),
         english_name: englishName.trim() || null,
         gender: gender,
-        dob: dob.trim(),
+        dob: parsedDob,
         photo_url: finalPhotoUrl || '',
         parent_phone: parentPhone.trim() || null,
         emergency_contact_phone: emergencyPhone.trim() || null,
@@ -511,18 +517,62 @@ export default function AdminEditStudentModal({
 
               <div className="sm:col-span-2">
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ថ្ងៃខែឆ្នាំកំណើត (Date of Birth) <span className="text-rose-500">*</span>
+                  ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY) <span className="text-rose-500">*</span>
                 </label>
-                <div className="relative">
-                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <div className="relative flex items-center">
                   <input
+                    type="text"
+                    value={dobInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDobInput(val);
+                      const parsed = parseStudentDob(val);
+                      if (parsed) setDob(parsed);
+                    }}
+                    onBlur={() => {
+                      if (dobInput.trim()) {
+                        const parsed = parseStudentDob(dobInput);
+                        if (parsed) {
+                          setDob(parsed);
+                          setDobInput(formatDobForDisplay(parsed));
+                        }
+                      }
+                    }}
+                    placeholder="22 01 2008"
+                    required
+                    className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-blue-100 outline-none transition-all tracking-wider"
+                  />
+                  <input
+                    ref={datePickerRef}
                     type="date"
                     value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    required
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                    onChange={(e) => {
+                      const iso = e.target.value;
+                      setDob(iso);
+                      setDobInput(formatDobForDisplay(iso));
+                    }}
+                    tabIndex={-1}
+                    className="sr-only"
+                    aria-hidden="true"
                   />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        datePickerRef.current?.showPicker();
+                      } catch {
+                        datePickerRef.current?.focus();
+                      }
+                    }}
+                    title="ជ្រើសរើសថ្ងៃខែពីប្រតិទិន"
+                    className="absolute right-2.5 p-1 rounded-lg text-slate-400 hover:text-[#155EEF] hover:bg-slate-100 transition-colors"
+                  >
+                    <Calendar className="w-4 h-4" />
+                  </button>
                 </div>
+                <p className="text-[11px] text-slate-400 font-medium mt-1">
+                  ទម្រង់៖ ថ្ងៃ ខែ ឆ្នាំ (ឧ. <strong>22 01 2008</strong> ឬ <strong>22/01/2008</strong>) អាចចម្លងពី Excel បានភ្លាមៗ
+                </p>
               </div>
             </div>
           </div>

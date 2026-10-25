@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Save, AlertCircle, CheckCircle, Trash2, Plus, Copy, RotateCcw, X, Info, Loader2 } from 'lucide-react';
+import { parseStudentDob, formatDobForDisplay } from '@/lib/utils/student-date';
 
 export interface GridStudent {
   _id: string; // internal id for React key
@@ -89,23 +90,21 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
       }
     }
     
-    // Convert Dates (DD/MM/YYYY to YYYY-MM-DD roughly)
-    let parsedDob = row.dob.trim();
-    if (parsedDob) {
-      // Basic match for DD/MM/YYYY or DD-MM-YYYY
-      const dateMatch = parsedDob.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-      if (dateMatch) {
-        const [_, d, m, y] = dateMatch;
-        parsedDob = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-      } else if (!/^\d{4}-\d{2}-\d{2}$/.test(parsedDob)) {
-        errors.push('ទម្រង់ថ្ងៃខែមិនត្រឹមត្រូវ (ឧ. 2010-02-01 ឬ 01/02/2010)');
+    // Convert Dates (supports dd mm yyyy, slashes, dashes, dots, Khmer numerals, Excel serials)
+    let displayDob = row.dob.trim();
+    if (displayDob) {
+      const parsedIso = parseStudentDob(displayDob);
+      if (parsedIso) {
+        displayDob = formatDobForDisplay(parsedIso);
+      } else {
+        errors.push('ទម្រង់ថ្ងៃខែមិនត្រឹមត្រូវ (ឧ. 22 01 2008 ឬ 22/01/2008)');
       }
     }
 
     return {
       ...row,
       gender: normalizedGender,
-      dob: parsedDob,
+      dob: displayDob,
       class_name: row.class_name.trim(),
       isValid: hasData ? errors.length === 0 : true,
       errors: hasData ? errors : []
@@ -243,7 +242,7 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
         full_name: r.full_name,
         gender: r.gender,
         class_id: matchedClass?.id,
-        dob: r.dob,
+        dob: parseStudentDob(r.dob) || r.dob,
         room_number: r.room_number,
         desk_number: r.desk_number,
         status: 'new'
@@ -328,7 +327,7 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
               <th className="p-2 border border-slate-200 text-xs font-black text-slate-600">គោត្តនាម និង នាម*</th>
               <th className="w-24 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">ភេទ*</th>
               <th className="w-32 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">ថ្នាក់*</th>
-              <th className="w-40 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">ថ្ងៃខែឆ្នាំកំណើត</th>
+              <th className="w-40 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)</th>
               <th className="w-24 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">លេខបន្ទប់</th>
               <th className="w-24 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">លេខតុ</th>
               <th className="w-12 p-2 border border-slate-200 text-center text-xs font-black text-slate-600"></th>
@@ -378,7 +377,7 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
                           onFocus={() => setFocusedCell({ rowIndex, field: typedField })}
                           className={`w-full h-full p-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#155EEF] bg-transparent ${hasErrorForField ? 'bg-rose-100/50 text-rose-700 placeholder-rose-300' : 'text-slate-800'}`}
                           title={errorTooltip}
-                          placeholder={field === 'dob' ? 'YYYY-MM-DD' : ''}
+                          placeholder={field === 'dob' ? '22 01 2008' : ''}
                         />
                         {hasErrorForField && (
                            <div className="absolute top-1/2 right-2 -translate-y-1/2 pointer-events-none text-rose-500" title={errorTooltip}>

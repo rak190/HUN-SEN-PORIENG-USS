@@ -4,6 +4,7 @@ import { MassiveProfilingStudent, DEFAULT_FORM, calculateProfileCompleteness } f
 import { UserSquare2, FileText, Heart, Users, MapPin, X, Loader2, Check, Camera, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { parseStudentDob, formatDobForDisplay } from '@/lib/utils/student-date';
 
 const VIEW_TABS = [
   { id: 1, label: 'មូលដ្ឋាន', icon: UserSquare2 },
@@ -359,8 +360,18 @@ export default function StudentProfileDrawer({ isOpen, onClose, initialData, act
                   </select>
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
-                  ថ្ងៃខែឆ្នាំកំណើត
-                  <input type="date" value={formData.date_of_birth || ''} onChange={e=>setFormData({...formData, date_of_birth:e.target.value})} className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" />
+                  ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)
+                  <input 
+                    type="text" 
+                    placeholder="22 01 2008" 
+                    value={formData.date_of_birth ? formatDobForDisplay(formData.date_of_birth) : ''} 
+                    onChange={e => {
+                      const val = e.target.value;
+                      const parsed = parseStudentDob(val);
+                      setFormData({ ...formData, date_of_birth: parsed || val });
+                    }} 
+                    className="mt-1 w-full p-2.5 bg-white border border-slate-200/80 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF]" 
+                  />
                 </label>
                 <label className="block text-xs font-bold text-slate-700">
                   អាយុ

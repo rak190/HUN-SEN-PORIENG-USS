@@ -1,3 +1,5 @@
+import { parseStudentDob } from '@/lib/utils/student-date';
+
 export interface MassiveProfilingStudent {
   id: string;
   class_id?: string;
@@ -122,23 +124,11 @@ export function normalizePastedCell(field: string, rawVal: any): any {
   if (strVal === '') return undefined;
   let str = normalizeKhmerDigits(strVal);
 
-  // 1. Date of birth normalization
+  // 1. Date of birth normalization (supports dd mm yyyy, slashes, dashes, dots, Khmer numerals, Excel serials)
   if (field === 'date_of_birth' || field === 'dob') {
-    // Handle Excel serial date numbers (e.g. 39553 -> 2008-04-15)
-    const numDate = Number(str);
-    if (!isNaN(numDate) && numDate > 25000 && numDate < 65000) {
-      const dateObj = new Date((numDate - 25569) * 86400 * 1000);
-      if (!isNaN(dateObj.getTime())) {
-        return dateObj.toISOString().split('T')[0];
-      }
-    }
-    // Match DD/MM/YYYY or DD-MM-YYYY
-    const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-    if (dmyMatch) {
-      const [_, d, m, y] = dmyMatch;
-      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    }
-    // Match YYYY-MM-DD
+    const parsed = parseStudentDob(rawVal);
+    if (parsed) return parsed;
+    // Match YYYY-MM-DD fallback
     if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
     return str;
   }

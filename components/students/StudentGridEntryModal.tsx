@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Table as TableIcon, X, Check, Plus, Loader2, Save } from 'lucide-react';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import { parseStudentDob, formatDobForDisplay } from '@/lib/utils/student-date';
 
 interface StudentGridEntryModalProps {
   isOpen: boolean;
@@ -121,13 +122,12 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
           const colName = columns[targetColIdx];
           if (colName !== 'no') {
             let val = cellVal.trim();
-            // Handle Excel serial dates for dob if copied from Excel without formatting
-            if (colName === 'dob' && val && !isNaN(Number(val)) && Number(val) > 30000) {
-               // Excel epoch is roughly Dec 30, 1899. 25569 days until Jan 1, 1970
-               const dateObj = new Date((Number(val) - 25569) * 86400 * 1000);
-               if (!isNaN(dateObj.getTime())) {
-                 val = dateObj.toISOString().split('T')[0];
-               }
+            // Handle Excel serial dates and dd mm yyyy for dob
+            if (colName === 'dob' && val) {
+              const parsedIso = parseStudentDob(val);
+              if (parsedIso) {
+                val = formatDobForDisplay(parsedIso);
+              }
             }
             newData[targetRowIdx][colName] = val;
           }
@@ -163,25 +163,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
       // Basic formatting cleanup
       const isFemale = ['f', 'ស្រី', 'ស្ត្រី'].includes((s.gender || '').toLowerCase().trim());
       
-      let dobStr = s.dob?.trim();
-      // Validate dob is roughly a date if possible, else null
-      if (dobStr) {
-        let parsedDateStr = dobStr;
-        // Handle DD/MM/YYYY or DD-MM-YYYY
-        const parts = dobStr.split(/[\/\-]/);
-        if (parts.length === 3) {
-          if (parts[0].length === 4) {
-             // YYYY-MM-DD
-             parsedDateStr = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-          } else {
-             // DD/MM/YYYY
-             parsedDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-          }
-        }
-        const d = new Date(parsedDateStr);
-        if (isNaN(d.getTime())) dobStr = null;
-        else dobStr = d.toISOString().split('T')[0];
-      }
+      let dobStr = parseStudentDob(s.dob);
 
       return {
         class_id: activeClass?.id || '',
@@ -264,7 +246,7 @@ export default function StudentGridEntryModal({ isOpen, onClose, onSuccess }: St
                 <th className="px-4 py-3 border border-slate-200 w-32 sticky left-12 bg-slate-100 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">អត្តលេខ</th>
                 <th className="px-4 py-3 border border-slate-200 w-48">គោត្តនាម និងនាម</th>
                 <th className="px-4 py-3 border border-slate-200 w-24 text-center">ភេទ</th>
-                <th className="px-4 py-3 border border-slate-200 w-36">ថ្ងៃខែឆ្នាំកំណើត</th>
+                <th className="px-4 py-3 border border-slate-200 w-36">ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)</th>
                 <th className="px-4 py-3 border border-slate-200 w-48">ទីកន្លែងកំណើត</th>
                 <th className="px-4 py-3 border border-slate-200 w-40">ឈ្មោះឪពុក</th>
                 <th className="px-4 py-3 border border-slate-200 w-32">មុខរបរឪពុក</th>

@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Upload, FileSpreadsheet, Check, AlertTriangle, X, Loader2, Info } from 'lucide-react';
 import { applySchema } from '@/lib/import/schema';
 import { detectDuplicate } from '@/lib/import/duplicate-detector';
+import { parseStudentDob } from '@/lib/utils/student-date';
 
 interface StudentImportModalProps {
   isOpen: boolean;
@@ -41,28 +42,7 @@ export default function StudentImportModal({ isOpen, onClose, onSuccess }: Stude
   if (!isOpen || !mounted) return null;
 
   function parseDate(dob: any) {
-    if (!dob) return null;
-    if (typeof dob === 'number') {
-      const excelEpoch = new Date(1899, 11, 30);
-      const parsedDate = new Date(excelEpoch.getTime() + dob * 86400000);
-      return parsedDate.toISOString().split('T')[0];
-    }
-    if (typeof dob === 'string') {
-      if (dob.includes('/')) {
-        const parts = dob.split('/');
-        if (parts.length === 3) {
-          return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-        }
-      } else if (dob.includes('-')) {
-        const parts = dob.split('-');
-        if (parts.length === 3) {
-           return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-        }
-      }
-      const d = new Date(dob);
-      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
-    }
-    return null;
+    return parseStudentDob(dob);
   }
 
   function cleanString(val: any) {
