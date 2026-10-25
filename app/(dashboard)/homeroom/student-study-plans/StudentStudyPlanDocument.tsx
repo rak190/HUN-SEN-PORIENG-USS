@@ -546,7 +546,7 @@ export default function StudentStudyPlanDocument({
 
   return (
     <div
-      className={`study-plan-page w-[1122px] min-h-[790px] shrink-0 bg-white p-7 text-black shadow-lg rounded-sm border border-slate-300 print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:h-full flex flex-col justify-between font-siemreap select-none ${className}`}
+      className={`study-plan-page w-[1122px] min-h-[765px] shrink-0 bg-white p-5 text-black shadow-lg rounded-sm border border-slate-300 print:shadow-none print:border-none print:p-0 print:m-0 print:w-full print:h-full flex flex-col justify-between font-siemreap select-none ${className}`}
       style={{ boxSizing: 'border-box' }}
     >
       {/* ----------------- TOP HEADER SECTION ----------------- */}
@@ -576,9 +576,9 @@ export default function StudentStudyPlanDocument({
 
         {/* Document Title Banner */}
         <div className="text-center mt-1 mb-2">
-          <h1 className="text-[15px] font-moul text-purple-900 tracking-wide">
+          <h1 className="text-[15px] font-moul text-[#7030A0] tracking-wide">
             ផែនការសិក្សារបស់សិស្ស ឆ្នាំសិក្សា{toKhmerDigits(academicYearName)}{' '}
-            <span className="text-purple-800 font-bold">{gradeSubtitle}</span>
+            <span className="text-[#7030A0] font-bold">{gradeSubtitle}</span>
           </h1>
         </div>
 
@@ -677,12 +677,19 @@ export default function StudentStudyPlanDocument({
           </div>
         </div>
 
-        {/* Dynamic Grade-Specific Score Bands Legend */}
+        {/* Dynamic Grade-Specific Score Bands Legend with 'C' highlighted in Red */}
         <div className="mt-2.5 mb-1.5 text-[10px] font-siemreap leading-tight text-slate-900 space-y-0.5 border-t border-slate-200 pt-1.5">
           {scoreBands.map((scale) => (
             <p key={scale.maxScore} className="truncate">
               <span className="font-bold">{scale.title}</span>{' '}
-              {scale.ranges.map((r) => r.label).join('\u00A0\u00A0\u00A0')}
+              {scale.ranges.map((r, rIdx) => (
+                <React.Fragment key={r.letter}>
+                  <span className={r.letter === 'C' ? 'text-red-600 font-bold' : ''}>
+                    {r.label}
+                  </span>
+                  {rIdx < scale.ranges.length - 1 ? '\u00A0\u00A0\u00A0' : ''}
+                </React.Fragment>
+              ))}
             </p>
           ))}
         </div>
@@ -694,7 +701,7 @@ export default function StudentStudyPlanDocument({
             <tr className="bg-slate-50 print:bg-white text-black font-bold">
               <th
                 rowSpan={2}
-                className="border border-black p-1 w-[82px] text-center font-bold"
+                className="border border-black p-1 w-[82px] text-center font-bold text-[#7030A0]"
               >
                 មុខវិជ្ជា
               </th>

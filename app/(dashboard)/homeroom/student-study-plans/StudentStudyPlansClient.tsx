@@ -32,6 +32,7 @@ import {
   Save,
   Check,
   AlertCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { toJpeg } from 'html-to-image';
 import jsPDF from 'jspdf';
@@ -79,6 +80,13 @@ export default function StudentStudyPlansClient({
   // PDF generation state
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [exportProgress, setExportProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
+
+  // Excel generation state
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [excelProgress, setExcelProgress] = useState<{
     current: number;
     total: number;
   } | null>(null);
@@ -275,6 +283,59 @@ export default function StudentStudyPlansClient({
   const handleDownloadBatchPdf = handleExportBatchPdf;
   const handleDownloadSinglePdf = handleExportSinglePdf;
 
+  // Single Student Excel Export Handler
+  const handleExportSingleExcel = async () => {
+    if (!activeStudent) return;
+    setIsExportingExcel(true);
+    try {
+      const { exportSingleStudyPlanExcel } = await import('@/lib/excel/study-plan-export');
+      await exportSingleStudyPlanExcel({
+        student: activeStudent,
+        classInfo,
+        academicYearName,
+        schoolInfo,
+        teacherInfo,
+        planTargets: studyPlansMap[activeStudent.id] || {},
+        gradesData,
+        issueDateText: issueDate,
+      });
+    } catch (error) {
+      console.error('Error exporting single Excel:', error);
+      alert('មានបញ្ហាក្នុងការទាញយក Excel សម្រាប់សិស្សនេះ។');
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
+  // Batch Class Excel Export Handler
+  const handleExportBatchExcel = async () => {
+    if (selectedStudents.length === 0) return;
+    setIsExportingExcel(true);
+    setExcelProgress({ current: 0, total: selectedStudents.length });
+    try {
+      const { exportBatchStudyPlansExcel } = await import('@/lib/excel/study-plan-export');
+      await exportBatchStudyPlansExcel({
+        students: selectedStudents,
+        classInfo,
+        academicYearName,
+        schoolInfo,
+        teacherInfo,
+        studyPlansMap,
+        gradesData,
+        issueDateText: issueDate,
+        onProgress: (current, total) => {
+          setExcelProgress({ current, total });
+        },
+      });
+    } catch (error) {
+      console.error('Error exporting batch Excel:', error);
+      alert('មានបញ្ហាក្នុងការបង្កើត Excel ជាបណ្តុំ។');
+    } finally {
+      setIsExportingExcel(false);
+      setExcelProgress(null);
+    }
+  };
+
   // Open Goal Setting Modal
   const handleOpenGoalModal = () => {
     if (!activeStudent) return;
@@ -365,7 +426,7 @@ export default function StudentStudyPlansClient({
         @media print {
           @page {
             size: A4 landscape;
-            margin: 6mm !important;
+            margin: 5mm !important;
           }
           html, body {
             background: white !important;
@@ -473,6 +534,21 @@ export default function StudentStudyPlansClient({
               <span>ទាញយក PDF សិស្សនេះ</span>
             </button>
 
+            {/* Single Excel */}
+            <button
+              onClick={handleExportSingleExcel}
+              disabled={isExportingExcel || !activeStudent}
+              className="px-4 py-2.5 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-800 text-xs font-black rounded-xl shadow-2xs flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+              title="ទាញយកឯកសារ Excel (.xlsx) សម្រាប់សិស្សនេះ"
+            >
+              {isExportingExcel && !excelProgress ? (
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+              ) : (
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              )}
+              <span>ទាញយក Excel សិស្សនេះ</span>
+            </button>
+
             {/* Batch Print */}
             <button
               onClick={handlePrintBatch}
@@ -498,6 +574,25 @@ export default function StudentStudyPlansClient({
                 {exportProgress
                   ? `កំពុងដំណើរការ (${exportProgress.current}/${exportProgress.total})`
                   : `ទាញយក PDF ទាំងថ្នាក់ (${toKhmerDigits(selectedStudents.length)})`}
+              </span>
+            </button>
+
+            {/* Batch Excel */}
+            <button
+              onClick={handleExportBatchExcel}
+              disabled={isExportingExcel || selectedStudents.length === 0}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+              title="ទាញយកសៀវភៅ Excel (.xlsx) ទាំងថ្នាក់ ដែលមានសន្លឹកកិច្ចការដាច់ដោយឡែកសម្រាប់សិស្សម្នាក់ៗ"
+            >
+              {excelProgress ? (
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+              ) : (
+                <FileSpreadsheet className="w-4 h-4 text-white" />
+              )}
+              <span>
+                {excelProgress
+                  ? `កំពុងបង្កើត Excel (${excelProgress.current}/${excelProgress.total})`
+                  : `ទាញយក Excel ទាំងថ្នាក់ (${toKhmerDigits(selectedStudents.length)})`}
               </span>
             </button>
           </div>
