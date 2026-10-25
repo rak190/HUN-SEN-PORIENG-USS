@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import * as XLSX from 'xlsx';
 import { getServerAuth } from '@/lib/auth-server';
+import { generateOfficialSchoolRosterWorkbook } from '@/lib/excel/officialSchoolRosterExport';
 
 export async function GET(request: Request) {
   try {
@@ -20,14 +20,14 @@ export async function GET(request: Request) {
 
     const supabase = createAdminClient();
 
-    // Verify access
-    const { data: classData } = await supabase
+    // 1. Verify class existence & access
+    const { data: classData, error: classError } = await supabase
       .from('classes')
-      .select('id, teacher_id, school_id')
+      .select('id, name, grade, teacher_id, school_id, academic_year_id')
       .eq('id', classId)
       .single();
 
-    if (!classData) {
+    if (classError || !classData) {
       return new NextResponse('Class not found', { status: 404 });
     }
 
@@ -41,79 +41,77 @@ export async function GET(request: Request) {
         return new NextResponse('Forbidden: You do not own this class', { status: 403 });
       }
     } else if (profile.role === 'principal') {
-      if (classData.school_id !== profile.school_id) {
+      if (classData.school_id && profile.school_id && classData.school_id !== profile.school_id) {
         return new NextResponse('Forbidden: Class belongs to another school', { status: 403 });
       }
     }
 
-    // Fetch students with row limit protection
-    let query = supabase
+    const effectiveYearId = academicYearId || classData.academic_year_id;
+
+    // 2. Fetch students, academic year, and school information concurrently
+    let rosterQuery = supabase
       .from('active_class_rosters')
       .select('*')
       .eq('enrollment_class_id', classId)
       .order('student_id_number', { ascending: true })
-      .limit(300);
+      .limit(500);
 
-    if (academicYearId) {
-      query = query.eq('academic_year_id', academicYearId);
+    if (effectiveYearId) {
+      rosterQuery = rosterQuery.eq('academic_year_id', effectiveYearId);
     }
 
-    const { data: students, error } = await query;
+    const yearPromise = effectiveYearId
+      ? supabase.from('academic_years').select('id, name').eq('id', effectiveYearId).maybeSingle()
+      : supabase.from('academic_years').select('id, name').eq('is_active', true).maybeSingle();
 
-    if (error) {
-      throw error;
+    const schoolPromise = supabase
+      .from('schools')
+      .select('name, abbreviation, department, province')
+      .eq('id', classData.school_id || profile?.school_id || 'main-school')
+      .maybeSingle();
+
+    const [rosterRes, yearRes, schoolRes] = await Promise.all([
+      rosterQuery,
+      yearPromise,
+      schoolPromise,
+    ]);
+
+    if (rosterRes.error) {
+      throw rosterRes.error;
     }
 
+    const students = rosterRes.data;
     if (!students || students.length === 0) {
       return new NextResponse('No students found', { status: 404 });
     }
 
-    const wsData = students.map((std: any) => ({
-      'អត្តលេខ': std.student_id_number,
-      'គោត្តនាម និងនាម': std.full_name,
-      'ភេទ': std.gender === 'F' ? 'ស្រី' : 'ប្រុស',
-      'ថ្ងៃខែឆ្នាំកំណើត': std.dob || '',
-      'លេខសំបុត្រកំណើត': std.birth_cert_no || '',
-      'ស្ថានភាពសិស្ស': std.status === 'new' ? 'ថ្មី' : std.status === 'repeater' ? 'ត្រួតថ្នាក់' : 'ផ្ទេរចូល',
-      'សាលាចំណុះឬក្រៅចំណុះ': std.prev_school || '',
-      'ជនជាតិដើមភាគតិច': std.indigenous === 'yes' ? 'បាទ/ចាស' : 'ទេ',
-      'ប្រភេទពិការភាព': std.disability === 'none' ? 'គ្មាន' : std.disability === 'mild' ? 'ស្រាល' : 'ធ្ងន់ធ្ងរ',
-      'ឧបករណ៍ជំនួយ': std.assistive_device || '',
-      'កំព្រា': std.orphan === 'yes' ? 'បាទ/ចាស' : 'ទេ',
-      'បណ្ណក្រីក្រ': std.id_poor === 'none' ? 'គ្មាន' : std.id_poor === 'level_1' ? 'កម្រិត ១' : 'កម្រិត ២',
-      'អាហារូបករណ៍': std.scholarship === 'yes' ? 'បាទ/ចាស' : 'ទេ',
-      'ចម្ងាយ (គ.ម)': std.distance_km || '',
-      'ទម្ងន់ (kg)': std.weight_kg || '',
-      'កម្ពស់ (m)': std.height_m || '',
-      'BMI': std.bmi || '',
-      'លទ្ធផលវាយតម្លៃសុខភាព': std.nutrition_status || '',
-      'បញ្ហាសុខភាព': std.health_issues || '',
-      'ឈ្មោះឪពុក': std.father_name || '', 
-      'មុខរបរឪពុក': std.father_job || '', 
-      'ទូរស័ព្ទឪពុក': std.father_phone || '',
-      'ឈ្មោះម្តាយ': std.mother_name || '', 
-      'មុខរបរម្តាយ': std.mother_job || '', 
-      'ទូរស័ព្ទម្តាយ': std.mother_phone || '',
-      'ចំណាកស្រុក': std.migrant_status || '',
-      'ហឹង្សាក្នុងគ្រួសារ': std.domestic_violence === 'yes' ? 'មាន' : 'គ្មាន',
-      'ជម្រក': std.housing || '',
-      'ប្រាក់ចំណូល/ខែ': std.income ? `$${std.income}` : '',
-      'បងប្អូនបង្កើត': std.siblings_count || '',
-      'អាសយដ្ឋានបច្ចុប្បន្ន': std.current_address || '',
-      'លេខទូរស័ព្ទសិស្ស': std.student_phone || '',
-      'ស្ថានភាពចុងក្រោយ': std.current_enrollment_status || '',
-    }));
+    const academicYear = yearRes.data;
+    const schoolInfo = schoolRes.data;
 
-    const ws = XLSX.utils.json_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "GEIP Master Profiling");
-    
-    // Write to buffer
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    // 3. Generate high-fidelity Excel workbook matching official school template
+    const wb = await generateOfficialSchoolRosterWorkbook({
+      students,
+      classInfo: {
+        id: classData.id,
+        name: classData.name,
+        grade: classData.grade,
+        academic_year_id: classData.academic_year_id,
+      },
+      academicYear,
+      schoolInfo,
+    });
 
-    return new NextResponse(buf, {
+    const buf = await wb.xlsx.writeBuffer();
+
+    // 4. Clean Unicode Khmer filename with RFC 5987 encoding
+    const cleanClassName = (classData.name || 'ថ្នាក់').replace(/[\\/:*?"<>|]/g, '_');
+    const cleanYearName = (academicYear?.name || '២០២៦-២០២៧').replace(/[\\/:*?"<>|]/g, '_');
+    const filenameKhmer = `បញ្ជីឈ្មោះសិស្ស_ថ្នាក់ទី${cleanClassName}_${cleanYearName}.xlsx`;
+    const encodedFilename = encodeURIComponent(filenameKhmer);
+
+    return new NextResponse(buf as any, {
       headers: {
-        'Content-Disposition': `attachment; filename="MoEYS_GEIP_Master_Data.xlsx"`,
+        'Content-Disposition': `attachment; filename="${encodedFilename}"; filename*=UTF-8''${encodedFilename}`,
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       },
     });

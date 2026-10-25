@@ -760,7 +760,7 @@ export default function StudentsPage() {
                 </div>
                 <div>
                   <div className="text-xs font-black text-slate-800">ទាញយកជា Excel (.xlsx)</div>
-                  <div className="text-[10px] font-bold text-slate-400">តារាងទិន្នន័យពេញលេញ ២៨ ជួរឈរ</div>
+                  <div className="text-[10px] font-bold text-slate-400">គំរូផ្លូវការតាមកម្រិតថ្នាក់ (ទម្រង់ក្រសួង/សាលា)</div>
                 </div>
               </button>
 
