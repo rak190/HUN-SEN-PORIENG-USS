@@ -7,9 +7,12 @@ import {
   SubjectPlanTargetSchema,
   SaveStudyPlanPayloadSchema,
   BatchSaveStudyPlanPayloadSchema,
-  STUDY_PLAN_SUBJECTS,
+  resolveAuthoritativeGradeLetter,
+  resolveSubjectMaxScore,
+  lookupScoreWithAliases,
 } from '../../app/(dashboard)/homeroom/student-study-plans/types';
 import { getSubjectGradeLetter } from '../../app/(dashboard)/homeroom/student-study-plans/StudentStudyPlanDocument';
+import { toLatinDigits } from '../../app/(dashboard)/homeroom/student-study-plans/StudentStudyPlanGridModal';
 
 describe('Student Study Plans Grade-Based Architecture Suite (Phase 24)', () => {
   const modalFilePath = path.join(
@@ -346,6 +349,211 @@ describe('Student Study Plans Grade-Based Architecture Suite (Phase 24)', () => 
       assert.ok(
         sql.includes('INSERT INTO public.audit_logs'),
         'Must log batch mutations to audit_logs'
+      );
+    });
+  });
+
+  describe('Scenario 6: Non-Destructive Target Persistence (Single-Student & Bulk Edit)', () => {
+    it('Editing expected goals preserves existing actual and end_actual grades', () => {
+      // Simulate existing student study plan in database
+      const existingPlan = {
+        khmer: {
+          initial: 'C',
+          plan: { nov: 'B', dec: 'C' },
+          end_plan: 'B',
+          actual: { nov: 'B', dec: 'B' }, // Provisional actuals previously entered
+          end_actual: 'A',
+        },
+      };
+
+      // Teacher opens single-student Goal Modal and only updates plan.dec from C to B
+      const clientContent = fs.readFileSync(clientFilePath, 'utf-8');
+      assert.ok(
+        clientContent.includes('actual: { ...(existingSub.actual || {}) }') &&
+          clientContent.includes('end_actual: existingSub.end_actual || \'\''),
+        'handleOpenGoalModal must strictly preserve actual and end_actual in editingTargets'
+      );
+
+      assert.ok(
+        clientContent.includes('actual: {') &&
+          clientContent.includes('...(existingSub.actual || {})') &&
+          clientContent.includes('...(editedSub.actual || {})'),
+        'handleSaveGoals must merge and retain actual and end_actual'
+      );
+
+      // Perform the exact deep-merge logic used in handleSaveGoals
+      const editingTargets = {
+        khmer: {
+          initial: 'C',
+          plan: { nov: 'B', dec: 'B' }, // Modified
+          end_plan: 'B',
+        },
+      };
+
+      const mergedKhmer = {
+        ...existingPlan.khmer,
+        ...editingTargets.khmer,
+        actual: { ...(existingPlan.khmer.actual || {}), ...(editingTargets.khmer as any).actual },
+        end_actual: (editingTargets.khmer as any).end_actual || existingPlan.khmer.end_actual || '',
+      };
+
+      assert.equal(mergedKhmer.plan.dec, 'B', 'Expected target was updated to B');
+      assert.equal(mergedKhmer.actual.nov, 'B', 'Provisional actual for Nov was preserved as B');
+      assert.equal(mergedKhmer.actual.dec, 'B', 'Provisional actual for Dec was preserved as B');
+      assert.equal(mergedKhmer.end_actual, 'A', 'Provisional end_actual was preserved as A');
+    });
+
+    it('Bulk editing persistence submits ONLY changed students instead of full roster', () => {
+      const modalContent = fs.readFileSync(modalFilePath, 'utf-8');
+
+      assert.ok(
+        modalContent.includes('changedStudentIds = Array.from(') &&
+          modalContent.includes('changedStudentIds.map('),
+        'handleSaveAll must build plansPayload containing ONLY changedStudentIds'
+      );
+
+      assert.ok(
+        modalContent.includes('មិនមានការផ្លាស់ប្តូរណាមួយត្រូវបានកែប្រែទេ'),
+        'handleSaveAll must warn and exit early if no cells were modified'
+      );
+    });
+  });
+
+  describe('Scenario 7: Centralized Curriculum & Grade Conversion Consistency', () => {
+    it('Accurately resolves max score and letter grades across Grade 7-9 and 10-12 tracks', () => {
+      // Lower Secondary Grade 9: Khmer & Math max score 100
+      const g9KhmerMax = resolveSubjectMaxScore('9', null, 'khmer');
+      assert.equal(g9KhmerMax, 100, 'Grade 9 Khmer max score must be 100');
+      assert.equal(resolveAuthoritativeGradeLetter(92, '9', null, 'khmer'), 'A');
+      assert.equal(resolveAuthoritativeGradeLetter(85, '9', null, 'khmer'), 'B');
+      assert.equal(resolveAuthoritativeGradeLetter(45, '9', null, 'khmer'), 'F');
+
+      // Upper Secondary Grade 12 Science Track: Math max score 150
+      const g12ScienceMathMax = resolveSubjectMaxScore('12', 'science', 'math');
+      assert.equal(g12ScienceMathMax, 150, 'Grade 12 Science Math max score must be 150');
+      assert.equal(resolveAuthoritativeGradeLetter(138, '12', 'science', 'math'), 'A');
+      assert.equal(resolveAuthoritativeGradeLetter(110, '12', 'science', 'math'), 'C');
+      assert.equal(resolveAuthoritativeGradeLetter(60, '12', 'science', 'math'), 'F');
+
+      // Upper Secondary Grade 12 Social Track: Math max score 100
+      const g12SocialMathMax = resolveSubjectMaxScore('12', 'social', 'math');
+      assert.equal(g12SocialMathMax, 100, 'Grade 12 Social Math max score must be 100');
+      assert.equal(resolveAuthoritativeGradeLetter(91, '12', 'social', 'math'), 'A');
+      assert.equal(resolveAuthoritativeGradeLetter(75, '12', 'social', 'math'), 'C');
+    });
+
+    it('Resolves subject aliases consistently (foreign_lang / english / eng, earth_science / earth, morals / civics)', () => {
+      const scoresRecord = {
+        english: 88,
+        civics: 42,
+        earth: 36,
+      };
+
+      const engScore = lookupScoreWithAliases(scoresRecord, 'foreign_lang', ['english', 'eng']);
+      assert.equal(engScore, 88, 'Should find foreign_lang score using alias "english"');
+
+      const civicsScore = lookupScoreWithAliases(scoresRecord, 'morals', ['civics']);
+      assert.equal(civicsScore, 42, 'Should find morals score using alias "civics"');
+
+      const earthScore = lookupScoreWithAliases(scoresRecord, 'earth_science', ['earth']);
+      assert.equal(earthScore, 36, 'Should find earth_science score using alias "earth"');
+    });
+
+    it('Published score of F is retained and missing scores remain blank (never default to F or 0)', () => {
+      // Official score of 20 out of 100 is F
+      const letterF = resolveAuthoritativeGradeLetter(20, '9', null, 'khmer');
+      assert.equal(letterF, 'F', 'Score of 20 must resolve to F');
+
+      // Missing score (undefined/null/empty)
+      assert.equal(resolveAuthoritativeGradeLetter(undefined, '9', null, 'khmer'), '');
+      assert.equal(resolveAuthoritativeGradeLetter(null, '9', null, 'khmer'), '');
+      assert.equal(resolveAuthoritativeGradeLetter('' as any, '9', null, 'khmer'), '');
+    });
+
+    it('Consumes identical resolver across Grid, Document, and Excel exports', () => {
+      const docContent = fs.readFileSync(documentFilePath, 'utf-8');
+      const gridContent = fs.readFileSync(modalFilePath, 'utf-8');
+      const excelContent = fs.readFileSync(exportFilePath, 'utf-8');
+
+      assert.ok(
+        docContent.includes('resolveAuthoritativeGradeLetter('),
+        'Document must consume resolveAuthoritativeGradeLetter'
+      );
+      assert.ok(
+        gridContent.includes('resolveAuthoritativeGradeLetter('),
+        'Grid Modal must consume resolveAuthoritativeGradeLetter'
+      );
+      assert.ok(
+        excelContent.includes('resolveAuthoritativeGradeLetter('),
+        'Excel Export must consume resolveAuthoritativeGradeLetter'
+      );
+    });
+  });
+
+  describe('Scenario 8: Clipboard Paste Safeguards & Review Preview', () => {
+    it('toLatinDigits converts Khmer numerals to Latin digits for student ID matching', () => {
+      assert.equal(toLatinDigits('០១២'), '012');
+      assert.equal(toLatinDigits('១២៣៤៥៦៧៨៩០'), '1234567890');
+      assert.equal(toLatinDigits('STU-០៩៩'), 'STU-099');
+    });
+
+    it('Grid modal provides Paste Preview Confirmation before applying clipboard changes', () => {
+      const modalContent = fs.readFileSync(modalFilePath, 'utf-8');
+
+      assert.ok(
+        modalContent.includes('setPastePreview(') &&
+          modalContent.includes('handleConfirmPaste'),
+        'Modal must stage paste into pastePreview and require handleConfirmPaste'
+      );
+
+      assert.ok(
+        modalContent.includes('isOfficialLocked = true') &&
+          modalContent.includes('lockedSkippedCount++'),
+        'Modal must protect published official grades from being overwritten by paste'
+      );
+
+      assert.ok(
+        modalContent.includes('duplicateIdsCount++'),
+        'Modal must detect and flag duplicate student IDs in clipboard data'
+      );
+    });
+  });
+
+  describe('Scenario 9: Migration 092 Hardened RLS and jsonb_deep_merge', () => {
+    it('Migration 092 defines recursive jsonb_deep_merge helper and scopes table policies', () => {
+      const migration092Path = path.join(
+        process.cwd(),
+        'supabase',
+        'migrations',
+        '092_student_study_plans_rls_hardening.sql'
+      );
+      assert.ok(fs.existsSync(migration092Path), 'Migration 092 file must exist');
+      const sql = fs.readFileSync(migration092Path, 'utf-8');
+
+      assert.ok(
+        sql.includes('CREATE OR REPLACE FUNCTION public.jsonb_deep_merge'),
+        'Migration 092 must define jsonb_deep_merge function'
+      );
+
+      assert.ok(
+        sql.includes('DROP POLICY IF EXISTS "Enable read access for authenticated users on student_study_plans"') &&
+          sql.includes('DROP POLICY IF EXISTS "Enable write access for authorized teachers and admins on student_study_plans"'),
+        'Migration 092 must drop permissive legacy policies'
+      );
+
+      assert.ok(
+        sql.includes('CREATE POLICY "student_study_plans_select_policy"') &&
+          sql.includes('CREATE POLICY "student_study_plans_insert_policy"') &&
+          sql.includes('CREATE POLICY "student_study_plans_update_policy"') &&
+          sql.includes('CREATE POLICY "student_study_plans_delete_policy"'),
+        'Migration 092 must create granular SELECT/INSERT/UPDATE/DELETE policies'
+      );
+
+      assert.ok(
+        sql.includes('jsonb_deep_merge') &&
+          sql.includes('student_study_plans.subject_targets') &&
+          sql.includes('EXCLUDED.subject_targets'),
+        'Migration 092 atomic RPC must deep merge subject_targets on conflict'
       );
     });
   });

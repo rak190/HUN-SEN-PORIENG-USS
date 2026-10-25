@@ -327,15 +327,15 @@ export default function StudentStudyPlansClient({
     }
   };
 
-  // Batch Class Excel Export Handler
-  const handleExportBatchExcel = async () => {
-    if (selectedStudents.length === 0) return;
+  // Batch Class Excel Export Handlers (Separate Sheets & Single Sheet)
+  const handleExportWholeClassSeparateSheetsExcel = async () => {
+    if (students.length === 0) return;
     setIsExportingExcel(true);
-    setExcelProgress({ current: 0, total: selectedStudents.length });
+    setExcelProgress({ current: 0, total: students.length });
     try {
       const { exportBatchStudyPlansExcel } = await import('@/lib/excel/study-plan-export');
       await exportBatchStudyPlansExcel({
-        students: selectedStudents,
+        students,
         classInfo,
         academicYearName,
         schoolInfo,
@@ -348,13 +348,44 @@ export default function StudentStudyPlansClient({
         },
       });
     } catch (error) {
-      console.error('Error exporting batch Excel:', error);
-      alert('មានបញ្ហាក្នុងការបង្កើត Excel ជាបណ្តុំ។');
+      console.error('Error exporting whole class separate sheets Excel:', error);
+      alert('មានបញ្ហាក្នុងការបង្កើត Excel ទាំងថ្នាក់ (សន្លឹកដាច់ដោយឡែក)។');
     } finally {
       setIsExportingExcel(false);
       setExcelProgress(null);
     }
   };
+
+  const handleExportWholeClassSingleSheetExcel = async () => {
+    if (students.length === 0) return;
+    setIsExportingExcel(true);
+    setExcelProgress({ current: 0, total: students.length });
+    try {
+      const { exportBatchStudyPlansSingleSheetExcel } = await import('@/lib/excel/study-plan-export');
+      await exportBatchStudyPlansSingleSheetExcel({
+        students,
+        classInfo,
+        academicYearName,
+        schoolInfo,
+        teacherInfo,
+        studyPlansMap,
+        gradesData,
+        issueDateText: issueDate,
+        onProgress: (current, total) => {
+          setExcelProgress({ current, total });
+        },
+      });
+    } catch (error) {
+      console.error('Error exporting whole class single sheet Excel:', error);
+      alert('មានបញ្ហាក្នុងការបង្កើត Excel ទាំងថ្នាក់ (សន្លឹកតែមួយ)។');
+    } finally {
+      setIsExportingExcel(false);
+      setExcelProgress(null);
+    }
+  };
+
+  // Keep handleExportBatchExcel for backward compatibility if called
+  const handleExportBatchExcel = handleExportWholeClassSeparateSheetsExcel;
 
   // Update a single target value in editingTargets
   const handleUpdateTargetValue = (subjectId: string, colKey: string, val: string) => {
@@ -490,13 +521,17 @@ export default function StudentStudyPlansClient({
   const handleOpenGoalModal = () => {
     if (!activeStudent) return;
     const existing = studyPlansMap[activeStudent.id] || {};
-    // Deep clone to isolate form state
+    // Deep clone to isolate form state while strictly preserving actual, end_actual, and custom fields
     const cloned: Record<string, SubjectPlanTarget> = {};
     STUDY_PLAN_SUBJECTS.forEach((sub) => {
+      const existingSub = existing[sub.id] || {};
       cloned[sub.id] = {
-        initial: existing[sub.id]?.initial || '',
-        plan: { ...(existing[sub.id]?.plan || {}) },
-        end_plan: existing[sub.id]?.end_plan || '',
+        ...existingSub,
+        initial: existingSub.initial || '',
+        plan: { ...(existingSub.plan || {}) },
+        end_plan: existingSub.end_plan || '',
+        actual: { ...(existingSub.actual || {}) },
+        end_actual: existingSub.end_actual || '',
       };
     });
     setEditingTargets(cloned);
@@ -513,20 +548,43 @@ export default function StudentStudyPlansClient({
     setIsSavingGoals(true);
     setGoalFeedback(null);
 
+    const existing = studyPlansMap[activeStudent.id] || {};
+    // Construct merged targets to ensure actuals and unedited subjects are never erased
+    const mergedTargets: Record<string, SubjectPlanTarget> = { ...existing };
+    STUDY_PLAN_SUBJECTS.forEach((sub) => {
+      const existingSub = existing[sub.id] || {};
+      const editedSub = editingTargets[sub.id] || {};
+      mergedTargets[sub.id] = {
+        ...existingSub,
+        ...editedSub,
+        initial: editedSub.initial !== undefined ? editedSub.initial : existingSub.initial || '',
+        plan: {
+          ...(existingSub.plan || {}),
+          ...(editedSub.plan || {}),
+        },
+        end_plan: editedSub.end_plan !== undefined ? editedSub.end_plan : existingSub.end_plan || '',
+        actual: {
+          ...(existingSub.actual || {}),
+          ...(editedSub.actual || {}),
+        },
+        end_actual: editedSub.end_actual !== undefined ? editedSub.end_actual : existingSub.end_actual || '',
+      };
+    });
+
     const yearId = academicYearId || classInfo.academic_year_id || '';
     const res = await saveStudentStudyPlanAction({
       student_id: activeStudent.id,
       class_id: classInfo.id,
       academic_year_id: yearId,
-      subject_targets: editingTargets,
+      subject_targets: mergedTargets,
     });
 
     setIsSavingGoals(false);
     if (res.success) {
-      // Update local state immediately for instant preview reflection
+      // Update local state immediately for instant preview reflection with preserved actuals
       setStudyPlansMap((prev) => ({
         ...prev,
-        [activeStudent.id]: editingTargets,
+        [activeStudent.id]: mergedTargets,
       }));
       setGoalFeedback({
         type: 'success',
@@ -539,7 +597,7 @@ export default function StudentStudyPlansClient({
       // Graceful fallback: Still update local state for preview/print
       setStudyPlansMap((prev) => ({
         ...prev,
-        [activeStudent.id]: editingTargets,
+        [activeStudent.id]: mergedTargets,
       }));
       setGoalFeedback({
         type: 'warning',
@@ -776,21 +834,48 @@ export default function StudentStudyPlansClient({
                     )}
                     <span>ទាញយក PDF ជាបណ្តុំ ({toKhmerDigits(selectedStudents.length)})</span>
                   </button>
+                  <div className="my-1.5 border-t border-slate-100" />
+
+                  {/* Whole-Class Excel Section (ទាំងថ្នាក់) */}
+                  <div className="px-3.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                    <span>Excel ទាំងថ្នាក់ (Class Roster)</span>
+                    <span className="bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded-full text-[10px]">
+                      {toKhmerDigits(students.length)} នាក់
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
                       setIsExportMenuOpen(false);
-                      handleExportBatchExcel();
+                      handleExportWholeClassSeparateSheetsExcel();
                     }}
-                    disabled={isExportingExcel || selectedStudents.length === 0}
+                    disabled={isExportingExcel || students.length === 0}
                     className="w-full px-4 py-2 text-left text-xs font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-2.5 cursor-pointer disabled:opacity-40"
+                    title="ទាញយកសន្លឹកកិច្ចការដាច់ដោយឡែកមួយសម្រាប់សិស្សម្នាក់ៗ"
                   >
                     {excelProgress ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
                     ) : (
                       <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
                     )}
-                    <span>ទាញយក Excel ទាំងថ្នាក់ ({toKhmerDigits(selectedStudents.length)})</span>
+                    <span>Excel ទាំងថ្នាក់ (សន្លឹកដាច់ដោយឡែក)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      handleExportWholeClassSingleSheetExcel();
+                    }}
+                    disabled={isExportingExcel || students.length === 0}
+                    className="w-full px-4 py-2 text-left text-xs font-bold text-emerald-800 hover:bg-emerald-50 flex items-center gap-2.5 cursor-pointer disabled:opacity-40"
+                    title="ទាញយកឯកសារផែនការសិស្សទាំងអស់ក្នុងសន្លឹកតែមួយ arranged vertically"
+                  >
+                    {excelProgress ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-700" />
+                    ) : (
+                      <Layers className="w-3.5 h-3.5 text-emerald-700" />
+                    )}
+                    <span>Excel ទាំងថ្នាក់ (សន្លឹកតែមួយ)</span>
                   </button>
                 </div>
               )}

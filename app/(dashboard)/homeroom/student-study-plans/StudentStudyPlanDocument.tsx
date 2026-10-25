@@ -3,6 +3,7 @@
 import React from 'react';
 import { Classroom, Student } from '@/types';
 import { getCurriculumSchemaForClass } from '@/lib/curriculum';
+import { resolveAuthoritativeGradeLetter, lookupScoreWithAliases } from './types';
 
 export interface SubjectPlanTarget {
   initial?: string; // Beginning of year baseline diagnostic grade (A-F)
@@ -761,19 +762,19 @@ export default function StudentStudyPlanDocument({
                   (sub.aliases && sub.aliases.includes(s.id)) ||
                   s.label === sub.officialLabel
               );
-              const maxScore = schemaSub?.maxScore || (gradeLevelNum <= 9 && (sub.id === 'khmer' || sub.id === 'math') ? 100 : 50);
-
-              // Helper for score lookup with alias support
-              const getScore = (periodId: string) => {
+              // Score resolver using authoritative curriculum & aliases
+              const getAuthoritativeScoreLetter = (periodId: string) => {
                 const periodScores = scoresByPeriod[periodId];
-                if (!periodScores) return undefined;
-                if (periodScores[sub.id] !== undefined) return periodScores[sub.id];
-                if (sub.aliases) {
-                  for (const alias of sub.aliases) {
-                    if (periodScores[alias] !== undefined) return periodScores[alias];
-                  }
-                }
-                return undefined;
+                if (!periodScores) return '';
+                const score = lookupScoreWithAliases(periodScores, sub.id);
+                return resolveAuthoritativeGradeLetter(
+                  score,
+                  classInfo.grade,
+                  (classInfo as any).track,
+                  sub.id,
+                  sub.aliases,
+                  sub.officialLabel
+                );
               };
 
               // Target / Plan for this subject
@@ -783,13 +784,11 @@ export default function StudentStudyPlanDocument({
               // Priority 1: explicitly planned initial target
               // Priority 2: converted pre-test score from grades
               // Fallback: empty (never fabricated)
-              const preTestScore = getScore('pre-test');
-              const preTestLetter = getSubjectGradeLetter(preTestScore, maxScore, gradeLevelNum);
+              const preTestLetter = getAuthoritativeScoreLetter('pre-test');
               const initialDisplay = target.initial || preTestLetter || '';
 
               // Annual result
-              const annualScore = getScore('annual');
-              const annualLetter = getSubjectGradeLetter(annualScore, maxScore, gradeLevelNum);
+              const annualLetter = getAuthoritativeScoreLetter('annual');
 
               return (
                 <tr key={sub.id} className="h-[28px] hover:bg-slate-50/50">
@@ -805,8 +804,7 @@ export default function StudentStudyPlanDocument({
 
                   {/* 10 Monthly Columns (Target & Actual) */}
                   {STUDY_PLAN_MONTHS.map((m) => {
-                    const monthScore = getScore(m.id);
-                    const officialActualLetter = getSubjectGradeLetter(monthScore, maxScore, gradeLevelNum);
+                    const officialActualLetter = getAuthoritativeScoreLetter(m.id);
                     const provisionalActualLetter = target.actual?.[m.id] || '';
                     const monthActualLetter = officialActualLetter || provisionalActualLetter;
                     const isProvisional = !officialActualLetter && Boolean(provisionalActualLetter);

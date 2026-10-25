@@ -10,7 +10,12 @@ import {
   getSubjectGradeLetter,
   toKhmerDigits,
 } from './StudentStudyPlanDocument';
-import { GRADE_LETTERS, GradeLetter } from './types';
+import {
+  GRADE_LETTERS,
+  GradeLetter,
+  resolveAuthoritativeGradeLetter,
+  lookupScoreWithAliases,
+} from './types';
 import { batchSaveStudentStudyPlansAction } from './actions';
 import {
   X,
@@ -55,6 +60,39 @@ const GRADE_OPTIONS: Array<{ value: GradeLetter | ''; label: string }> = [
   { value: 'F', label: 'F' },
 ];
 
+export function toLatinDigits(str: string): string {
+  if (!str) return '';
+  const khmerNums = ['០', '១', '២', '៣', '៤', '៥', '៦', '៧', '៨', '៩'];
+  let result = str;
+  khmerNums.forEach((kChar, idx) => {
+    result = result.replaceAll(kChar, String(idx));
+  });
+  return result;
+}
+
+export interface PasteProposedChange {
+  studentId: string;
+  studentName: string;
+  studentIdNumber?: string | null;
+  subjectId: string;
+  subjectLabel: string;
+  oldGrade: string;
+  newGrade: GradeLetter;
+  isOfficialLocked: boolean;
+  lockReason?: string;
+}
+
+export interface PastePreviewData {
+  totalRows: number;
+  matchedStudentsCount: number;
+  unmatchedRowsCount: number;
+  duplicateIdsCount: number;
+  invalidValuesCount: number;
+  lockedSkippedCount: number;
+  proposedChanges: PasteProposedChange[];
+  warnings: string[];
+}
+
 export default function StudentStudyPlanGridModal({
   isOpen,
   onClose,
@@ -95,6 +133,7 @@ export default function StudentStudyPlanGridModal({
 
   // Clipboard paste preview modal state
   const [clipboardNotice, setClipboardNotice] = useState<string | null>(null);
+  const [pastePreview, setPastePreview] = useState<PastePreviewData | null>(null);
 
   // Month Clone state
   const [cloneTargetMonth, setCloneTargetMonth] = useState<string>('dec');
@@ -105,6 +144,7 @@ export default function StudentStudyPlanGridModal({
       setDraftPlansMap(JSON.parse(JSON.stringify(activePlansMap)));
       setChangedCells(new Set());
       setFeedback(null);
+      setPastePreview(null);
     }
   }, [isOpen, activePlansMap]);
 
@@ -351,7 +391,8 @@ export default function StudentStudyPlanGridModal({
           // If in actual mode and published grade exists, skip
           if (activeMode === 'actual') {
             const periodKey = selectedMonth === 'end_actual' ? 'annual' : selectedMonth;
-            const publishedScore = publishedScoresByStudent[student.id]?.[periodKey]?.[sub.id];
+            const studentScores = publishedScoresByStudent[student.id]?.[periodKey];
+            const publishedScore = studentScores ? lookupScoreWithAliases(studentScores, sub.id) : null;
             if (publishedScore !== undefined && publishedScore !== null) return;
           }
 
@@ -451,7 +492,7 @@ export default function StudentStudyPlanGridModal({
     });
   };
 
-  // Fast Excel Clipboard Paste Listener
+  // Fast Excel Clipboard Paste with Preview & Collision Safeguards
   const handlePasteFromClipboard = async () => {
     try {
       const text = await navigator.clipboard.readText();
@@ -467,11 +508,10 @@ export default function StudentStudyPlanGridModal({
 
       if (rows.length === 0) return;
 
-      // 1. Detect headers in first row or inspect data
+      // 1. Detect headers in first rows (0..2)
       let headerRowIndex = -1;
       const subjectColMap: Record<number, string> = {};
 
-      // Check rows 0..2 for subject headers
       for (let ri = 0; ri < Math.min(3, rows.length); ri++) {
         const row = rows[ri];
         let foundSubjects = 0;
@@ -480,10 +520,12 @@ export default function StudentStudyPlanGridModal({
           const normCell = cell.toLowerCase().replace(/\s+/g, '');
           const matchedSub = STUDY_PLAN_SUBJECTS.find(
             (s) =>
-              normCell.includes(s.id) ||
+              normCell === s.id.toLowerCase() ||
+              normCell === s.label.toLowerCase() ||
+              normCell === s.officialLabel.toLowerCase() ||
               normCell.includes(s.label.toLowerCase()) ||
               normCell.includes(s.officialLabel.toLowerCase()) ||
-              (s.aliases && s.aliases.some((a) => normCell.includes(a)))
+              (s.aliases && s.aliases.some((a) => normCell.includes(a.toLowerCase())))
           );
 
           if (matchedSub) {
@@ -498,151 +540,302 @@ export default function StudentStudyPlanGridModal({
         }
       }
 
-      // If no subject headers found, assume columns starting from 3 or 4 match canonical subject order
+      // If no subject headers found, assume columns starting from 3 match canonical subject order
       if (headerRowIndex === -1 || Object.keys(subjectColMap).length === 0) {
         STUDY_PLAN_SUBJECTS.forEach((sub, sIdx) => {
-          // Heuristic: Col 0: ID/No, Col 1: Name, Col 2: Gender, Col 3..12: Subjects
           subjectColMap[3 + sIdx] = sub.id;
         });
       }
 
       const dataRows = headerRowIndex !== -1 ? rows.slice(headerRowIndex + 1) : rows;
 
-      // Match student ID mapping
-      const studentIdIndexMap = new Map<string, Student>();
+      // 2. Build multi-key student lookup indices for this class
+      const studentByUuid = new Map<string, Student>();
+      const studentByIdNumber = new Map<string, Student>();
+      const studentsByName = new Map<string, Student[]>();
+
       students.forEach((s) => {
-        if (s.student_id_number) studentIdIndexMap.set(s.student_id_number.trim(), s);
-        if (s.id) studentIdIndexMap.set(s.id.trim(), s);
+        if (s.id) studentByUuid.set(s.id.toLowerCase().trim(), s);
+        if (s.student_id_number) {
+          const rawNum = s.student_id_number.trim().toLowerCase();
+          const latinNum = toLatinDigits(rawNum);
+          studentByIdNumber.set(rawNum, s);
+          studentByIdNumber.set(latinNum, s);
+        }
+        if (s.full_name) {
+          const nameKey = s.full_name.trim().toLowerCase();
+          const list = studentsByName.get(nameKey) || [];
+          list.push(s);
+          studentsByName.set(nameKey, list);
+        }
       });
 
+      const proposedChanges: PasteProposedChange[] = [];
+      const seenStudentIds = new Set<string>();
       let matchedStudentsCount = 0;
-      let updatedCellsCount = 0;
-      let invalidRowsCount = 0;
+      let unmatchedRowsCount = 0;
+      let duplicateIdsCount = 0;
+      let invalidValuesCount = 0;
+      let lockedSkippedCount = 0;
+      const warnings: string[] = [];
 
-      setDraftPlansMap((prev) => {
-        const next = { ...prev };
+      dataRows.forEach((row, rowIdx) => {
+        // Find student identity in columns 0..3
+        let matchedStudent: Student | undefined;
 
-        dataRows.forEach((row) => {
-          // Try to locate student in row: Col 0 or Col 1 or Col 2
-          let matchedStudent: Student | undefined;
-
-          for (let ci = 0; ci < Math.min(3, row.length); ci++) {
-            const candidate = row[ci]?.trim();
-            if (candidate && studentIdIndexMap.has(candidate)) {
-              matchedStudent = studentIdIndexMap.get(candidate);
-              break;
-            }
+        // Step A: Explicit UUID check
+        for (let ci = 0; ci < Math.min(4, row.length); ci++) {
+          const val = row[ci]?.trim().toLowerCase();
+          if (val && studentByUuid.has(val)) {
+            matchedStudent = studentByUuid.get(val);
+            break;
           }
+        }
 
-          // Fallback: match by full_name
-          if (!matchedStudent) {
-            for (let ci = 0; ci < Math.min(3, row.length); ci++) {
-              const nameCandidate = row[ci]?.trim();
-              if (nameCandidate) {
-                const byName = students.filter(
-                  (s) => s.full_name?.trim().toLowerCase() === nameCandidate.toLowerCase()
-                );
-                if (byName.length === 1) {
-                  matchedStudent = byName[0];
-                  break;
-                }
+        // Step B: Unique Student ID Number check (supporting Khmer & Latin digits)
+        if (!matchedStudent) {
+          for (let ci = 0; ci < Math.min(4, row.length); ci++) {
+            const rawVal = row[ci]?.trim();
+            if (rawVal) {
+              const latinVal = toLatinDigits(rawVal).toLowerCase();
+              if (studentByIdNumber.has(latinVal)) {
+                matchedStudent = studentByIdNumber.get(latinVal);
+                break;
+              }
+              if (studentByIdNumber.has(rawVal.toLowerCase())) {
+                matchedStudent = studentByIdNumber.get(rawVal.toLowerCase());
+                break;
               }
             }
           }
+        }
 
-          if (!matchedStudent) {
-            invalidRowsCount++;
+        // Step C: Name matching fallback (strictly unambiguous in this class)
+        if (!matchedStudent) {
+          for (let ci = 0; ci < Math.min(4, row.length); ci++) {
+            const nameCandidate = row[ci]?.trim().toLowerCase();
+            if (nameCandidate) {
+              const matchedList = studentsByName.get(nameCandidate);
+              if (matchedList && matchedList.length === 1) {
+                matchedStudent = matchedList[0];
+                break;
+              } else if (matchedList && matchedList.length > 1) {
+                warnings.push(
+                  `ជួរទី ${rowIdx + 1}: ឈ្មោះ "${row[ci]}" មានសិស្សជាន់គ្នា ${matchedList.length} នាក់ - ត្រូវការអត្តលេខដើម្បីបញ្ជាក់`
+                );
+              }
+            }
+          }
+        }
+
+        if (!matchedStudent) {
+          unmatchedRowsCount++;
+          return;
+        }
+
+        if (seenStudentIds.has(matchedStudent.id)) {
+          duplicateIdsCount++;
+          warnings.push(
+            `សិស្ស "${matchedStudent.full_name}" (អត្តលេខ: ${matchedStudent.student_id_number || '-'}) មានទិន្នន័យស្ទួនក្នុង Clipboard`
+          );
+        } else {
+          seenStudentIds.add(matchedStudent.id);
+          matchedStudentsCount++;
+        }
+
+        const studentRecord = draftPlansMap[matchedStudent.id] || {};
+
+        // Iterate mapped subject columns
+        Object.entries(subjectColMap).forEach(([colIdxStr, subId]) => {
+          const colIdx = parseInt(colIdxStr, 10);
+          const rawVal = row[colIdx];
+          if (rawVal === undefined || rawVal === null) return;
+          const trimmed = rawVal.trim();
+          if (trimmed === '') return; // Do not silently erase with blank
+
+          const valUpper = trimmed.toUpperCase();
+          const gradeMap: Record<string, GradeLetter> = {
+            A: 'A',
+            B: 'B',
+            C: 'C',
+            D: 'D',
+            E: 'E',
+            F: 'F',
+            '1': 'A',
+            '2': 'B',
+            '3': 'C',
+            '4': 'D',
+            '5': 'E',
+            '6': 'F',
+          };
+
+          const canonicalGrade = gradeMap[valUpper];
+          if (!canonicalGrade) {
+            invalidValuesCount++;
             return;
           }
 
-          matchedStudentsCount++;
-          const studentRecord = { ...(next[matchedStudent.id] || {}) };
+          const subMeta = STUDY_PLAN_SUBJECTS.find((s) => s.id === subId);
+          const subjectLabel = subMeta?.label || subId;
+          const currentTarget = studentRecord[subId] || {};
 
-          // Iterate mapped subject columns
-          Object.entries(subjectColMap).forEach(([colIdxStr, subId]) => {
-            const colIdx = parseInt(colIdxStr, 10);
-            const rawVal = row[colIdx];
-            if (rawVal === undefined || rawVal === null) return;
+          let oldGrade = '';
+          let isOfficialLocked = false;
+          let lockReason: string | undefined;
 
-            // Normalize grade letter
-            const valUpper = rawVal.trim().toUpperCase();
-            const gradeMap: Record<string, GradeLetter> = {
-              A: 'A',
-              B: 'B',
-              C: 'C',
-              D: 'D',
-              E: 'E',
-              F: 'F',
-              '1': 'A',
-              '2': 'B',
-              '3': 'C',
-              '4': 'D',
-              '5': 'E',
-              '6': 'F',
-            };
+          if (activeMode === 'initial') {
+            oldGrade = currentTarget.initial || '';
+          } else if (activeMode === 'expected') {
+            oldGrade =
+              selectedMonth === 'end_plan'
+                ? currentTarget.end_plan || ''
+                : currentTarget.plan?.[selectedMonth] || '';
+          } else {
+            // Mode C: Actuals - check if official published grade exists!
+            const periodKey = selectedMonth === 'end_actual' ? 'annual' : selectedMonth;
+            const studentScores = publishedScoresByStudent[matchedStudent.id]?.[periodKey];
+            const publishedScore = studentScores ? lookupScoreWithAliases(studentScores, subId) : null;
 
-            const canonicalGrade = gradeMap[valUpper];
-            if (!canonicalGrade && valUpper !== '') return;
-
-            const subjectTarget = { ...(studentRecord[subId] || {}) };
-
-            if (activeMode === 'initial') {
-              subjectTarget.initial = canonicalGrade || '';
-            } else if (activeMode === 'expected') {
-              if (selectedMonth === 'end_plan') {
-                subjectTarget.end_plan = canonicalGrade || '';
-              } else {
-                subjectTarget.plan = {
-                  ...(subjectTarget.plan || {}),
-                  [selectedMonth]: canonicalGrade || '',
-                };
-              }
+            if (publishedScore !== null && publishedScore !== undefined) {
+              isOfficialLocked = true;
+              lockedSkippedCount++;
+              oldGrade = resolveAuthoritativeGradeLetter(
+                publishedScore,
+                classInfo.grade,
+                (classInfo as any).track,
+                subId,
+                subMeta?.aliases,
+                subMeta?.officialLabel
+              );
+              lockReason = 'ពិន្ទុផ្លូវការបានចេញផ្សាយរួច (Published Official Result)';
             } else {
-              // activeMode === 'actual'
-              if (selectedMonth === 'end_actual') {
-                subjectTarget.end_actual = canonicalGrade || '';
-              } else {
-                subjectTarget.actual = {
-                  ...(subjectTarget.actual || {}),
-                  [selectedMonth]: canonicalGrade || '',
-                };
-              }
+              oldGrade =
+                selectedMonth === 'end_actual'
+                  ? currentTarget.end_actual || ''
+                  : currentTarget.actual?.[selectedMonth] || '';
             }
+          }
 
-            studentRecord[subId] = subjectTarget;
-            updatedCellsCount++;
-            setChangedCells((c) =>
-              new Set(c).add(`${matchedStudent!.id}:${subId}:${activeMode}:${selectedMonth}`)
-            );
+          proposedChanges.push({
+            studentId: matchedStudent.id,
+            studentName: matchedStudent.full_name || '',
+            studentIdNumber: matchedStudent.student_id_number,
+            subjectId: subId,
+            subjectLabel,
+            oldGrade,
+            newGrade: canonicalGrade,
+            isOfficialLocked,
+            lockReason,
           });
-
-          next[matchedStudent.id] = studentRecord;
         });
-
-        return next;
       });
 
-      setClipboardNotice(
-        `បានផ្គូផ្គងសិស្ស ${matchedStudentsCount} នាក់ និងកែប្រែ ${updatedCellsCount} ក្រឡាដោយជោគជ័យ ${
-          invalidRowsCount > 0 ? `(រំលងជួរមិនស្គាល់អត្តលេខ ${invalidRowsCount})` : ''
-        }`
-      );
+      if (proposedChanges.length === 0 && unmatchedRowsCount === 0) {
+        alert('មិនមានទិន្នន័យត្រូវកែប្រែត្រូវបានរកឃើញក្នុង Clipboard ទេ។');
+        return;
+      }
+
+      setPastePreview({
+        totalRows: dataRows.length,
+        matchedStudentsCount,
+        unmatchedRowsCount,
+        duplicateIdsCount,
+        invalidValuesCount,
+        lockedSkippedCount,
+        proposedChanges,
+        warnings,
+      });
     } catch (err: any) {
       console.error('Error pasting from clipboard:', err);
       alert('មានបញ្ហាក្នុងការអាន Clipboard។ សូមពិនិត្យសិទ្ធិ Browser។');
     }
   };
 
-  // Save all staged changes atomically via Server Action
+  // Confirm and apply paste preview proposed changes
+  const handleConfirmPaste = () => {
+    if (!pastePreview) return;
+
+    let appliedCount = 0;
+
+    setDraftPlansMap((prev) => {
+      const next = { ...prev };
+
+      pastePreview.proposedChanges.forEach((change) => {
+        if (change.isOfficialLocked) return; // Skip locked cells
+
+        const studentRecord = { ...(next[change.studentId] || {}) };
+        const subjectTarget = { ...(studentRecord[change.subjectId] || {}) };
+
+        if (activeMode === 'initial') {
+          subjectTarget.initial = change.newGrade;
+        } else if (activeMode === 'expected') {
+          if (selectedMonth === 'end_plan') {
+            subjectTarget.end_plan = change.newGrade;
+          } else {
+            subjectTarget.plan = {
+              ...(subjectTarget.plan || {}),
+              [selectedMonth]: change.newGrade,
+            };
+          }
+        } else {
+          // activeMode === 'actual'
+          if (selectedMonth === 'end_actual') {
+            subjectTarget.end_actual = change.newGrade;
+          } else {
+            subjectTarget.actual = {
+              ...(subjectTarget.actual || {}),
+              [selectedMonth]: change.newGrade,
+            };
+          }
+        }
+
+        studentRecord[change.subjectId] = subjectTarget;
+        next[change.studentId] = studentRecord;
+        appliedCount++;
+
+        setChangedCells((c) =>
+          new Set(c).add(`${change.studentId}:${change.subjectId}:${activeMode}:${selectedMonth}`)
+        );
+      });
+
+      return next;
+    });
+
+    setPastePreview(null);
+    setClipboardNotice(
+      `បានបញ្ចូល ${appliedCount} ក្រឡាពី Clipboard ដោយជោគជ័យ ${
+        pastePreview.lockedSkippedCount > 0
+          ? `(រំលងពិន្ទុផ្លូវការ ${pastePreview.lockedSkippedCount} ក្រឡា)`
+          : ''
+      }`
+    );
+  };
+
+  // Save only changed student plans atomically via Server Action
   const handleSaveAll = async () => {
+    const changedStudentIds = Array.from(
+      new Set(Array.from(changedCells).map((k) => k.split(':')[0]))
+    );
+
+    if (changedStudentIds.length === 0) {
+      setFeedback({
+        type: 'warning',
+        message: 'មិនមានការផ្លាស់ប្តូរណាមួយត្រូវបានកែប្រែទេ (គ្មានទិន្នន័យត្រូវរក្សាទុក)',
+      });
+      return;
+    }
+
     setIsSaving(true);
     setFeedback(null);
 
     try {
-      // Build batch payload of all students in class
-      const plansPayload = students.map((s) => ({
-        student_id: s.id,
-        subject_targets: draftPlansMap[s.id] || {},
+      // Build batch payload containing ONLY the modified students
+      const plansPayload = changedStudentIds.map((studentId) => ({
+        student_id: studentId,
+        subject_targets: {
+          ...(activePlansMap[studentId] || {}),
+          ...(draftPlansMap[studentId] || {}),
+        },
       }));
 
       const res = await batchSaveStudentStudyPlansAction({
@@ -661,11 +854,15 @@ export default function StudentStudyPlanGridModal({
 
       setFeedback({
         type: 'success',
-        message: `បានរក្សាទុកផែនការសិក្សាសម្រាប់សិស្ស ${res.count || plansPayload.length} នាក់ដោយជោគជ័យ!`,
+        message: `បានរក្សាទុកផែនការសិក្សាសម្រាប់សិស្ស ${plansPayload.length} នាក់ដោយជោគជ័យ!`,
       });
 
       setChangedCells(new Set());
-      onSaveSuccess(draftPlansMap);
+      const updatedMap = {
+        ...activePlansMap,
+        ...draftPlansMap,
+      };
+      onSaveSuccess(updatedMap);
     } catch (err: any) {
       console.error('Fatal error during batch save:', err);
       setFeedback({
@@ -957,12 +1154,21 @@ export default function StudentStudyPlanGridModal({
                           // Mode C: Actuals
                           const periodKey =
                             selectedMonth === 'end_actual' ? 'annual' : selectedMonth;
-                          const publishedScore =
-                            publishedScoresByStudent[student.id]?.[periodKey]?.[sub.id];
+                          const studentScores =
+                            publishedScoresByStudent[student.id]?.[periodKey];
+                          const publishedScore = studentScores
+                            ? lookupScoreWithAliases(studentScores, sub.id)
+                            : null;
 
                           if (publishedScore !== undefined && publishedScore !== null) {
-                            const maxScore = getSubjectMaxScore(sub.id);
-                            cellValue = getSubjectGradeLetter(publishedScore, maxScore, gradeLevelNum);
+                            cellValue = resolveAuthoritativeGradeLetter(
+                              publishedScore,
+                              classInfo.grade,
+                              (classInfo as any).track,
+                              sub.id,
+                              sub.aliases,
+                              sub.officialLabel
+                            );
                             isLocked = true;
                             isOfficial = true;
                           } else {
@@ -1073,6 +1279,151 @@ export default function StudentStudyPlanGridModal({
           </div>
         </div>
       </div>
+
+      {/* ----------------- PASTE PREVIEW & CONFIRMATION MODAL ----------------- */}
+      {pastePreview && (
+        <div className="fixed inset-0 z-60 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-sm">
+                    📋
+                  </span>
+                  <span>ផ្ទៀងផ្ទាត់ទិន្នន័យចម្លងពី Excel (Paste Review)</span>
+                </h3>
+                <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                  ពិនិត្យមើលសិស្ស មុខវិជ្ជា និងនិទ្ទេសដែលបានរកឃើញមុនពេលបញ្ចូលទៅក្នុងតារាង
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPastePreview(null)}
+                className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Summary statistics badges */}
+            <div className="px-6 py-3 bg-slate-100/60 border-b border-slate-200 flex flex-wrap items-center gap-3 text-xs font-bold">
+              <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-xl border border-blue-200">
+                សិស្សផ្គូផ្គងបាន៖ {toKhmerDigits(pastePreview.matchedStudentsCount)} នាក់
+              </span>
+              <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-xl border border-emerald-200">
+                ក្រឡានឹងកែប្រែ៖ {toKhmerDigits(pastePreview.proposedChanges.filter((c) => !c.isOfficialLocked).length)} ក្រឡា
+              </span>
+              {pastePreview.lockedSkippedCount > 0 && (
+                <span className="bg-red-50 text-red-700 px-3 py-1 rounded-xl border border-red-200 flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5 text-red-600" />
+                  <span>ពិន្ទុផ្លូវការជាប់សោ (រំលង)៖ {toKhmerDigits(pastePreview.lockedSkippedCount)}</span>
+                </span>
+              )}
+              {pastePreview.unmatchedRowsCount > 0 && (
+                <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-xl border border-amber-200">
+                  ជួរមិនស្គាល់អត្តសញ្ញាណ៖ {toKhmerDigits(pastePreview.unmatchedRowsCount)}
+                </span>
+              )}
+              {pastePreview.duplicateIdsCount > 0 && (
+                <span className="bg-purple-50 text-purple-700 px-3 py-1 rounded-xl border border-purple-200">
+                  អត្តលេខស្ទួន៖ {toKhmerDigits(pastePreview.duplicateIdsCount)}
+                </span>
+              )}
+            </div>
+
+            {/* Warnings list if any */}
+            {pastePreview.warnings.length > 0 && (
+              <div className="px-6 py-2.5 bg-amber-50/70 border-b border-amber-200 text-xs text-amber-800 space-y-1 max-h-24 overflow-y-auto">
+                {pastePreview.warnings.map((w, wIdx) => (
+                  <div key={wIdx} className="flex items-center gap-1.5 font-medium">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>{w}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Proposed changes table */}
+            <div className="flex-1 overflow-auto p-6">
+              <table className="w-full border-collapse border border-slate-200 text-xs">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                    <th className="p-2 text-left">ឈ្មោះសិស្ស</th>
+                    <th className="p-2 text-center w-24">អត្តលេខ</th>
+                    <th className="p-2 text-left w-28">មុខវិជ្ជា</th>
+                    <th className="p-2 text-center w-20">និទ្ទេសចាស់</th>
+                    <th className="p-2 text-center w-10"></th>
+                    <th className="p-2 text-center w-20">និទ្ទេសថ្មី</th>
+                    <th className="p-2 text-center w-28">ស្ថានភាព</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pastePreview.proposedChanges.slice(0, 100).map((change, cIdx) => (
+                    <tr
+                      key={cIdx}
+                      className={`border-b border-slate-100 ${
+                        change.isOfficialLocked ? 'bg-red-50/50' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <td className="p-2 font-bold text-slate-800">{change.studentName}</td>
+                      <td className="p-2 text-center text-slate-500 font-mono">
+                        {toKhmerDigits(change.studentIdNumber || '-')}
+                      </td>
+                      <td className="p-2 font-semibold text-slate-700">{change.subjectLabel}</td>
+                      <td className="p-2 text-center text-slate-400 font-bold">{change.oldGrade || '-'}</td>
+                      <td className="p-2 text-center text-slate-400">
+                        <ArrowRight className="w-3.5 h-3.5 mx-auto" />
+                      </td>
+                      <td className="p-2 text-center font-black text-blue-700">{change.newGrade}</td>
+                      <td className="p-2 text-center">
+                        {change.isOfficialLocked ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 bg-red-100/60 px-2 py-0.5 rounded-md">
+                            <Lock className="w-3 h-3" />
+                            <span>ជាប់សោ</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-md">
+                            <Check className="w-3 h-3" />
+                            <span>នឹងអនុវត្ត</span>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {pastePreview.proposedChanges.length > 100 && (
+                <p className="text-center text-xs text-slate-400 mt-3 font-semibold">
+                  ... និងបង្ហាញ {toKhmerDigits(100)} ក្នុងចំណោម {toKhmerDigits(pastePreview.proposedChanges.length)} ការកែប្រែសរុប
+                </p>
+              )}
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPastePreview(null)}
+                className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                បោះបង់ (Cancel)
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPaste}
+                disabled={pastePreview.proposedChanges.filter((c) => !c.isOfficialLocked).length === 0}
+                className="px-5 py-2 bg-[#155EEF] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4 text-white" />
+                <span>
+                  យល់ព្រមអនុវត្ត ({toKhmerDigits(pastePreview.proposedChanges.filter((c) => !c.isOfficialLocked).length)} ក្រឡា)
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

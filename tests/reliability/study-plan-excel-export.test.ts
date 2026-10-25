@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
 import {
   generateStudyPlanWorkbook,
-  GenerateStudyPlanWorkbookOptions,
+  generateSingleSheetClassWorkbook,
 } from '../../lib/excel/study-plan-export';
 import { Classroom, Student } from '../../types';
 
@@ -205,5 +205,119 @@ describe('Study Plan Excel Export Suite', () => {
     assert.equal(reReadWs.getCell('A1').value, 'ព្រះរាជាណាចក្រកម្ពុជា');
     assert.equal(reReadWs.getCell('A12').value, 'មុខវិជ្ជា');
     assert.equal(reReadWs.pageSetup.orientation, 'landscape');
+  });
+
+  it('Scenario 6: Whole-class single-sheet export creates exactly ONE worksheet named ផែនការសិស្សទាំងថ្នាក់', () => {
+    const wb = generateSingleSheetClassWorkbook({
+      classInfo: sampleClass,
+      academicYearName: '2025-2026',
+      studentsData: [
+        { student: sampleStudent1, planTargets: sampleTargets },
+        { student: sampleStudent2 },
+      ],
+      gradesData: sampleGrades,
+    });
+
+    assert.equal(wb.worksheets.length, 1, 'Single-sheet export must have exactly ONE worksheet');
+    const ws = wb.worksheets[0];
+    assert.equal(ws.name, 'ផែនការសិស្សទាំងថ្នាក់');
+    assert.ok(ws.name.length <= 31, 'Worksheet name must satisfy Excel 31-character limit');
+    assert.equal(ws.pageSetup.orientation, 'landscape');
+    assert.equal(ws.pageSetup.paperSize, 9);
+  });
+
+  it('Scenario 7: Generates 50 complete student blocks vertically stacked without merge collisions and with page breaks', () => {
+    // Generate 50 sample students
+    const fiftyStudents = Array.from({ length: 50 }, (_, i) => ({
+      student: {
+        id: `student-uuid-${i + 1}`,
+        student_id_number: String(i + 1).padStart(3, '0'),
+        full_name: `សិស្ស ទី${i + 1}`,
+        gender: i % 2 === 0 ? 'M' : 'F',
+        class_id: 'class-uuid-1',
+        is_active: true,
+        created_at: '2026-01-01',
+        updated_at: '2026-01-01',
+      } as Student,
+      planTargets: sampleTargets,
+    }));
+
+    const wb = generateSingleSheetClassWorkbook({
+      classInfo: sampleClass,
+      academicYearName: '2025-2026',
+      studentsData: fiftyStudents,
+      gradesData: sampleGrades,
+    });
+
+    assert.equal(wb.worksheets.length, 1);
+    const ws = wb.worksheets[0];
+
+    // Total rows: 50 students * 28 rows per block = 1400 rows
+    assert.ok(ws.rowCount >= 50 * 27, 'Worksheet must contain full rows for all 50 student document blocks');
+
+    // Check first student at Block 1 (Row 1)
+    assert.equal(ws.getCell('D6').value, 'សិស្ស ទី1');
+    assert.equal(ws.getCell('A1').value, 'ព្រះរាជាណាចក្រកម្ពុជា');
+    assert.equal(ws.getCell('A12').value, 'មុខវិជ្ជា');
+
+    // Check 25th student at Block 25 (startRow = 1 + 24 * 28 = 673)
+    const block25Start = 1 + 24 * 28;
+    assert.equal(ws.getCell(block25Start + 5, 4).value, 'សិស្ស ទី25');
+    assert.equal(ws.getCell(block25Start, 1).value, 'ព្រះរាជាណាចក្រកម្ពុជា');
+    assert.equal(ws.getCell(block25Start + 11, 1).value, 'មុខវិជ្ជា');
+
+    // Check 50th student at Block 50 (startRow = 1 + 49 * 28 = 1373)
+    const block50Start = 1 + 49 * 28;
+    assert.equal(ws.getCell(block50Start + 5, 4).value, 'សិស្ស ទី50');
+    assert.equal(ws.getCell(block50Start, 1).value, 'ព្រះរាជាណាចក្រកម្ពុជា');
+    assert.equal(ws.getCell(block50Start + 11, 1).value, 'មុខវិជ្ជា');
+
+    // Verify row page breaks: rows 27, 27+28, 27+56, ... have page breaks
+    const rowBreaks = (ws as any).rowBreaks || [];
+    assert.ok(rowBreaks.some((b: any) => b.id === 27), 'Block 1 row 27 must have an explicit page break');
+    assert.ok(rowBreaks.some((b: any) => b.id === 27 + 28), 'Block 2 row 55 must have an explicit page break');
+
+    // Verify print area encompasses all 50 student document blocks
+    assert.ok(ws.pageSetup.printArea?.startsWith('A1:X'), 'Print area must encompass full width A:X');
+    assert.ok(ws.pageSetup.printArea?.endsWith(String(1 + 50 * 28 - 2)), 'Print area must encompass all 50 blocks');
+  });
+
+  it('Scenario 8: 50-student single-sheet workbook writes to buffer and re-reads cleanly in ExcelJS', async () => {
+    const fiftyStudents = Array.from({ length: 50 }, (_, i) => ({
+      student: {
+        id: `student-uuid-${i + 1}`,
+        student_id_number: String(i + 1).padStart(3, '0'),
+        full_name: `សិស្ស ទី${i + 1}`,
+        gender: 'M',
+        class_id: 'class-uuid-1',
+        is_active: true,
+        created_at: '2026-01-01',
+        updated_at: '2026-01-01',
+      } as Student,
+      planTargets: sampleTargets,
+    }));
+
+    const wb = generateSingleSheetClassWorkbook({
+      classInfo: sampleClass,
+      academicYearName: '2025-2026',
+      studentsData: fiftyStudents,
+      gradesData: sampleGrades,
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    assert.ok(buffer.byteLength > 20000, '50-student workbook buffer must be substantial');
+
+    const reReadWb = new ExcelJS.Workbook();
+    await reReadWb.xlsx.load(buffer);
+
+    assert.equal(reReadWb.worksheets.length, 1);
+    const reReadWs = reReadWb.worksheets[0];
+    assert.equal(reReadWs.name, 'ផែនការសិស្សទាំងថ្នាក់');
+    assert.equal(reReadWs.pageSetup.orientation, 'landscape');
+
+    // Check first and 50th student names
+    assert.equal(reReadWs.getCell('D6').value, 'សិស្ស ទី1');
+    const block50Start = 1 + 49 * 28;
+    assert.equal(reReadWs.getCell(block50Start + 5, 4).value, 'សិស្ស ទី50');
   });
 });
