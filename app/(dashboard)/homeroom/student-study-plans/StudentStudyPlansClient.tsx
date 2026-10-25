@@ -336,6 +336,136 @@ export default function StudentStudyPlansClient({
     }
   };
 
+  // Update a single target value in editingTargets
+  const handleUpdateTargetValue = (subjectId: string, colKey: string, val: string) => {
+    setEditingTargets((prev) => {
+      const existing = prev[subjectId] || {};
+      if (colKey === 'initial') {
+        return {
+          ...prev,
+          [subjectId]: {
+            ...existing,
+            initial: val,
+          },
+        };
+      }
+      if (colKey === 'end_plan') {
+        return {
+          ...prev,
+          [subjectId]: {
+            ...existing,
+            end_plan: val,
+          },
+        };
+      }
+      return {
+        ...prev,
+        [subjectId]: {
+          ...existing,
+          plan: {
+            ...(existing.plan || {}),
+            [colKey]: val,
+          },
+        },
+      };
+    });
+  };
+
+  // Focus a specific cell in the goal setting grid
+  const focusGoalCell = (row: number, col: number) => {
+    const el = document.getElementById(`goal-cell-${row}-${col}`) as HTMLElement | null;
+    if (el) {
+      el.focus();
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  };
+
+  // Handle arrow keys, Enter, Tab, and instant A-F / 1-6 grade entry in goal modal grid
+  const handleGoalGridKeyDown = (
+    e: React.KeyboardEvent<HTMLElement>,
+    rowIndex: number,
+    colIndex: number,
+    subjectId: string,
+    colKey: string
+  ) => {
+    const TOTAL_ROWS = STUDY_PLAN_SUBJECTS.length; // 10
+    const TOTAL_COLS = 12; // 0: initial, 1..10: months, 11: end_plan
+
+    // 1. Enter key: moves to next subject (or previous with Shift)
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const nextRow = e.shiftKey ? Math.max(0, rowIndex - 1) : Math.min(TOTAL_ROWS - 1, rowIndex + 1);
+      focusGoalCell(nextRow, colIndex);
+      return;
+    }
+
+    // 2. Arrow Down: moves to next subject
+    if (e.key === 'ArrowDown') {
+      if (e.altKey) return; // Allow Alt+Down for native dropdown opening
+      e.preventDefault();
+      focusGoalCell(Math.min(TOTAL_ROWS - 1, rowIndex + 1), colIndex);
+      return;
+    }
+
+    // 3. Arrow Up: moves to previous subject
+    if (e.key === 'ArrowUp') {
+      if (e.altKey) return;
+      e.preventDefault();
+      focusGoalCell(Math.max(0, rowIndex - 1), colIndex);
+      return;
+    }
+
+    // 4. Arrow Right: moves to next month/column
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      focusGoalCell(rowIndex, Math.min(TOTAL_COLS - 1, colIndex + 1));
+      return;
+    }
+
+    // 5. Arrow Left: moves to previous month/column
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      focusGoalCell(rowIndex, Math.max(0, colIndex - 1));
+      return;
+    }
+
+    // 6. Tab / Shift+Tab wrapping navigation
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        if (colIndex > 0) {
+          focusGoalCell(rowIndex, colIndex - 1);
+        } else if (rowIndex > 0) {
+          focusGoalCell(rowIndex - 1, TOTAL_COLS - 1);
+        }
+      } else {
+        if (colIndex < TOTAL_COLS - 1) {
+          focusGoalCell(rowIndex, colIndex + 1);
+        } else if (rowIndex < TOTAL_ROWS - 1) {
+          focusGoalCell(rowIndex + 1, 0);
+        }
+      }
+      return;
+    }
+
+    // 7. Instant Grade Entry (A-F, 1-6, Backspace/Delete/0)
+    const keyUpper = e.key.toUpperCase();
+    let targetGrade: string | null = null;
+    if (['A', 'B', 'C', 'D', 'E', 'F'].includes(keyUpper)) {
+      targetGrade = keyUpper;
+    } else if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
+      const numMap: Record<string, string> = { '1': 'A', '2': 'B', '3': 'C', '4': 'D', '5': 'E', '6': 'F' };
+      targetGrade = numMap[e.key];
+    } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
+      targetGrade = '';
+    }
+
+    if (targetGrade !== null) {
+      e.preventDefault();
+      handleUpdateTargetValue(subjectId, colKey, targetGrade);
+    }
+  };
+
   // Open Goal Setting Modal
   const handleOpenGoalModal = () => {
     if (!activeStudent) return;
@@ -352,6 +482,9 @@ export default function StudentStudyPlansClient({
     setEditingTargets(cloned);
     setGoalFeedback(null);
     setIsGoalModalOpen(true);
+    setTimeout(() => {
+      focusGoalCell(0, 0);
+    }, 120);
   };
 
   // Save Goal Settings
@@ -851,8 +984,8 @@ export default function StudentStudyPlansClient({
                 ))}
               </div>
 
-              <span className="text-[11px] font-semibold text-amber-700">
-                * កម្រិតគ្រោងនឹងបង្ហាញលើជួរឈរខ្មៅ (គ្រោង) នៃឯកសារ
+              <span className="text-[11px] font-semibold text-amber-800">
+                * គន្លឹះ៖ ប្រើ <strong>Enter</strong> ឬ <strong>ព្រួញឡើង/ចុះ</strong> ដើម្បីរំកិលតាមមុខវិជ្ជា, <strong>ព្រួញឆ្វេង/ស្តាំ</strong> ដើម្បីរំកិលតាមខែ, និងចុច <strong>A-F</strong> ឬ <strong>1-6</strong> ដើម្បីកំណត់កម្រិតពិន្ទុភ្លាមៗ
               </span>
             </div>
 
@@ -892,7 +1025,7 @@ export default function StudentStudyPlansClient({
                   </tr>
                 </thead>
                 <tbody>
-                  {STUDY_PLAN_SUBJECTS.map((sub) => {
+                  {STUDY_PLAN_SUBJECTS.map((sub, rIdx) => {
                     const currentTarget = editingTargets[sub.id] || {};
                     return (
                       <tr key={sub.id} className="hover:bg-slate-50/80">
@@ -901,21 +1034,14 @@ export default function StudentStudyPlansClient({
                           {sub.label}
                         </td>
 
-                        {/* Beginning of Year Initial Goal */}
+                        {/* Beginning of Year Initial Goal (Col 0) */}
                         <td className="border border-slate-200 p-1">
                           <select
+                            id={`goal-cell-${rIdx}-0`}
                             value={currentTarget.initial || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setEditingTargets((prev) => ({
-                                ...prev,
-                                [sub.id]: {
-                                  ...(prev[sub.id] || {}),
-                                  initial: val,
-                                },
-                              }));
-                            }}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-center font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            onChange={(e) => handleUpdateTargetValue(sub.id, 'initial', e.target.value)}
+                            onKeyDown={(e) => handleGoalGridKeyDown(e, rIdx, 0, sub.id, 'initial')}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-center font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-blue-50/90 focus:border-blue-500 transition-all cursor-pointer"
                           >
                             {GRADE_LETTER_OPTIONS.map((g) => (
                               <option key={g} value={g}>
@@ -925,27 +1051,18 @@ export default function StudentStudyPlansClient({
                           </select>
                         </td>
 
-                        {/* 10 Monthly Plan Goals */}
-                        {STUDY_PLAN_MONTHS.map((m) => {
+                        {/* 10 Monthly Plan Goals (Cols 1 to 10) */}
+                        {STUDY_PLAN_MONTHS.map((m, mIdx) => {
+                          const colIdx = 1 + mIdx;
                           const monthVal = currentTarget.plan?.[m.id] || '';
                           return (
                             <td key={m.id} className="border border-slate-200 p-1">
                               <select
+                                id={`goal-cell-${rIdx}-${colIdx}`}
                                 value={monthVal}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setEditingTargets((prev) => ({
-                                    ...prev,
-                                    [sub.id]: {
-                                      ...(prev[sub.id] || {}),
-                                      plan: {
-                                        ...(prev[sub.id]?.plan || {}),
-                                        [m.id]: val,
-                                      },
-                                    },
-                                  }));
-                                }}
-                                className={`w-full border rounded-lg p-1 text-center font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                                onChange={(e) => handleUpdateTargetValue(sub.id, m.id, e.target.value)}
+                                onKeyDown={(e) => handleGoalGridKeyDown(e, rIdx, colIdx, sub.id, m.id)}
+                                className={`w-full border rounded-lg p-1 text-center font-bold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-blue-50/90 focus:border-blue-500 transition-all cursor-pointer ${
                                   monthVal
                                     ? 'bg-blue-50 text-blue-900 border-blue-200'
                                     : 'bg-slate-50 text-slate-400 border-slate-200'
@@ -961,21 +1078,14 @@ export default function StudentStudyPlansClient({
                           );
                         })}
 
-                        {/* End of Year Plan Goal */}
+                        {/* End of Year Plan Goal (Col 11) */}
                         <td className="border border-slate-200 p-1">
                           <select
+                            id={`goal-cell-${rIdx}-11`}
                             value={currentTarget.end_plan || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setEditingTargets((prev) => ({
-                                ...prev,
-                                [sub.id]: {
-                                  ...(prev[sub.id] || {}),
-                                  end_plan: val,
-                                },
-                              }));
-                            }}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-center font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            onChange={(e) => handleUpdateTargetValue(sub.id, 'end_plan', e.target.value)}
+                            onKeyDown={(e) => handleGoalGridKeyDown(e, rIdx, 11, sub.id, 'end_plan')}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-center font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-blue-50/90 focus:border-blue-500 transition-all cursor-pointer"
                           >
                             {GRADE_LETTER_OPTIONS.map((g) => (
                               <option key={g} value={g}>
