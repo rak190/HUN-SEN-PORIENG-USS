@@ -5,6 +5,7 @@ import { fetchSchemaCompatibleRoster, unavailableProfileFields } from '@/lib/stu
 import type { GridRow } from '@/lib/students/grid';
 import { useAuth } from '@/lib/auth-context';
 import { buildCacheKey, getOrFetchScoped, subscribe } from '@/lib/cache/client-cache';
+import { compareStudentsByName, compareStudentsByField } from '@/lib/students/student-sort';
 
 export const STUDENT_ROSTER_FIELDS = 
   'id, student_id_number, desk_number, room_number, full_name, english_name, photo_url, gender, dob, current_address, enrollment_status, current_enrollment_status, academic_year_id, status, pob, primary_school, secondary_school, exam_grade, ethnicity, scholarship_program, scholarship_materials, scholarship_funding, scholarship_other, elective_subject, student_roles, notes, student_phone, prev_school, indigenous, birth_cert_no, assistive_device, migrant_status, scholarship, id_poor, orphan, distance_km, weight_kg, height_m, bmi, nutrition_status, disability, health_note, father_name, father_job, father_phone, mother_name, mother_job, mother_phone, guardian_name, guardian_job, guardian_phone, siblings_count, housing, income, parent_phone, risk_level';
@@ -16,8 +17,8 @@ export function useStudents(activeClassId: string | undefined) {
   const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortState, setSortState] = useState<{ field: string | null; direction: 'asc' | 'desc' | null }>({
-    field: null,
-    direction: null,
+    field: 'full_name',
+    direction: 'asc',
   });
 
   const classSeqRef = useRef(0);
@@ -106,25 +107,15 @@ export function useStudents(activeClassId: string | undefined) {
 
   const filteredStudents = useMemo<MassiveProfilingStudent[]>(() => {
     let result = students.filter(s => 
-      s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      ((s.full_name || '').toLowerCase().includes(searchQuery.toLowerCase())) || 
       (s.student_id_number && s.student_id_number.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
     if (sortState.field && sortState.direction) {
       const { field, direction } = sortState;
-      const factor = direction === 'asc' ? 1 : -1;
-
-      result = [...result].sort((a: any, b: any) => {
-        let valA = a[field];
-        let valB = b[field];
-
-        if (typeof valA === 'string') valA = valA.toLowerCase();
-        if (typeof valB === 'string') valB = valB.toLowerCase();
-
-        if (valA < valB) return -1 * factor;
-        if (valA > valB) return 1 * factor;
-        return 0;
-      });
+      result = [...result].sort((a, b) => compareStudentsByField(a, b, field, direction));
+    } else {
+      result = [...result].sort((a, b) => compareStudentsByName(a, b, 'asc'));
     }
 
     return result;

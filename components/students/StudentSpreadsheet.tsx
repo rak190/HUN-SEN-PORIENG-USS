@@ -32,6 +32,7 @@ import { formatDobForDisplay } from "@/lib/utils/student-date";
 import { invalidateClassRoster } from "@/lib/cache/client-cache";
 import StudentGridImport from "./StudentGridImport";
 import { deriveStudentProfile } from "@/lib/students/derived-profile";
+import { compareStudentsByField } from "@/lib/students/student-sort";
 import {
   Search,
   Users,
@@ -118,7 +119,7 @@ export default function StudentSpreadsheet(props: Props) {
   const [measureText, setMeasureText] = useState<TextMeasurer>();
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({
-    key: "student_id_number",
+    key: "full_name",
     ascending: true,
   });
   const [anchor, setAnchor] = useState<Cell>({ row: 0, col: 2 });
@@ -178,15 +179,14 @@ export default function StudentSpreadsheet(props: Props) {
             .toLowerCase()
             .includes(search.toLowerCase()),
         )
-        .sort(
-          (a, b) =>
-            String(
-              sortValue(a as unknown as GridRow, sort.key) ?? "",
-            ).localeCompare(
-              String(sortValue(b as unknown as GridRow, sort.key) ?? ""),
-              "km",
-              { numeric: true },
-            ) * (sort.ascending ? 1 : -1),
+        .sort((a, b) =>
+          compareStudentsByField(
+            a as unknown as MassiveProfilingStudent,
+            b as unknown as MassiveProfilingStudent,
+            sort.key,
+            sort.ascending ? "asc" : "desc",
+            (row, key) => sortValue(row as unknown as GridRow, key),
+          ),
         ),
     [students, search, sort],
   );

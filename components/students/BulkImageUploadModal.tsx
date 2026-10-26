@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { MassiveProfilingStudent } from '@/app/(dashboard)/students/types';
 import { X, UploadCloud, Image as ImageIcon, User, CheckCircle2, Loader2, AlertCircle, Trash2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { compareStudentsByName } from '@/lib/students/student-sort';
 
 interface BulkImageUploadModalProps {
   isOpen: boolean;
@@ -110,9 +111,30 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, classI
     setSelectedStudentId(null);
   };
 
-  const unmatchedStudents = students.filter(s => !files.some(f => f.matchedStudentId === s.id) && !s.photo_url);
-  const matchedFiles = files.filter(f => f.matchedStudentId);
-  const unmatchedFiles = files.filter(f => !f.matchedStudentId);
+  const unmatchedStudents = useMemo(() => {
+    return students
+      .filter(s => !files.some(f => f.matchedStudentId === s.id) && !s.photo_url)
+      .slice()
+      .sort((a, b) => compareStudentsByName(a, b, 'asc'));
+  }, [students, files]);
+
+  const matchedFiles = useMemo(() => {
+    return files
+      .filter(f => f.matchedStudentId)
+      .slice()
+      .sort((fa, fb) => {
+        const sa = students.find(s => s.id === fa.matchedStudentId);
+        const sb = students.find(s => s.id === fb.matchedStudentId);
+        if (!sa && !sb) return 0;
+        if (!sa) return 1;
+        if (!sb) return -1;
+        return compareStudentsByName(sa, sb, 'asc');
+      });
+  }, [files, students]);
+
+  const unmatchedFiles = useMemo(() => {
+    return files.filter(f => !f.matchedStudentId);
+  }, [files]);
 
   // Compression Utility
   const compressImage = (file: File, maxWidth: number, maxHeight: number, quality: number): Promise<Blob> => {
