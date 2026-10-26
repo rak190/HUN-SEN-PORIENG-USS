@@ -81,8 +81,8 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
             let val = cellVal.trim();
             // Handle Khmer gender conversions on paste if needed
             if (colName === 'gender') {
-                const isFemale = ['f', 'ស្រី', 'ស្ត្រី', 'female'].includes(val.toLowerCase());
-                val = isFemale ? 'F' : 'M';
+                const isFemale = ['f', 'ស្រី', 'ស្ត្រី', 'female', 'ស'].includes(val.toLowerCase());
+                val = isFemale ? 'F' : ['m', 'ប្រុស', 'male', 'ប'].includes(val.toLowerCase()) ? 'M' : val;
             }
             newData[targetRowIdx][colName] = val;
           }
@@ -103,15 +103,23 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
         return;
     }
 
-    const validData = gridData.filter(row => row.student_id_number.trim() !== '' && row.full_name.trim() !== '');
+    const validData = gridData.filter(row => row.full_name.trim() !== '');
+    if (gridData.some(row => !row.full_name.trim() && [row.student_id_number, row.desk_number, row.room_number].some(value => value?.trim()))) {
+      setErrorMsg('សូមបំពេញឈ្មោះសិស្សសម្រាប់ជួរដែលបានបញ្ចូលទិន្នន័យ។');
+      return;
+    }
+    if (validData.some(row => !['m', 'male', 'ប្រុស', 'ប', 'f', 'female', 'ស្រី', 'ស្ត្រី', 'ស'].includes(String(row.gender).trim().toLowerCase()))) {
+      setErrorMsg('ភេទមិនត្រឹមត្រូវ (ប្រុស/ស្រី)');
+      return;
+    }
     
     if (validData.length === 0) {
-      setErrorMsg('សូមបញ្ចូលអត្តលេខ និងឈ្មោះសិស្សយ៉ាងហោចណាស់មួយជួរ។');
+      setErrorMsg('សូមបញ្ចូលឈ្មោះសិស្សយ៉ាងហោចណាស់មួយជួរ។ អាចទុកអត្តលេខសិស្សទទេបាន។');
       return;
     }
 
     // Check for duplicates within the grid itself
-    const ids = validData.map(r => r.student_id_number.trim());
+    const ids = validData.map(r => r.student_id_number.trim()).filter(Boolean);
     if (new Set(ids).size !== ids.length) {
         setErrorMsg('មានអត្តលេខជាន់គ្នានៅក្នុងតារាង! សូមពិនិត្យឡើងវិញ។');
         return;
@@ -126,13 +134,13 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
     setErrorMsg('');
 
     const payload = validData.map(s => {
-      const isFemale = ['f', 'ស្រី', 'ស្ត្រី'].includes((s.gender || '').toLowerCase().trim());
+      const isFemale = ['f', 'female', 'ស្រី', 'ស្ត្រី', 'ស'].includes((s.gender || '').toLowerCase().trim());
       
       return {
         class_id: selectedClass, 
         status: 'new',
         gender: isFemale ? 'F' : 'M',
-        student_id_number: s.student_id_number.trim(),
+        student_id_number: s.student_id_number.trim() || null,
         full_name: s.full_name.trim(),
         desk_number: s.desk_number?.trim() || null,
         room_number: s.room_number?.trim() || null,
@@ -197,7 +205,7 @@ export default function AdminBasicRegistrationModal({ isOpen, onClose, onSuccess
             <thead className="bg-slate-100 sticky top-0 z-10 shadow-sm font-black text-slate-600 text-xs uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-3 border border-slate-200 w-12 text-center text-slate-400">ល.រ</th>
-                <th className="px-4 py-3 border border-slate-200 w-32 text-blue-600">អត្តលេខ*</th>
+                <th className="px-4 py-3 border border-slate-200 w-32 text-blue-600">អត្តលេខ</th>
                 <th className="px-4 py-3 border border-slate-200 w-full text-blue-600">គោត្តនាម និងនាម*</th>
                 <th className="px-4 py-3 border border-slate-200 w-24 text-center">ភេទ*</th>
                 <th className="px-4 py-3 border border-slate-200 w-24 text-center">លេខតុ</th>

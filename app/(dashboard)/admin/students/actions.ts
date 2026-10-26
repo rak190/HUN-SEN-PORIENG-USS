@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { getServerAuth, requireRole } from '@/lib/auth-server';
 import { revalidatePath } from 'next/cache';
 import { AdminUpdateStudentSchema, type AdminUpdateStudentPayload } from './student-edit-schema';
+import { normalizeBasicRegistrationRows } from '@/lib/students/basic-registration';
+import type { AdminStudentRow } from '@/lib/students/admin-workspace';
 
 export async function fetchExportData(filters: { q?: string, class?: string, teacher?: string, gender?: string, desk?: string }) {
   const { user, profile, role } = await getServerAuth();
@@ -13,6 +15,26 @@ export async function fetchExportData(filters: { q?: string, class?: string, tea
   }
 
   const supabase = await createClient();
+
+  if (role === 'admin') {
+    if (!profile.is_active || !profile.school_id) return { success: false, error: 'Active school-scoped Admin required.' };
+    const { data: year, error: yearError } = await supabase.from('academic_years').select('id').eq('school_id',profile.school_id).eq('is_active',true).eq('status','active').order('created_at',{ascending:false}).limit(1).maybeSingle();
+    if (yearError || !year) return { success: false, error: yearError?.message || 'No active academic year' };
+    const exported: AdminStudentRow[] = [];
+    let expected = 0;
+    for (let page = 1; page <= 20; page++) {
+      const unassigned = filters.class === 'unassigned' || filters.class === 'គ្មានថ្នាក់';
+      const { data,error } = await supabase.rpc('admin_student_directory',{
+        p_year:year.id,p_class:filters.class && filters.class!=='all' && !unassigned ? filters.class : null,
+        p_search:filters.q || '',p_unassigned:unassigned,p_gender:filters.gender || 'all',p_desk:filters.desk || 'all',p_teacher:filters.teacher || 'all',p_page:page,p_page_size:500,
+      });
+      if (error || !data || !Array.isArray(data.rows)) return { success: false, error: error?.message || 'Export query failed' };
+      expected = Number(data.filtered_total); exported.push(...data.rows);
+      if (exported.length >= expected) break;
+    }
+    if (exported.length !== expected || new Set(exported.map(row => row.id)).size !== expected) return { success: false, error: 'Roster changed during export or exceeds 10,000 rows. Please retry or filter by class.' };
+    return { success: true, data: exported };
+  }
 
   // Scope to Active Academic Year as Single Source of Truth
   const { data: activeYear } = await supabase
@@ -113,7 +135,7 @@ export async function fetchExportData(filters: { q?: string, class?: string, tea
 
 export async function adminBasicRegisterAction(payload: {
   records: Array<{ 
-    student_id_number: string; 
+    student_id_number?: string | null;
     full_name: string; 
     gender: string; 
     class_id: string; 
@@ -123,23 +145,20 @@ export async function adminBasicRegisterAction(payload: {
 }) {
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
-    const { user } = await requirePrincipal(); // strict admin requirement
-    const supabase = await createClient(); // this uses the service role for admin routes? 
-    // Wait, createAdminClient is usually used for bypass RLS. Let's import it.
-    // Actually, createClient is fine because requirePrincipal ensures we are admin, but let's see what was imported.
-    const { createAdminClient } = await import('@/lib/supabase/admin');
-    const adminSupabase = createAdminClient();
+    await requirePrincipal();
+    const records = normalizeBasicRegistrationRows(payload.records);
+    const adminSupabase = await createClient();
 
     const { data, error } = await adminSupabase.rpc('bulk_quick_register_students', {
-      student_records: payload.records,
+      student_records: records,
       target_year_id: payload.academic_year_id,
-      admin_user_id: user?.id
     });
 
     if (error) {
       console.error('Admin basic register error:', error);
       return { success: false, error: error.message };
     }
+    if (!data?.success) return { success: false, error: 'ការចុះឈ្មោះបរាជ័យ។ សូមព្យាយាមម្តងទៀត។' };
 
     const { revalidatePath } = await import('next/cache');
     revalidatePath('/admin/students');
@@ -282,7 +301,7 @@ export async function processGiepCommitAction(
 export async function bulkAssignClassAction(studentIds: string[], targetClassId: string, academicYearId: string) {
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
-    await requirePrincipal();
+    const { profile } = await requirePrincipal();
     const { createClient } = await import('@/lib/supabase/server');
     const supabase = await createClient();
 
@@ -291,6 +310,7 @@ export async function bulkAssignClassAction(studentIds: string[], targetClassId:
       const { data: yearData } = await supabase
         .from('academic_years')
         .select('id')
+        .eq('school_id', profile.school_id)
         .eq('is_active', true)
         .limit(1)
         .maybeSingle();
@@ -306,13 +326,14 @@ export async function bulkAssignClassAction(studentIds: string[], targetClassId:
     });
 
     if (error) throw error;
+    if (!rpcRes?.success) throw new Error('Class assignment was not confirmed');
 
     const { revalidatePath } = await import('next/cache');
     revalidatePath('/admin/students');
     revalidatePath('/students');
     revalidatePath('/classes/info');
 
-    return { success: true, count: rpcRes?.reassigned_count || studentIds.length };
+    return { success: true, count: Number(rpcRes.reassigned_count), classIds: [targetClassId,...(Array.isArray(rpcRes.source_class_ids) ? rpcRes.source_class_ids : [])] as string[] };
   } catch (err: any) {
     console.error('Bulk assign class error:', err);
     return { success: false, error: err.message || 'Unknown error occurred' };
@@ -322,9 +343,8 @@ export async function bulkAssignClassAction(studentIds: string[], targetClassId:
 export async function batchRegisterBasicStudents(studentsData: any[], academicYearId: string) {
   try {
     const { requirePrincipal } = await import('@/lib/auth-server');
-    const { user } = await requirePrincipal();
-    const { createAdminClient } = await import('@/lib/supabase/admin');
-    const supabase = createAdminClient();
+    await requirePrincipal();
+    const supabase = await createClient();
 
     let targetYearId = academicYearId;
     if (targetYearId === 'fetch-active') {
@@ -340,7 +360,7 @@ export async function batchRegisterBasicStudents(studentsData: any[], academicYe
       const rawDob = s.dob || s.date_of_birth || null;
       const sanitizedDob = rawDob && typeof rawDob === 'string' && rawDob.trim() !== '' ? rawDob.trim() : null;
       return {
-        student_id_number: String(s.student_id_number || s.student_id || '').trim(),
+        student_id_number: s.student_id_number ?? s.student_id ?? null,
         full_name: String(s.full_name || s.name_khmer || '').trim(),
         gender: s.gender,
         dob: sanitizedDob,
@@ -352,15 +372,15 @@ export async function batchRegisterBasicStudents(studentsData: any[], academicYe
     });
 
     const { data, error } = await supabase.rpc('batch_register_students_atomic', {
-      p_students: cleanData,
+      p_students: normalizeBasicRegistrationRows(cleanData, false),
       p_academic_year_id: targetYearId,
-      p_caller_id: user.id
     });
 
     if (error) {
       console.error('Batch register atomic error:', error);
       return { success: false, error: error.message };
     }
+    if (!data?.success) return { success: false, error: 'ការចុះឈ្មោះបរាជ័យ។ សូមព្យាយាមម្តងទៀត។' };
 
     const { revalidatePath } = await import('next/cache');
     revalidatePath('/admin/students');
@@ -369,7 +389,7 @@ export async function batchRegisterBasicStudents(studentsData: any[], academicYe
     revalidatePath('/homeroom/profiling');
     revalidatePath('/classes');
 
-    return { success: true, count: data?.count || cleanData.length };
+    return { success: true, count: data.count };
   } catch (err: any) {
     console.error('Batch register caught error:', err);
     return { success: false, error: err?.message || 'Unknown error occurred' };
@@ -696,7 +716,7 @@ export async function updateAdminStudentProfileAction(payload: AdminUpdateStuden
     }
 
     const validated = validationResult.data;
-    const cleanIdNumber = validated.student_id_number.trim();
+    const cleanIdNumber = validated.student_id_number;
     const cleanFullName = validated.full_name.trim();
     const normalizedGender = (validated.gender === 'ស្រី' || validated.gender === 'F') ? 'F' : 'M';
 
@@ -713,16 +733,21 @@ export async function updateAdminStudentProfileAction(payload: AdminUpdateStuden
       return { success: false, error: 'រកមិនឃើញទិន្នន័យសិស្សនៅក្នុងប្រព័ន្ធទេ (Student not found).' };
     }
 
+    if (currentStudent.student_id_number?.trim() && !cleanIdNumber) {
+      return { success: false, error: 'មិនអាចលុបអត្តលេខដែលបានកំណត់រួចទេ។ សូមរក្សាអត្តលេខចាស់ ឬបញ្ចូលអត្តលេខថ្មី។' };
+    }
+
     // 4. Duplicate Check: Ensure student_id_number is not assigned to another student
-    const { data: conflictStudent, error: conflictErr } = await supabase
+    const { data: conflictStudent, error: conflictErr } = cleanIdNumber ? await supabase
       .from('students')
       .select('id, full_name')
       .eq('student_id_number', cleanIdNumber)
       .neq('id', validated.studentId)
-      .maybeSingle();
+      .maybeSingle() : { data: null, error: null };
 
     if (conflictErr) {
       console.error('Duplicate student_id_number check error:', conflictErr);
+      return { success: false, error: 'មិនអាចពិនិត្យអត្តលេខស្ទួនបានទេ។ សូមព្យាយាមម្តងទៀត។' };
     }
 
     if (conflictStudent) {
@@ -738,8 +763,8 @@ export async function updateAdminStudentProfileAction(payload: AdminUpdateStuden
       student_id_number: cleanIdNumber,
       english_name: validated.english_name ? validated.english_name.trim() : null,
       gender: normalizedGender,
-      dob: validated.dob.trim(),
-      date_of_birth: validated.dob.trim(),
+      dob: validated.dob,
+      date_of_birth: validated.dob,
       photo_url: validated.photo_url && validated.photo_url.trim().length > 0 ? validated.photo_url.trim() : null,
       parent_phone: validated.parent_phone ? validated.parent_phone.trim() : null,
       emergency_contact_phone: validated.emergency_contact_phone ? validated.emergency_contact_phone.trim() : null,

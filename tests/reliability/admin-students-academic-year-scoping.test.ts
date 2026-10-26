@@ -12,37 +12,14 @@ describe('Admin Students Academic Year & Archive Scoping Suite', () => {
 
     const content = fs.readFileSync(pagePath, 'utf8');
 
-    // 1. Must fetch active academic year
-    assert.ok(
-      content.includes(".from('academic_years')") && content.includes(".eq('is_active', true)"),
-      'Must fetch active academic year with is_active = true'
-    );
+    // Detailed school/year/class behavior is exercised by admin-student-workspace-database.test.ts.
+    assert.match(content, /\.eq\('is_active',\s*true\)/);
+    assert.match(content, /\.eq\('is_archived',\s*false\)/);
+    assert.match(content, /\.eq\('academic_year_id',\s*activeYear.id\)/);
+    assert.match(content, /\.rpc\('admin_student_directory'/);
+    assert.match(content, /p_year:\s*activeYear.id/);
+    assert.match(content, /total:\s*Number\(directory.total\)/);
 
-    // 2. Must filter classes with is_archived = false and academic_year_id
-    assert.ok(
-      content.includes(".eq('is_archived', false)"),
-      'classes query must filter out archived classes'
-    );
-    assert.ok(
-      content.includes("classesQuery.eq('academic_year_id', activeYearId)"),
-      'classes query must be scoped to activeYearId'
-    );
-
-    // 3. Must scope active_class_rosters main query
-    assert.ok(
-      content.includes("query = query.eq('academic_year_id', activeYearId)"),
-      'active_class_rosters query must be scoped to activeYearId'
-    );
-
-    // 4. Must scope femaleCount and maleCount
-    assert.ok(
-      content.includes("femaleQuery = femaleQuery.eq('academic_year_id', activeYearId)"),
-      'femaleCount query must be scoped to activeYearId'
-    );
-    assert.ok(
-      content.includes("maleQuery = maleQuery.eq('academic_year_id', activeYearId)"),
-      'maleCount query must be scoped to activeYearId'
-    );
   });
 
   it('Scenario 2: fetchExportData in actions.ts scopes query to active academic year', () => {

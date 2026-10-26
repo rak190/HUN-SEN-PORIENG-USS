@@ -195,14 +195,8 @@ export default function AdminEditStudentModal({
       return;
     }
 
-    if (!studentIdNumber.trim()) {
-      setErrorMsg('សូមបញ្ចូលអត្តលេខសិស្ស');
-      setActiveTab('identity');
-      return;
-    }
-
-    const parsedDob = parseStudentDob(dobInput || dob);
-    if (!parsedDob) {
+    const parsedDob = dobInput.trim() ? parseStudentDob(dobInput) : null;
+    if (dobInput.trim() && !parsedDob) {
       setErrorMsg('សូមបញ្ចូលថ្ងៃខែឆ្នាំកំណើតឱ្យបានត្រឹមត្រូវ (ឧ. 22 01 2008 ឬ 22/01/2008)');
       setActiveTab('identity');
       return;
@@ -460,14 +454,13 @@ export default function AdminEditStudentModal({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  អត្តលេខសិស្ស (Student ID Number) <span className="text-rose-500">*</span>
+                  អត្តលេខសិស្ស (Student ID Number)
                 </label>
                 <input
                   type="text"
                   value={studentIdNumber}
                   onChange={(e) => setStudentIdNumber(e.target.value)}
                   placeholder="ឧ. 5094"
-                  required
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                 />
               </div>
@@ -517,7 +510,7 @@ export default function AdminEditStudentModal({
 
               <div className="sm:col-span-2">
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY) <span className="text-rose-500">*</span>
+                  ថ្ងៃខែឆ្នាំកំណើត (DD MM YYYY)
                 </label>
                 <div className="relative flex items-center">
                   <input
@@ -539,7 +532,6 @@ export default function AdminEditStudentModal({
                       }
                     }}
                     placeholder="22 01 2008"
-                    required
                     className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-blue-100 outline-none transition-all tracking-wider"
                   />
                   <input

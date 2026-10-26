@@ -36,7 +36,7 @@ export const studentImportSchema: ImportSchemaField[] = [
   {
     canonicalField: 'student_id_number',
     dbField: 'student_id_number',
-    headers: ['អត្តលេខ', 'ID', 'Student ID', 'លេខសិស្ស'],
+    headers: ['អត្តលេខ', 'ID', 'Student ID', 'លេខសិស្ស', 'អត្តលេខសិស្ស'],
     type: 'string',
     required: true,
     missingValueBehavior: 'validate_error',
@@ -110,7 +110,7 @@ export const studentImportSchema: ImportSchemaField[] = [
   {
     canonicalField: 'gender',
     dbField: 'gender',
-    headers: ['ភេទ'],
+    headers: ['ភេទ', 'Gender'],
     type: 'enum',
     required: true,
     missingValueBehavior: 'validate_error',
@@ -252,7 +252,23 @@ export const studentImportSchema: ImportSchemaField[] = [
   }
 ];
 
-export function applySchema(rowObj: Record<string, any>, rawArray: any[], headersArray: string[]) {
+export function findBasicImportHeader(rows: unknown[][]): number {
+  const names = [...studentImportSchema.find(field => field.canonicalField === 'full_name')!.headers, 'នាមត្រកូល'];
+  return rows.slice(0, 15).findIndex(row => {
+    const headers = row.map(value => String(value ?? '').trim().toLowerCase());
+    return names.some(name => headers.includes(name.toLowerCase())) && ['ភេទ', 'gender'].some(gender => headers.includes(gender));
+  });
+}
+
+export function applySchema(rowObj: Record<string, any>, rawArray: any[], headersArray: string[], options: { requireStudentId?: boolean } = {}) {
+  if (options.requireStudentId === false) {
+    rowObj = { ...rowObj };
+    const aliases = studentImportSchema.flatMap(field => field.headers);
+    for (const [header, value] of Object.entries(rowObj)) {
+      const canonical = aliases.find(alias => alias.toLowerCase() === header.trim().toLowerCase());
+      if (canonical && rowObj[canonical] === undefined) rowObj[canonical] = value;
+    }
+  }
   const result: Record<string, any> = {};
   const warnings: any[] = [];
   const errors: any[] = [];
@@ -260,20 +276,24 @@ export function applySchema(rowObj: Record<string, any>, rawArray: any[], header
   // Custom logic to handle duplicate column names in the real spreadsheet
   // using the _1, _2 suffixes assigned during parsing.
   
-  const idNum = String(rowObj['អត្តលេខ_1'] || rowObj['អត្តលេខ'] || rowObj['ID'] || '').trim();
+  const idNum = String(studentImportSchema[0].headers.map(header => rowObj[header] ?? rowObj[`${header}_1`]).find(value => value !== undefined && value !== null && String(value).trim() !== '') ?? '').trim();
   const lastName = String(rowObj['នាមត្រកូល_1'] || rowObj['នាមត្រកូល'] || '').trim();
   const firstName = String(rowObj['នាមខ្លួន_1'] || rowObj['នាមខ្លួន'] || '').trim();
-  const fullName = (lastName + ' ' + firstName).trim() || String(rowObj['នាមត្រកូល និងនាមខ្លួន_1'] || rowObj['នាមត្រកូល និងនាមខ្លួន'] || '').trim();
+  const fullName = (lastName + ' ' + firstName).trim() || String(studentImportSchema.find(field => field.canonicalField === 'full_name')!.headers.map(header => rowObj[header] ?? rowObj[`${header}_1`]).find(value => value !== undefined && value !== null && String(value).trim() !== '') ?? '').trim();
   
   result['student_id_number'] = idNum;
   result['full_name'] = fullName;
   
-  if (!idNum) errors.push({ column: 'អត្តលេខ', problem: 'បាត់អត្តលេខសិស្ស', suggestion: 'សូមបំពេញអត្តលេខ' });
+  if (!idNum && options.requireStudentId !== false) errors.push({ column: 'អត្តលេខ', problem: 'បាត់អត្តលេខសិស្ស', suggestion: 'សូមបំពេញអត្តលេខ' });
   if (!fullName) errors.push({ column: 'ឈ្មោះ', problem: 'បាត់ឈ្មោះសិស្ស', suggestion: 'សូមបំពេញនាមត្រកូល និងនាមខ្លួន' });
 
   // Standard processing for the rest
   for (const field of studentImportSchema) {
     if (field.dbField === '') continue; // Skip transients
+    if (field.canonicalField === 'student_id_number' && options.requireStudentId === false) {
+      result.student_id_number = idNum || null;
+      continue;
+    }
     if (result[field.canonicalField]) continue; // Already manually populated
     
     // Find value by checking headers or specific known indexes
@@ -328,6 +348,13 @@ export function applySchema(rowObj: Record<string, any>, rawArray: any[], header
   result['academic_year'] = String(rowObj['ឆ្នាំសិក្សា'] || rowObj['Academic Year'] || '').trim();
   result['desk_number'] = String(rowObj['លេខតុ'] || rowObj['Desk'] || result['desk_number'] || '').trim();
   result['room_number'] = String(rowObj['លេខបន្ទប់'] || rowObj['បន្ទប់ប្រឡង'] || rowObj['Room'] || result['room_number'] || '').trim();
+
+  if (options.requireStudentId === false) {
+    const gender = String(rowObj['ភេទ'] ?? rowObj['Gender'] ?? '').trim().toLowerCase();
+    if (!['m', 'male', 'ប្រុស', 'ប', 'f', 'female', 'ស្រី', 'ស'].includes(gender)) {
+      errors.push({ column: 'ភេទ', problem: 'ភេទមិនត្រឹមត្រូវ (ប្រុស/ស្រី)', suggestion: 'សូមបំពេញភេទត្រឹមត្រូវ' });
+    } else result.gender = ['f', 'female', 'ស្រី', 'ស'].includes(gender) ? 'F' : 'M';
+  }
 
   if (!result['parent_phone']) {
      warnings.push({ column: 'លេខទូរស័ព្ទ', problem: 'មិនមានលេខទូរស័ព្ទទំនាក់ទំនងទាល់តែសោះ' });

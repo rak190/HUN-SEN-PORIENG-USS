@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/lib/auth-context';
 import { Upload, FileSpreadsheet, Check, AlertTriangle, X, Loader2, Info } from 'lucide-react';
-import { applySchema } from '@/lib/import/schema';
+import { applySchema, findBasicImportHeader } from '@/lib/import/schema';
 import { detectDuplicate } from '@/lib/import/duplicate-detector';
 import { adminBasicRegisterAction } from '@/app/(dashboard)/admin/students/actions';
 import { createClient } from '@/lib/supabase/client';
@@ -52,27 +52,19 @@ export default function AdminBasicImportModal({ isOpen, onClose, onSuccess }: Ad
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const XLSX = await import('xlsx');
         const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        const allRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+        // The downloaded template starts with instructions; detect the data sheet by its required headings.
+        const sheets = workbook.SheetNames.map(name => XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], { header: 1, defval: '', raw: false }));
+        const allRows: any[][] = sheets.find(rows => findBasicImportHeader(rows) >= 0) || [];
         
         if (allRows.length === 0) {
           setErrorMsg('ឯកសារ Excel មិនមានទិន្នន័យទេ។');
           return;
         }
 
-        // Find the actual header row by looking for 'អត្តលេខ' or 'ID'
-        let headerRowIdx = -1;
-        for (let i = 0; i < Math.min(10, allRows.length); i++) {
-          if (allRows[i].some(cell => String(cell).includes('អត្តលេខ') || String(cell).includes('ID') || String(cell).includes('អត្តលេខសិស្ស'))) {
-            headerRowIdx = i;
-            break;
-          }
-        }
+        const headerRowIdx = findBasicImportHeader(allRows);
 
         if (headerRowIdx === -1) {
-           setErrorMsg('មិនអាចរកឃើញក្បាលជួរឈរ (អត្តលេខ) នៅក្នុងឯកសារទេ។ សូមពិនិត្យទម្រង់ឯកសារម្តងទៀត។');
+           setErrorMsg('មិនអាចរកឃើញក្បាលជួរឈរ ឈ្មោះ និង ភេទ នៅក្នុងឯកសារទេ។ សូមពិនិត្យទម្រង់ឯកសារម្តងទៀត។');
            return;
         }
 
@@ -126,20 +118,23 @@ export default function AdminBasicImportModal({ isOpen, onClose, onSuccess }: Ad
           });
 
           // Use applySchema from lib/import/schema
-          const { result: mappedData, warnings, errors } = applySchema(rowObj, rowArr, headers);
+          const { result: mappedData, warnings, errors } = applySchema(rowObj, rowArr, headers, { requireStudentId: false });
 
           let status: ValidationStatus = 'valid';
 
           // Map Class Name to Class ID
           let mappedClassId = null;
           if (mappedData.class_name) {
-             const matchedClass = classesData?.find(c => c.name === mappedData.class_name);
+             const classMatches = classesData?.filter(c => c.name === mappedData.class_name) || [];
+             const matchedClass = classMatches.length === 1 ? classMatches[0] : null;
              if (matchedClass) {
                 mappedClassId = matchedClass.id;
                 mappedData.class_id = mappedClassId;
              } else {
                 errors.push({ column: 'ថ្នាក់', problem: `រកមិនឃើញថ្នាក់ "${mappedData.class_name}"`, suggestion: 'ពិនិត្យឈ្មោះថ្នាក់ក្នុងប្រព័ន្ធ' });
              }
+          } else {
+             errors.push({ column: 'ថ្នាក់', problem: 'សូមបញ្ចូលថ្នាក់សិស្ស', suggestion: 'ពិនិត្យឈ្មោះថ្នាក់ក្នុងប្រព័ន្ធ' });
           }
 
           if (errors.length > 0) {
@@ -312,7 +307,7 @@ export default function AdminBasicImportModal({ isOpen, onClose, onSuccess }: Ad
                      <p className="font-bold mb-1">គោលការណ៍នាំចូលទិន្នន័យ៖</p>
                      <ul className="list-disc pl-5 space-y-1 opacity-90">
                         <li>ការនាំចូលនេះគឺសម្រាប់តែទិន្នន័យមូលដ្ឋានប៉ុណ្ណោះ (អត្តលេខ, ឈ្មោះ, ភេទ, ថ្នាក់, លេខតុ, បន្ទប់)។</li>
-                        <li>អត្តលេខសិស្ស និងឈ្មោះ គឺជាព័ត៌មានចាំបាច់ដាច់ខាត។</li>
+                        <li>ឈ្មោះ និងភេទ គឺជាព័ត៌មានចាំបាច់។ អាចទុកអត្តលេខសិស្សទទេ ហើយបំពេញបន្ថែមនៅពេលក្រោយបាន។</li>
                         <li>សិស្សដែលមានស្រាប់នឹងត្រូវ Update តែទិន្នន័យមូលដ្ឋានប៉ុណ្ណោះដោយមិនប៉ះពាល់ទិន្នន័យលម្អិត។</li>
                      </ul>
                   </div>

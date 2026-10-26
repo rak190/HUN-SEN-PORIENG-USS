@@ -13,10 +13,11 @@ interface StudentProfileDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   student: any;
+  academicYearId?: string;
   onUpdate?: (updatedStudent: any) => void;
 }
 
-export default function StudentProfileDrawer({ isOpen, onClose, student, onUpdate }: StudentProfileDrawerProps) {
+export default function StudentProfileDrawer({ isOpen, onClose, student, onUpdate, academicYearId }: StudentProfileDrawerProps) {
   const [homeVisits, setHomeVisits] = useState<HomeVisit[]>([]);
   const [fullStudent, setFullStudent] = useState<any>(student);
   const [loading, setLoading] = useState(false);
@@ -38,6 +39,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, student, onUpdat
 
   useEffect(() => {
     if (!isOpen || !student) return;
+    let cancelled = false;
     setFullStudent(student);
 
     const fetchDeepData = async () => {
@@ -52,6 +54,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, student, onUpdat
           .eq('student_id', student.id)
           .order('date', { ascending: false });
 
+        if (cancelled) return;
         setHomeVisits(visits || []);
 
         // 2. Fetch full student profile from canonical students table
@@ -62,15 +65,17 @@ export default function StudentProfileDrawer({ isOpen, onClose, student, onUpdat
           .maybeSingle();
 
         // 3. Fetch active enrollment for desk and room seating
-        const { data: enrollment } = await supabase
+        let enrollmentQuery = supabase
           .from('student_enrollments')
           .select('desk_number, room_number')
-          .eq('student_id', student.id)
+          .eq('student_id', student.id);
+        if (academicYearId) enrollmentQuery = enrollmentQuery.eq('academic_year_id', academicYearId);
+        const { data: enrollment } = await enrollmentQuery
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        if (profile) {
+        if (profile && !cancelled) {
           setFullStudent((prev: any) => ({
             ...prev,
             ...profile,
@@ -83,12 +88,13 @@ export default function StudentProfileDrawer({ isOpen, onClose, student, onUpdat
       } catch (err) {
         console.error('Error fetching deep student data:', err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchDeepData();
-  }, [isOpen, student]);
+    return () => { cancelled = true; };
+  }, [isOpen, student, academicYearId]);
 
   if (!isOpen || !student || !mounted) return null;
 
@@ -347,6 +353,7 @@ export default function StudentProfileDrawer({ isOpen, onClose, student, onUpdat
 
       {/* Admin Edit Student Modal */}
       <AdminEditStudentModal
+        academicYearId={academicYearId}
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         student={current}

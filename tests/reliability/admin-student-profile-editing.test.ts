@@ -126,7 +126,7 @@ describe('Admin Student Profile Editing Suite', () => {
 
     // Canonical students update allowlist
     assert.ok(
-      content.includes("dob: validated.dob.trim()"),
+      content.includes("dob: validated.dob") && content.includes("date_of_birth: validated.dob"),
       'Must sync dob and date_of_birth for database schema compatibility'
     );
     assert.ok(

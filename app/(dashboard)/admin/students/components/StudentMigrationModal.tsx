@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ArrowRightLeft, AlertTriangle, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { invalidateClassRoster } from '@/lib/cache/client-cache';
 
 import { useAuth } from '@/lib/auth-context';
 
@@ -12,15 +13,20 @@ interface StudentMigrationModalProps {
   onClose: () => void;
   selectedStudentIds: string[];
   onComplete: () => void;
+  academicYearId?: string;
+  academicYearName?: string;
 }
 
 export default function StudentMigrationModal({
   isOpen,
   onClose,
   selectedStudentIds,
-  onComplete
+  onComplete,
+  academicYearId,
+  academicYearName
 }: StudentMigrationModalProps) {
   const { activeAcademicYear } = useAuth();
+  const yearId = academicYearId || activeAcademicYear?.id;
   const [classes, setClasses] = useState<any[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,46 +49,53 @@ export default function StudentMigrationModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (isOpen && activeAcademicYear?.id) {
+    if (isOpen && yearId) {
       fetchClasses();
     }
-  }, [isOpen, activeAcademicYear]);
+  }, [isOpen, yearId]);
 
   const fetchClasses = async () => {
-    if (!activeAcademicYear?.id) return;
+    if (!yearId) return;
     const { data, error } = await supabase.from('classes')
       .select('id, name, grade')
-      .eq('academic_year_id', activeAcademicYear.id)
+      .eq('academic_year_id', yearId)
       .eq('is_archived', false)
       .order('grade').order('name');
     if (!error && data) {
       setClasses(data);
       if (data.length > 0) setSelectedClassId(data[0].id);
+    } else if (error) {
+      setErrorMsg(error.message);
+      setClasses([]);
+      setSelectedClassId('');
     }
   };
 
   if (!isOpen) return null;
 
   const handleMigrate = async () => {
+    if (loading) return;
     if (!selectedClassId) {
       setErrorMsg('សូមជ្រើសរើសថ្នាក់ដែលត្រូវផ្ទេរទៅ');
       return;
     }
-    if (!activeAcademicYear?.id) {
+    if (!yearId || !selectedStudentIds.length) {
       setErrorMsg('មិនមានឆ្នាំសិក្សា។');
       return;
     }
+    if (!window.confirm(`បញ្ជាក់ការចាត់ / ផ្ទេរសិស្ស ${selectedStudentIds.length} នាក់ទៅថ្នាក់ ${classes.find(c => c.id===selectedClassId)?.name || ''} ឆ្នាំសិក្សា ${academicYearName || activeAcademicYear?.name || yearId} មែនទេ?`)) return;
 
     setLoading(true);
     setErrorMsg('');
 
     try {
       const { bulkAssignClassAction } = await import('../actions');
-      const res = await bulkAssignClassAction(selectedStudentIds, selectedClassId, activeAcademicYear.id);
+      const res = await bulkAssignClassAction(selectedStudentIds, selectedClassId, yearId);
 
       if (!res.success) throw new Error(res.error);
+      if ('classIds' in res) res.classIds?.forEach(invalidateClassRoster);
 
-      alert(`បានផ្ទេរសិស្សចំនួន ${selectedStudentIds.length} នាក់ដោយជោគជ័យ!`);
+      alert(`បានចាត់ / ផ្ទេរសិស្សចំនួន ${res.count} នាក់ដោយជោគជ័យ!`);
       onComplete();
       onClose();
     } catch (err: any) {
@@ -126,7 +139,7 @@ export default function StudentMigrationModal({
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-xs text-amber-800">
             <p className="font-bold mb-1">បញ្ជាក់ (Important Note):</p>
-            <p className="opacity-90">ពិន្ទុចាស់ៗរបស់សិស្សនឹងត្រូវបានរក្សាទុក និងផ្ទេរទៅកាន់ថ្នាក់ថ្មីដោយស្វ័យប្រវត្តិ។ សូមប្រាកដថាអ្នកបានជ្រើសរើសថ្នាក់ត្រឹមត្រូវ។</p>
+            <p className="opacity-90">ប្រតិបត្តិការនេះចាត់ / ផ្ទេរថ្នាក់ក្នុងឆ្នាំសិក្សាដែលបានជ្រើសរើស។ ពិន្ទុ វត្តមាន និងប្រវត្តិឆ្នាំចាស់នៅតែភ្ជាប់នឹងសិស្សដដែល ហើយមិនត្រូវបានផ្លាស់ទីដោយស្វ័យប្រវត្តិទេ។</p>
           </div>
         </div>
 
@@ -136,6 +149,7 @@ export default function StudentMigrationModal({
           </label>
           <select 
             value={selectedClassId}
+            disabled={loading}
             onChange={(e) => setSelectedClassId(e.target.value)}
             className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
           >

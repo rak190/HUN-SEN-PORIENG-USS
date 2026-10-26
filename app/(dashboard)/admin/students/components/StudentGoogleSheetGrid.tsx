@@ -74,7 +74,6 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
     const hasData = row.student_id || row.full_name || row.gender || row.class_name || row.dob || row.room_number || row.desk_number;
     
     if (hasData) {
-      if (!row.student_id.trim()) errors.push('អត្តលេខមិនអាចទទេ');
       if (!row.full_name.trim()) errors.push('ឈ្មោះមិនអាចទទេ');
       
       if (!['ប្រុស', 'ស្រី'].includes(normalizedGender)) {
@@ -323,7 +322,7 @@ export default function StudentGoogleSheetGrid({ onSave, onCancel, isSaving, act
           <thead className="bg-slate-100 sticky top-0 z-10 shadow-sm">
             <tr>
               <th className="w-12 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">ល.រ</th>
-              <th className="w-32 p-2 border border-slate-200 text-xs font-black text-slate-600">អត្តលេខ*</th>
+              <th className="w-32 p-2 border border-slate-200 text-xs font-black text-slate-600">អត្តលេខ</th>
               <th className="p-2 border border-slate-200 text-xs font-black text-slate-600">គោត្តនាម និង នាម*</th>
               <th className="w-24 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">ភេទ*</th>
               <th className="w-32 p-2 border border-slate-200 text-center text-xs font-black text-slate-600">ថ្នាក់*</th>

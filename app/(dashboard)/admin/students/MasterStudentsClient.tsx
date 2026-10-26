@@ -21,6 +21,7 @@ import AdminBasicRegistrationModal from '@/components/admin/AdminBasicRegistrati
 import AdminBasicImportModal from '@/components/admin/AdminBasicImportModal';
 import GIEPImportManager from './components/GIEPImportManager';
 import StudentGoogleSheetGrid from './components/StudentGoogleSheetGrid';
+import AdminExistingStudentGrid from './components/AdminExistingStudentGrid';
 import AdminStudentRequestsQueue from './components/AdminStudentRequestsDrawer';
 import QuickSeatingUpdateModal from '@/components/admin/QuickSeatingUpdateModal';
 import { fetchExportData, getPendingStudentRequests, batchRegisterBasicStudents, bulkArchiveStudents } from './actions';
@@ -29,6 +30,8 @@ import { formatDobForDisplay } from '@/lib/utils/student-date';
 interface MasterStudentsClientProps {
   initialStudents: any[];
   totalCount: number;
+  activeAcademicYearId: string;
+  activeAcademicYearName: string;
   globalStats?: {
     total: number;
     female: number;
@@ -53,6 +56,8 @@ interface MasterStudentsClientProps {
 export default function MasterStudentsClient({
   initialStudents,
   totalCount,
+  activeAcademicYearId,
+  activeAcademicYearName,
   globalStats,
   currentPage,
   pageSize,
@@ -78,9 +83,26 @@ export default function MasterStudentsClient({
   const [activeTab, setActiveTab] = useState<'list' | 'grid' | 'requests'>('list');
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [isSavingGrid, setIsSavingGrid] = useState(false);
+  const [gridMode, setGridMode] = useState<'create' | 'edit'>('create');
+  const [gridClassId, setGridClassId] = useState(filterOptions.classes.some(c => c.id === filters.class) ? filters.class : '');
+  const [gridYearId, setGridYearId] = useState(activeAcademicYearId);
+  const [gridDirty, setGridDirty] = useState(false);
+  const [gridBusy, setGridBusy] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  useEffect(() => {
+    if (gridDirty || gridBusy) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setGridYearId(activeAcademicYearId);
+      setGridClassId(filterOptions.classes.some(c => c.id === filters.class) ? filters.class : '');
+    });
+    return () => { cancelled = true; };
+  }, [activeAcademicYearId,filters.class,filterOptions.classes,gridDirty,gridBusy]);
+
   const handleTabChange = (tab: 'list' | 'grid' | 'requests') => {
+    if (gridBusy || (gridDirty && tab !== activeTab && !confirm('មានការកែប្រែមិនទាន់រក្សាទុក។ បោះបង់ ហើយប្តូរផ្ទាំងមែនទេ?'))) return;
     startTransition(() => {
       setActiveTab(tab);
     });
@@ -216,6 +238,8 @@ export default function MasterStudentsClient({
   }, []);
 
   const updateFilter = (key: string, value: string) => {
+    if (gridBusy || (gridDirty && !confirm('មានការកែប្រែមិនទាន់រក្សាទុក។ បោះបង់ ហើយប្តូរលក្ខខណ្ឌមែនទេ?'))) return;
+    if (key === 'class' && gridDirty) setGridDirty(false);
     startTransition(() => {
       const params = new URLSearchParams(searchParams.toString());
       if (value && value !== 'all') {
@@ -354,7 +378,7 @@ export default function MasterStudentsClient({
       ['ការណែនាំអំពីការប្រើប្រាស់គំរូ Excel (Read Me)'],
       [''],
       ['១. សូមកុំប្តូរឈ្មោះ Column (ជួរឈរ) ខាងលើឱ្យសោះ។ ប្រព័ន្ធនឹងអានទិន្នន័យតាមឈ្មោះទាំងនេះ។'],
-      ['២. ព័ត៌មានដែលចាំបាច់ត្រូវតែមាន៖ អត្តលេខ, នាមត្រកូល, នាមខ្លួន, និង ភេទ។'],
+      ['២. ព័ត៌មានដែលចាំបាច់ត្រូវតែមាន៖ នាមត្រកូល, នាមខ្លួន, និង ភេទ។ អត្តលេខសិស្សអាចទុកទទេនៅដើមឆ្នាំសិក្សា ហើយបំពេញបន្ថែមនៅពេលក្រោយបាន។'],
       ['៣. ភេទ៖ សូមបញ្ចូល "M" ឬ "ប្រុស" សម្រាប់សិស្សប្រុស, "F" ឬ "ស្រី" សម្រាប់សិស្សស្រី។'],
       ['៤. ថ្នាក់៖ សូមបញ្ចូលឈ្មោះថ្នាក់ឱ្យបានត្រឹមត្រូវ (ឧ. "7A", "10A") បើមិនទាន់មានថ្នាក់ សូមទុកទទេ។'],
       ['៥. លេខតុ និង បន្ទប់ប្រឡង៖ អាចទុកទទេបានប្រសិនបើមិនទាន់មាន។'],
@@ -432,7 +456,7 @@ export default function MasterStudentsClient({
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm text-sm">
               <span className="text-slate-500 font-semibold">សរុប:</span>
-              <span className="font-bold text-slate-800">{globalStats?.total || totalCount}</span>
+              <span className="font-bold text-slate-800">{globalStats?.total ?? totalCount}</span>
             </div>
             <div className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm text-sm">
               <span className="text-slate-500 font-semibold">ស្រី:</span>
@@ -458,6 +482,7 @@ export default function MasterStudentsClient({
             {/* Class Operations Dropdown */}
             <div className="relative action-dropdown">
               <button 
+                disabled={gridDirty || gridBusy}
                 onClick={() => {
                   setClassOpsMenuOpen(!classOpsMenuOpen);
                   setImportExportMenuOpen(false);
@@ -470,7 +495,7 @@ export default function MasterStudentsClient({
               {classOpsMenuOpen && (
                 <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden py-1 z-50 animate-in fade-in slide-in-from-top-2">
                   <button 
-                    onClick={() => { setIsMigrationModalOpen(true); setClassOpsMenuOpen(false); }}
+                    onClick={() => { if (!selectedStudents.length) { alert('សូមជ្រើសរើសសិស្សក្នុងទំព័រនេះជាមុនសិន។'); return; } setIsMigrationModalOpen(true); setClassOpsMenuOpen(false); }}
                     className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-[#155EEF] flex items-center gap-2 transition-colors"
                   >
                     <ArrowRightLeft className="w-4 h-4" /> ផ្ទេរប្តូរថ្នាក់សិស្ស
@@ -507,12 +532,14 @@ export default function MasterStudentsClient({
                 <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden py-1 z-50 animate-in fade-in slide-in-from-top-2">
                   <div className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">នាំចូល (Import)</div>
                   <button 
+                    disabled={gridDirty || gridBusy}
                     onClick={() => { setIsBasicImportModalOpen(true); setImportExportMenuOpen(false); }}
                     className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-emerald-600 flex items-center gap-2 transition-colors"
                   >
                     <FileSpreadsheet className="w-4 h-4" /> នាំចូលឯកសារ Excel/CSV
                   </button>
                   <button 
+                    disabled={gridDirty || gridBusy}
                     onClick={() => { setIsGiepImportModalOpen(true); setImportExportMenuOpen(false); }}
                     className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-purple-600 flex items-center gap-2 transition-colors"
                   >
@@ -548,6 +575,7 @@ export default function MasterStudentsClient({
 
           {/* Primary CTA */}
           <button 
+            disabled={gridDirty || gridBusy}
             onClick={() => setIsBasicRegistrationModalOpen(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow font-medium px-4 py-2 rounded-xl flex items-center gap-2 text-sm transition-all"
           >
@@ -612,13 +640,22 @@ export default function MasterStudentsClient({
 
       {activeTab === 'grid' && (
         <div className="mt-6">
-          <StudentGoogleSheetGrid 
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <span className="text-xs font-bold text-slate-500">{activeAcademicYearName}</span>
+            <select aria-label="របៀបតារាងសិស្ស" value={gridMode} disabled={gridBusy} onChange={event => { if (gridDirty && !confirm('បោះបង់ការកែប្រែ ហើយប្តូររបៀបមែនទេ?')) return; setGridMode(event.target.value as 'create' | 'edit'); }} className="pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 shadow-sm cursor-pointer">
+              <option value="create">បញ្ចូលសិស្សថ្មី</option>
+              <option value="edit">កែប្រែសិស្សដែលមានស្រាប់</option>
+            </select>
+            {gridMode === 'edit' && <select aria-label="ថ្នាក់សម្រាប់កែប្រែ" value={gridClassId} disabled={gridBusy} onChange={event => updateFilter('class',event.target.value || 'all')} className="pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 shadow-sm cursor-pointer"><option value="">ជ្រើសរើសថ្នាក់</option>{filterOptions.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+          </div>
+          {gridMode === 'edit' && gridYearId !== activeAcademicYearId && <p role="alert" className="p-4 text-sm font-bold text-rose-600">ឆ្នាំសិក្សាបានផ្លាស់ប្តូរ។ ការកែប្រែឆ្នាំចាស់ត្រូវបានរក្សា។ សូមពិនិត្យ និងបោះបង់ការកែប្រែ ដើម្បីផ្ទុកឆ្នាំថ្មី។</p>}
+          {gridMode === 'edit' ? (gridClassId ? <AdminExistingStudentGrid key={`${gridClassId}:${gridYearId}`} classId={gridClassId} academicYearId={gridYearId} onDirtyChange={setGridDirty} onBusyChange={setGridBusy} onSaved={() => router.refresh()} /> : <p className="p-4 text-sm font-bold text-slate-500">សូមជ្រើសរើសថ្នាក់ដើម្បីផ្ទុកសិស្សដែលមានស្រាប់។</p>) : <StudentGoogleSheetGrid
             activeClasses={filterOptions.classes}
             isSaving={isSavingGrid}
-            onCancel={() => setActiveTab('list')}
+            onCancel={() => handleTabChange('list')}
             onSave={async (students) => {
               setIsSavingGrid(true);
-              const res = await batchRegisterBasicStudents(students, 'fetch-active');
+              const res = await batchRegisterBasicStudents(students, activeAcademicYearId);
               setIsSavingGrid(false);
               
               if (res.success) {
@@ -629,7 +666,7 @@ export default function MasterStudentsClient({
                 alert('មានបញ្ហាក្នុងការបញ្ចូលទិន្នន័យ: ' + res.error);
               }
             }}
-          />
+          />}
         </div>
       )}
 
@@ -709,9 +746,9 @@ export default function MasterStudentsClient({
                     className="pl-8 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF]/20 focus:border-[#155EEF] appearance-none shadow-sm cursor-pointer"
                   >
                     <option value="all">គ្រប់ថ្នាក់</option>
-                    <option value="គ្មានថ្នាក់">គ្មានថ្នាក់</option>
+                    <option value="unassigned">គ្មានថ្នាក់ (ទិន្នន័យបឋម)</option>
                     {filterOptions.classes.map(c => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -828,7 +865,7 @@ export default function MasterStudentsClient({
                       </td>
                       <td className="px-4 py-3 text-center border-r border-slate-100">
                         <span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-bold ${
-                          student.class_name !== 'គ្មានថ្នាក់' ? 'bg-slate-100 text-slate-700 border border-slate-200' : 'bg-rose-100 text-rose-700 border border-rose-200'
+                          student.class_id ? 'bg-slate-100 text-slate-700 border border-slate-200' : 'bg-rose-100 text-rose-700 border border-rose-200'
                         }`}>
                           {student.class_name}
                         </span>
@@ -1000,6 +1037,8 @@ export default function MasterStudentsClient({
         isOpen={isMigrationModalOpen}
         onClose={() => setIsMigrationModalOpen(false)}
         selectedStudentIds={selectedStudents}
+        academicYearId={activeAcademicYearId}
+        academicYearName={activeAcademicYearName}
         onComplete={() => {
           setIsMigrationModalOpen(false);
           setSelectedStudents([]);
@@ -1019,6 +1058,7 @@ export default function MasterStudentsClient({
       />
 
       <StudentProfileDrawer
+        academicYearId={activeAcademicYearId}
         student={selectedProfileStudent}
         isOpen={!!selectedProfileStudent}
         onClose={() => {

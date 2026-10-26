@@ -60,16 +60,17 @@ describe('Batch Register Atomic Integrity & Contract Suite', () => {
     );
   });
 
-  it('Scenario 3: batchRegisterBasicStudents in actions.ts passes p_caller_id and handles dob/date_of_birth', () => {
+  it('Scenario 3: batchRegisterBasicStudents uses the authenticated session and handles dob/date_of_birth', () => {
     const actionsPath = path.join(rootDir, 'app', '(dashboard)', 'admin', 'students', 'actions.ts');
     assert.ok(fs.existsSync(actionsPath), 'actions.ts must exist');
 
     const content = fs.readFileSync(actionsPath, 'utf8');
 
-    // Must pass p_caller_id
+    // Registration uses the verified session; PostgreSQL ignores forged actor parameters.
+    const registration = content.slice(content.indexOf('export async function batchRegisterBasicStudents'), content.indexOf('export async function', content.indexOf('export async function batchRegisterBasicStudents') + 1));
     assert.ok(
-      content.includes('p_caller_id: user.id'),
-      'batchRegisterBasicStudents must pass p_caller_id: user.id to RPC'
+      registration.includes('await createClient()') && !registration.includes('p_caller_id'),
+      'Batch registration must use its authenticated client without browser actor attribution'
     );
 
     // Must map dob and date_of_birth
