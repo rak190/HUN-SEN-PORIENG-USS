@@ -100,6 +100,14 @@ export default function StudentStudyPlansClient({
     )}`
   );
 
+  // Document-only override, like the issue date; keep the Admin profile unchanged.
+  const [teacherPhone, setTeacherPhone] = useState<string | null>(null);
+  const documentTeacherInfo: StudyPlanTeacherInfo = {
+    ...teacherInfo,
+    full_name: teacherInfo?.full_name || '',
+    phone: (teacherPhone ?? teacherInfo?.phone ?? '').trim(),
+  };
+
   // Study Plans Map: student_id -> Record<subject_id, SubjectPlanTarget>
   const [studyPlansMap, setStudyPlansMap] = useState<
     Record<string, Record<string, SubjectPlanTarget>>
@@ -314,7 +322,7 @@ export default function StudentStudyPlansClient({
         classInfo,
         academicYearName,
         schoolInfo,
-        teacherInfo,
+        teacherInfo: documentTeacherInfo,
         planTargets: studyPlansMap[activeStudent.id] || {},
         gradesData,
         issueDateText: issueDate,
@@ -339,7 +347,7 @@ export default function StudentStudyPlansClient({
         classInfo,
         academicYearName,
         schoolInfo,
-        teacherInfo,
+        teacherInfo: documentTeacherInfo,
         studyPlansMap,
         gradesData,
         issueDateText: issueDate,
@@ -367,7 +375,7 @@ export default function StudentStudyPlansClient({
         classInfo,
         academicYearName,
         schoolInfo,
-        teacherInfo,
+        teacherInfo: documentTeacherInfo,
         studyPlansMap,
         gradesData,
         issueDateText: issueDate,
@@ -883,7 +891,7 @@ export default function StudentStudyPlansClient({
           </div>
         </div>
 
-        {/* Date of Issue Config Bar */}
+        {/* Document settings */}
         <div className="bg-slate-50 px-5 py-3 rounded-2xl border border-slate-200/70 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="font-extrabold text-slate-600">កាលបរិច្ឆេទចេញឯកសារ៖</span>
@@ -895,6 +903,17 @@ export default function StudentStudyPlansClient({
               placeholder="កាលបរិច្ឆេទ..."
             />
           </div>
+          <label className="flex flex-wrap items-center gap-2">
+            <span className="font-extrabold text-slate-600">លេខទូរស័ព្ទគ្រូបន្ទុកថ្នាក់៖</span>
+            <input
+              type="tel"
+              autoComplete="tel"
+              value={teacherPhone ?? teacherInfo?.phone ?? ''}
+              onChange={(e) => setTeacherPhone(e.target.value)}
+              className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 font-bold text-slate-800 text-xs w-48 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              placeholder="លេខទូរស័ព្ទ..."
+            />
+          </label>
           <p className="text-[11px] font-semibold text-slate-500">
             * គន្លឹះ៖ ពិន្ទុជាក់ស្តែង (ក្រហម) នឹងទាញយកដោយស្វ័យប្រវត្តិតាមរយៈពិន្ទុដែលបានចេញផ្សាយក្នុងម៉ូឌុលពិន្ទុ
           </p>
@@ -1081,7 +1100,7 @@ export default function StudentStudyPlansClient({
                   classInfo={classInfo}
                   academicYearName={academicYearName}
                   schoolInfo={schoolInfo}
-                  teacherInfo={teacherInfo}
+                  teacherInfo={documentTeacherInfo}
                   gradesData={gradesData}
                   planTargets={studyPlansMap[activeStudent.id] || {}}
                   issueDateText={issueDate}
@@ -1314,7 +1333,7 @@ export default function StudentStudyPlansClient({
                 classInfo={classInfo}
                 academicYearName={academicYearName}
                 schoolInfo={schoolInfo}
-                teacherInfo={teacherInfo}
+                teacherInfo={documentTeacherInfo}
                 gradesData={gradesData}
                 planTargets={studyPlansMap[activeStudent.id] || {}}
                 issueDateText={issueDate}
@@ -1329,7 +1348,7 @@ export default function StudentStudyPlansClient({
                 classInfo={classInfo}
                 academicYearName={academicYearName}
                 schoolInfo={schoolInfo}
-                teacherInfo={teacherInfo}
+                teacherInfo={documentTeacherInfo}
                 gradesData={gradesData}
                 planTargets={studyPlansMap[std.id] || {}}
                 issueDateText={issueDate}
@@ -1357,7 +1376,7 @@ export default function StudentStudyPlansClient({
               classInfo={classInfo}
               academicYearName={academicYearName}
               schoolInfo={schoolInfo}
-              teacherInfo={teacherInfo}
+              teacherInfo={documentTeacherInfo}
               gradesData={gradesData}
               planTargets={studyPlansMap[std.id] || {}}
               issueDateText={issueDate}
