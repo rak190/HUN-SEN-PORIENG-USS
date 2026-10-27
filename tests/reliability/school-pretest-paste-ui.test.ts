@@ -48,13 +48,15 @@ test('existing grid: clipboard denial fallback, numeric review, manual shortcut 
         assert.equal(math().value, 'E');
         fireEvent.click(view.getByRole('button', { name: /បិទភ្ជាប់ Excel/ }));
         const paste = await view.findByRole('textbox', { name: 'Excel clipboard data' });
-        const text = 'ឆ្នាំសិក្សា 2026-2027\nGrade 7\nអត្តលេខ\tឈ្មោះសិស្ស\tគណិត\n\tSok Dara\t5';
+        const text = 'ឆ្នាំសិក្សា 2026-2027\nGrade 7\nអត្តលេខ\tឈ្មោះសិស្ស\tគណិត\tថ្នាក់\n\tSok Dara\t5\t7A\n\tOther Class Student\t40\t7B';
         fireEvent.paste(paste, { clipboardData: { getData: () => text } });
         assert.equal((view.getByRole('button', { name: /យល់ព្រមអនុវត្ត/ }) as HTMLButtonElement).disabled, true);
         fireEvent.change(view.getByRole('textbox', { name: 'Verified examination rubric reference' }), { target: { value: 'School examination instruction #1, 2026-11-01' } });
         fireEvent.change(view.getByRole('combobox', { name: 'Maximum math' }), { target: { value: '50' } });
         fireEvent.click(view.getByRole('checkbox', { name: 'បញ្ជាក់ក្បួននិទ្ទេស' }));
         const apply = view.getByRole('button', { name: /យល់ព្រមអនុវត្ត/ }) as HTMLButtonElement;
+        assert.equal(apply.disabled, true, 'Other class rows require explicit exclusion');
+        fireEvent.click(view.getByRole('button', { name: /ដកជួរថ្នាក់ផ្សេងចេញ/ }));
         await waitFor(() => assert.equal(apply.disabled, false));
         assert.match(view.container.textContent || '', /5 = 5/);
         fireEvent.click(apply);

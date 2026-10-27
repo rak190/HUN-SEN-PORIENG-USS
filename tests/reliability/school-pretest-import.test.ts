@@ -11,6 +11,46 @@ function options(table: PretestTable, patch: Partial<PretestOptions> = {}): Pret
 const preview = (text: string, patch: Partial<PretestOptions> = {}, students = roster) => { const table = parseSchoolPretestClipboard(text); return buildPretestImportPreview(table, students, options(table, patch), {}); };
 const header = 'ល រ\tអត្ថលេខ\tគោត្តនាម នាម\tភេទ\tថ្ងៃខែឆ្នាំកំណើត\tថ្នាក់';
 const row = '1\t00123\tសុខ ដារ៉ា\tប្រុស\t02/01/2012\t7';
+test('current Copy workbook Grade 8 uses one Khmer column, not the older two-component layout', () => {
+    const subjects = ['តែង', 'សីល', 'ភូមិ', 'ប្រវត្តិ', 'គណិត', 'ផែន', 'រូប', 'គីមី', 'ជីវៈ', 'អង់'];
+    const text = ['បញ្ជីរាយនាមសិស្ស ថ្នាក់ទី ៨ C', 'ឆ្នាំសិក្សា ២០២៦-២០២៧', `${header}\t${subjects.join('\t')}`, `${row.replace(/\t7$/, '\t8C')}\t48\t25\t25\t25\t98\t25\t25\t25\t25\t25`].join('\n');
+    const table = parseSchoolPretestClipboard(text);
+    assert.deepEqual(table.sourceGrades, [8]);
+    assert.deepEqual(table.sourceYears, ['2026-2027']);
+    const rules = suggestScoreRules(table.roles);
+    assert.equal(rules.length, 10);
+    assert.deepEqual(rules.find(rule => rule.subjectId === 'khmer')?.sourceColumns, [6]);
+    assert.equal(rules.find(rule => rule.subjectId === 'khmer')?.aggregation, 'direct');
+    assert.ok(rules.every(rule => rule.maxScore === 0 && !rule.confirmed), 'Observed scores cannot supply denominators');
+    const confirmed = options(table, { grade: 8, sourceGrade: 8, className: '8C', rules: rules.map(rule => ({ ...rule, maxScore: 100, confirmed: true })) });
+    const result = buildPretestImportPreview(table, roster, confirmed, {});
+    assert.deepEqual(result.errors, []);
+    assert.deepEqual(result.rows[0].errors, []);
+    assert.equal(result.changes.length, 10);
+    assert.equal(result.changes.find(change => change.subjectId === 'math')?.newGrade, 'A');
+});
+test('actual Khmer track titles and compact SC/SS names detect grade and track', () => {
+    for (const [title, track] of [['ថ្នាក់ទី ១១ A (វិទ្យាសាស្ត្រ)', 'science'], ['ថ្នាក់ទី ១១ C (សង្គម)', 'social'], ['ថ្នាក់ទី ១២ B (វិទ្យាសាស្ត្រសង្គម)', 'social'], ['Grade 12SC', 'science'], ['Grade 11SS', 'social']]) {
+        const table = parseSchoolPretestClipboard(`${title}\nឆ្នាំសិក្សា ២០២៦-២០២៧\n${header}\tគណិត\n${row}\t42`);
+        assert.deepEqual(table.sourceTracks, [track]);
+        assert.equal(table.sourceGrades.length, 1);
+    }
+    const mixed = parseSchoolPretestClipboard(`ថ្នាក់ទី ១១ (វិទ្យាសាស្ត្រ)\nថ្នាក់ទី ១១ (សង្គម)\n${header}\tគណិត\n${row}\t42`);
+    assert.equal(mixed.sourceTracks.length, 2);
+});
+test('a whole-grade paste can explicitly exclude other sections while unknown IDs still require review', () => {
+    const text = `${header}\tគណិត\n${row.replace(/\t7$/, '\t7B')}\t42\n${row}\t42\n${row.replace('00123', '999')}\t42`;
+    const table = parseSchoolPretestClipboard(text);
+    const before = buildPretestImportPreview(table, roster, options(table), {});
+    assert.equal(before.rows[0].classStatus, 'other');
+    assert.equal(before.rows[1].classStatus, 'selected');
+    assert.equal(before.rows[2].classStatus, 'unknown');
+    const excludedRows = before.rows.filter(row => row.classStatus === 'other').map(row => row.sourceRow);
+    const after = buildPretestImportPreview(table, roster, options(table, { excludedRows }), {});
+    assert.ok(after.rows[0].excluded);
+    assert.ok(after.rows[2].errors.length, 'Bulk section exclusion must not hide an unknown supplied ID');
+    assert.equal(after.changes.length, 1);
+});
 for (const [sheet, grade, two, extra, at] of [['7 SCOR', 7, true, false, 8], ['8', 8, true, false, 7], ['9', 9, true, true, 7], ['10', 10, false, false, 7], ['11SC', 11, false, false, 7], ['11SS', 11, false, false, 7], ['12SC', 12, false, false, 7], ['12SS', 12, false, false, 7]] as const) {
     test(`school format ${sheet}: detects row ${at} and maps actual subject columns`, () => {
         const subjects = `${two ? 'តែង\tសរសេរ' : 'តែង'}\tសីល\tភូមិ\tប្រវត្តិ\tគណិត\tផែន\tរូប\tគីមី\tជីវៈ\tអង់\tសរុប`;

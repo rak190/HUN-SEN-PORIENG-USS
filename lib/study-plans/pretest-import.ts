@@ -68,6 +68,7 @@ export interface ImportRow {
     errors: string[];
     excluded: boolean;
     allZero: boolean;
+    classStatus: 'selected' | 'other' | 'unknown';
 }
 export interface PretestPreview {
     rows: ImportRow[];
@@ -138,8 +139,11 @@ export function parseSchoolPretestClipboard(text: string, manualHeaderRow?: numb
     const headers = Array.from({ length: width }, (_, i) => headerRow >= 0 ? rows[headerRow]?.[i] || `Column ${i + 1}` : `Column ${i + 1}`);
     const metadata = westernDigits(rows.slice(0, headerRow < 0 ? 20 : headerRow).map(row => row.join(' ')).join('\n'));
     const sourceYears = [...new Set([...metadata.matchAll(/20\d{2}\s*[-–—_/]\s*20\d{2}/g)].map(match => normalizeYear(match[0])))];
-    const sourceTracks = [...new Set([...metadata.matchAll(/\b(?:11|12)\s*(SC|SS)\b/gi)].map(match => normalizeTrack(match[1])))];
-    const sourceGrades = [...new Set([...metadata.matchAll(/(?:ថ្នាក់(?:ទី)?\s*|Grade\s*)(7|8|9|10|11|12)\b|^\s*(7|8|9|10|11|12)\s*(?:SC|SS)?\s*$/gim)].map(match => Number(match[1] || match[2])))];
+    const detectedTracks = [...metadata.matchAll(/\b(?:11|12)\s*(SC|SS)\b/gi)].map(match => normalizeTrack(match[1]));
+    if (/សង្គម/.test(metadata)) detectedTracks.push('social');
+    if (/វិទ្យាសាស្ត្រ/.test(metadata.replace(/វិទ្យាសាស្ត្រ\s*សង្គម/g, ''))) detectedTracks.push('science');
+    const sourceTracks = [...new Set(detectedTracks)];
+    const sourceGrades = [...new Set([...metadata.matchAll(/(?:ថ្នាក់(?:ទី)?\s*|Grade\s*)(7|8|9|10|11|12)(?!\d)|^\s*(7|8|9|10|11|12)\s*(?:SC|SS)?\s*$/gim)].map(match => Number(match[1] || match[2])))];
     const roles: ColumnRole[] = headers.map((header, col) => {
         if (rows.slice(headerRow + 1).every(row => !(row[col] || '').trim()) && (headerRow < 0 || !(rows[headerRow]?.[col] || '').trim()))
             return 'ignore';
@@ -249,7 +253,7 @@ export function buildPretestImportPreview(table: PretestTable, students: Pretest
             continue;
         const sourceRow = ri + 1;
         const get = (role: ColumnRole) => cells[roles.indexOf(role)]?.trim() || '';
-        const row: ImportRow = { sourceRow, name: get('name'), candidates: [], match: '', errors: [], excluded: options.excludedRows.includes(sourceRow), allZero: false };
+        const row: ImportRow = { sourceRow, name: get('name'), candidates: [], match: '', errors: [], excluded: options.excludedRows.includes(sourceRow), allZero: false, classStatus: 'unknown' };
         result.rows.push(row);
         if (row.excluded)
             continue;
@@ -257,6 +261,7 @@ export function buildPretestImportPreview(table: PretestTable, students: Pretest
         const selectedClass = westernDigits(options.className).replace(/\s+/g, '').toLowerCase();
         const rowGrade = Number(sourceClass.match(/\d+/)?.[0]);
         if (sourceClass && ((rowGrade && rowGrade !== options.grade) || (/\d+\D+/.test(sourceClass) && sourceClass !== selectedClass))) {
+            row.classStatus = 'other';
             row.errors.push('សិស្សមកពីថ្នាក់ផ្សេង');
             result.wrongClass++;
         }
@@ -278,6 +283,7 @@ export function buildPretestImportPreview(table: PretestTable, students: Pretest
             continue;
         }
         const student = candidates[0];
+        if (row.classStatus !== 'other') row.classStatus = 'selected';
         row.studentId = student.id;
         row.name = student.full_name;
         if (uuid && id && westernDigits(student.student_id_number || '').trim() !== id)

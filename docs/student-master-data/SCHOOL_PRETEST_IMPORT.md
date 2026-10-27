@@ -19,12 +19,17 @@ The locally supplied school workbook was inspected read-only on 2026-10-27. No s
 - `7` is a roster, not a score source.
 - `7 SCOR`: row 8, subject columns G–Q; unnamed totals/extra columns need explicit handling.
 - `8`: row 7, subjects G–Q.
+- The newly supplied `_Copy.xlsx` differs from `_Copy (2).xlsx`: its `8` sheet has **one** Khmer column (`តែង`) and ten subjects G–P. The parser derives direct versus component rules from actual headers, never from grade alone. Both variants are supported. Direct-score status does not establish the maximum possible mark.
 - `9`: row 7, G is metadata; subjects H–R.
 - `10`, `11SC`, `11SS`, `12SC`, `12SS`: row 7, subjects G–P, single Khmer component.
 - `Sheet1` summaries are not score sources.
 - Khmer-numeral title years on `11SS` and `12SC` say 2025–2026. If those titles are included in a current-year paste, application is blocked even if the year input is changed. Obtain independently verified current examination data; a checkbox cannot override historical metadata.
 
 The parser uses exact controlled Khmer/English aliases, not substring/position guessing. A copied worksheet title or sheet name alone never authorizes a student or supplies an exam denominator. Without source titles, users must enter verified source context; clipboard-only data cannot independently prove exam provenance.
+
+Khmer track headings such as `ថ្នាក់ទី ១១ A (វិទ្យាសាស្ត្រ)` and `ថ្នាក់ទី ១១ C (សង្គម)` are detected along with compact SC/SS titles. Whole-grade tables offer an explicit “exclude other class rows” action for rows whose class labels contradict the selected section. Excluded rows and their count remain visible. Unrecognized identities and ambiguous rows are never included in this bulk exclusion.
+
+The supplied Grade 8C study-plan workbook's A10/A11 contain the existing 100/50-point legends; they do not assign exam maxima to subjects. The 100-point legend leaves exactly 50 unclassified (`F < 50`, `E 51–60`). The application's established conversion is unchanged and its exact boundaries remain displayed for confirmation. These files alone do not verify a school-wide examination mapping profile, component maxima, or whether zeros mean absence.
 
 ## Matching
 
