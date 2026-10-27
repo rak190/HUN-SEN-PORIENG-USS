@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
-import { buildPretestImportPreview, convertPretestScoreToGrade, identifySourceColumn, normalizeKhmerStudentName, parseSchoolPretestClipboard, suggestScoreRules, type PretestOptions, type PretestStudent, type PretestTable } from '../../lib/study-plans/pretest-import';
+import { buildPretestImportPreview, confirmedSchoolGrade8Rules, convertPretestScoreToGrade, identifySourceColumn, normalizeKhmerStudentName, parseSchoolPretestClipboard, suggestScoreRules, type PretestOptions, type PretestStudent, type PretestTable } from '../../lib/study-plans/pretest-import';
 import { buildStudyPlanPatches, StudyPlanPatchSchema } from '../../lib/study-plans/field-patches';
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const roster: PretestStudent[] = [{ id: id(1), student_id_number: '00123', full_name: 'សុខ ដារ៉ា', gender: 'M', dob: '2012-01-02' }, { id: id(2), full_name: 'ចាន់ សុខា', gender: 'F' }];
@@ -22,6 +22,13 @@ test('current Copy workbook Grade 8 uses one Khmer column, not the older two-com
     assert.deepEqual(rules.find(rule => rule.subjectId === 'khmer')?.sourceColumns, [6]);
     assert.equal(rules.find(rule => rule.subjectId === 'khmer')?.aggregation, 'direct');
     assert.ok(rules.every(rule => rule.maxScore === 0 && !rule.confirmed), 'Observed scores cannot supply denominators');
+    const schoolRules = confirmedSchoolGrade8Rules(table, 8, '2026-2027')!;
+    assert.equal(schoolRules.find(rule => rule.subjectId === 'khmer')?.maxScore, 100);
+    assert.equal(schoolRules.find(rule => rule.subjectId === 'math')?.maxScore, 100);
+    assert.ok(schoolRules.filter(rule => !['khmer', 'math'].includes(rule.subjectId)).every(rule => rule.maxScore === 50));
+    assert.ok(schoolRules.every(rule => !rule.confirmed), 'The preset supplies confirmed denominators but still requires reviewing displayed A–F bands');
+    assert.equal(confirmedSchoolGrade8Rules(table, 9, '2026-2027'), null);
+    assert.equal(confirmedSchoolGrade8Rules(table, 8, '2027-2028'), null);
     const confirmed = options(table, { grade: 8, sourceGrade: 8, className: '8C', rules: rules.map(rule => ({ ...rule, maxScore: 100, confirmed: true })) });
     const result = buildPretestImportPreview(table, roster, confirmed, {});
     assert.deepEqual(result.errors, []);

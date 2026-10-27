@@ -4,6 +4,7 @@ import React from 'react';
 import { JSDOM } from 'jsdom';
 import type { Student, Classroom } from '../../types';
 import type { StudyPlanPatchPayload, StudyPlansMap } from '../../lib/study-plans/field-patches';
+import type { PretestPreview } from '../../lib/study-plans/pretest-import';
 test('existing grid: clipboard denial fallback, numeric review, manual shortcut regression and safe failed-save recovery', async () => {
     const dom = new JSDOM('<html><body></body></html>', { url: 'http://localhost/homeroom/student-study-plans' });
     for (const key of ['window', 'document', 'navigator', 'HTMLElement', 'HTMLSelectElement', 'Node', 'Event', 'MouseEvent', 'KeyboardEvent'])
@@ -99,4 +100,28 @@ test('existing grid: clipboard denial fallback, numeric review, manual shortcut 
         cleanup();
         dom.window.close();
     }
+});
+
+test('confirmed Grade 8 school preset fills all ten maxima and zero policy while Apply remains a separate reviewed step', async () => {
+    const dom = new JSDOM('<html><body></body></html>', { url: 'http://localhost/homeroom/student-study-plans' });
+    for (const key of ['window', 'document', 'navigator', 'HTMLElement', 'Node', 'Event', 'MouseEvent']) Object.defineProperty(globalThis, key, { value: (dom.window as unknown as Record<string, unknown>)[key], writable: true, configurable: true });
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    const { render, fireEvent, cleanup, waitFor } = await import('@testing-library/react');
+    const Controls = (await import('../../app/(dashboard)/homeroom/student-study-plans/SchoolPretestPasteControls')).default;
+    let latest: PretestPreview | undefined;
+    try {
+        const text = 'ឆ្នាំសិក្សា 2026-2027\nថ្នាក់ទី ៨ C\nឈ្មោះសិស្ស\tតែង\tសីល\tភូមិ\tប្រវត្តិ\tគណិត\tផែន\tរូប\tគីមី\tជីវៈ\tអង់\nSok Dara\t48\t25\t25\t25\t98\t25\t25\t25\t25\t25';
+        const view = render(React.createElement(Controls, { text, students: [{ id: 's1', full_name: 'Sok Dara' }], grade: 8, className: '8C', academicYear: '2026-2027', current: {}, initialMode: true, onPreview: preview => { latest = preview; } }));
+        assert.equal((view.getByRole('combobox', { name: 'Maximum math' }) as HTMLSelectElement).value, '0');
+        fireEvent.click(view.getByRole('button', { name: /ប្រើគំរូ វិ.ហស ពោធិ៍រៀង/ }));
+        assert.equal((view.getByRole('combobox', { name: 'Maximum khmer' }) as HTMLSelectElement).value, '100');
+        assert.equal((view.getByRole('combobox', { name: 'Maximum math' }) as HTMLSelectElement).value, '100');
+        assert.equal((view.getByRole('combobox', { name: 'Maximum biology' }) as HTMLSelectElement).value, '50');
+        assert.equal((view.getByRole('combobox', { name: 'Zero score policy' }) as HTMLSelectElement).value, 'score');
+        assert.ok(latest!.errors.length, 'Preset selection alone must not confirm conversion');
+        fireEvent.click(view.getByRole('button', { name: /បញ្ជាក់ក្បួននិទ្ទេសដែលបានបង្ហាញទាំងអស់/ }));
+        await waitFor(() => assert.deepEqual(latest!.errors, []));
+        assert.equal(latest!.changes.length, 10);
+        assert.equal(latest!.changes.find(change => change.subjectId === 'khmer')!.raw, '48 = 48');
+    } finally { cleanup(); dom.window.close(); }
 });

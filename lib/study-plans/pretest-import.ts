@@ -160,6 +160,18 @@ export function suggestScoreRules(roles: ColumnRole[]): ScoreRule[] {
         return sourceColumns.length ? [{ subjectId, sourceColumns, aggregation: sourceColumns.length > 1 ? 'sum' as const : 'direct' as const, maxScore: 0, confirmed: false }] : [];
     });
 }
+// Owner-confirmed for this supplied workbook/year, not inferred from observed scores or normal curriculum.
+export const SCHOOL_GRADE8_PRETEST_REFERENCE = 'សាលាបានបញ្ជាក់ 2026-10-27៖ ថ្នាក់ទី៨ ឆ្នាំ2026-2027 — ខ្មែរសរុប/100 គណិត/100 មុខវិជ្ជាផ្សេង/50; 0 ជាពិន្ទុពិត';
+export function confirmedSchoolGrade8Rules(table: PretestTable, grade: number, academicYear: string): ScoreRule[] | null {
+    if (grade !== 8 || normalizeYear(academicYear) !== '2026-2027') return null;
+    if (table.sourceYears.some(year => year !== '2026-2027') || table.sourceGrades.some(sourceGrade => sourceGrade !== 8)) return null;
+    const rules = suggestScoreRules(table.roles);
+    if (rules.length !== 10 || rules.some(rule => rule.aggregation !== 'direct')) return null;
+    const khmer = rules.find(rule => rule.subjectId === 'khmer');
+    if (!khmer || !['composition', 'khmer'].includes(table.roles[khmer.sourceColumns[0]])) return null;
+    // Preserve explicit rubric review even though the school has confirmed each denominator.
+    return rules.map(rule => ({ ...rule, maxScore: rule.subjectId === 'khmer' || rule.subjectId === 'math' ? 100 : 50, confirmed: false }));
+}
 export const SUPPORTED_PRETEST_MAXIMA = [25, 32, 33, 35, 37, 38, 50, 75, 100, 125, 150] as const;
 export function convertPretestScoreToGrade(score: number, maximum: number): Letter {
     if (!Number.isFinite(score) || score < 0 || score > maximum || !SUPPORTED_PRETEST_MAXIMA.includes(maximum as typeof SUPPORTED_PRETEST_MAXIMA[number]))

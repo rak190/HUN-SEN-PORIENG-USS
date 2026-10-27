@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useMemo, useState } from 'react';
-import { buildPretestImportPreview, normalizeTrack, parseSchoolPretestClipboard, PRETEST_SUBJECTS, scoreBandDescription, suggestScoreRules, SUPPORTED_PRETEST_MAXIMA, type ColumnRole, type PretestOptions, type PretestPreview, type PretestStudent } from '@/lib/study-plans/pretest-import';
+import { buildPretestImportPreview, confirmedSchoolGrade8Rules, SCHOOL_GRADE8_PRETEST_REFERENCE, normalizeTrack, parseSchoolPretestClipboard, PRETEST_SUBJECTS, scoreBandDescription, suggestScoreRules, SUPPORTED_PRETEST_MAXIMA, type ColumnRole, type PretestOptions, type PretestPreview, type PretestStudent } from '@/lib/study-plans/pretest-import';
 import { STUDY_PLAN_SUBJECTS } from './StudentStudyPlanDocument';
 import type { StudyPlansMap } from '@/lib/study-plans/field-patches';
 const input = 'bg-white border border-slate-200 rounded-xl px-3 py-1.5 font-bold text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20';
@@ -33,7 +33,7 @@ export default function SchoolPretestPasteControls({ text, students, grade, trac
             const next = parseSchoolPretestClipboard(value, headerRow);
             setTable(next);
             setParseError('');
-            update({ mode: initialMode && next.detectedMode !== 'letters' ? 'numeric' : 'letters', rules: suggestScoreRules(next.roles), excludedRows: [], studentChoices: {}, confirmedZeroRows: [], sourceYear: next.sourceYears.length === 1 ? next.sourceYears[0] : '', sourceGrade: next.sourceGrades.length === 1 ? next.sourceGrades[0] : 0, sourceTrack: next.sourceTracks.length === 1 ? next.sourceTracks[0] : '' });
+            update({ mode: initialMode && next.detectedMode !== 'letters' ? 'numeric' : 'letters', rules: suggestScoreRules(next.roles), evidence: '', zeroPolicy: '', excludedRows: [], studentChoices: {}, confirmedZeroRows: [], sourceYear: next.sourceYears.length === 1 ? next.sourceYears[0] : '', sourceGrade: next.sourceGrades.length === 1 ? next.sourceGrades[0] : 0, sourceTrack: next.sourceTracks.length === 1 ? next.sourceTracks[0] : '' });
         }
         catch (error) {
             setParseError(error instanceof Error ? error.message : 'Clipboard មិនត្រឹមត្រូវ');
@@ -56,16 +56,18 @@ export default function SchoolPretestPasteControls({ text, students, grade, trac
     <div className="flex flex-wrap gap-2">{table.headers.map((header, col) => <label key={col} className="font-semibold text-slate-600">{col + 1}. {header.slice(0, 30)} <select aria-label={`Map column ${col + 1}`} className={input} value={table.roles[col]} onChange={event => {
                 const roles = [...table.roles];
                 roles[col] = event.target.value as ColumnRole;
-                setTable({ ...table, roles });
-                update({ rules: suggestScoreRules(roles) });
+                const mapped = { ...table, roles };
+                setTable(mapped);
+                update({ rules: suggestScoreRules(roles), evidence: '', zeroPolicy: '' });
             }}>{['unknown', 'ignore', 'uuid', 'id', 'name', 'gender', 'dob', 'class', 'composition', 'writing', ...PRETEST_SUBJECTS].map(role => <option key={role} value={role}>{labels[role] || STUDY_PLAN_SUBJECTS.find(subject => subject.id === role)?.label}</option>)}</select></label>)}</div>
     {options.mode === 'numeric' && <>
       <p className="font-bold text-amber-800">កុំប្រើអតិបរមាពិន្ទុប្រចាំខែដោយស្វ័យប្រវត្តិ។ ជ្រើសតែកម្រិត និងក្បួនដែលសាលាបានបញ្ជាក់សម្រាប់តេស្តនេះ។</p>
+      {confirmedSchoolGrade8Rules(table, grade, academicYear) && <div className="flex flex-wrap items-center gap-2"><p className="font-bold text-slate-600">គំរូសាលាថ្នាក់ទី៨៖ ខ្មែរ /100 · គណិត /100 · មុខវិជ្ជាផ្សេង /50 · 0 ជាពិន្ទុពិត។ សូមពិនិត្យក្បួននិទ្ទេសខាងក្រោមមុនអនុវត្ត។</p><button type="button" className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer" onClick={() => update({ rules: confirmedSchoolGrade8Rules(table, grade, academicYear) || options.rules, evidence: SCHOOL_GRADE8_PRETEST_REFERENCE, zeroPolicy: 'score', confirmedZeroRows: [] })}>ប្រើគំរូ វិ.ហស ពោធិ៍រៀង ថ្នាក់ទី៨ ឆ្នាំ2026-2027</button></div>}
       {grade === 8 && options.rules.some(rule => rule.subjectId === 'khmer' && rule.sourceColumns.length === 1 && table.roles[rule.sourceColumns[0]] === 'composition') && <p className="font-bold text-slate-600">គំរូថ្នាក់ទី៨៖ «តែង» ជាពិន្ទុភាសាខ្មែរសរុប (តែង + សរសេរ) ដែលសាលាបានបញ្ជាក់។ ប្រើពិន្ទុនេះតែម្តង មិនបូកស្ទួនទេ។ សូមបញ្ជាក់ពិន្ទុអតិបរមាដាច់ដោយឡែក។</p>}
       {options.rules.map((rule, i) => <div key={rule.subjectId} className="flex flex-wrap items-center gap-2">
         <strong>{STUDY_PLAN_SUBJECTS.find(subject => subject.id === rule.subjectId)?.label}</strong>
         <span>{rule.sourceColumns.map(col => `${col + 1}. ${table.headers[col]}`).join(rule.aggregation === 'sum' ? ' + ' : '')}</span>
-        <select aria-label={`Maximum ${rule.subjectId}`} className={input} value={rule.maxScore} onChange={event => update({ rules: options.rules.map((value, index) => index === i ? { ...value, maxScore: Number(event.target.value), confirmed: false } : value) })}><option value={0}>ពិន្ទុអតិបរមា</option>{SUPPORTED_PRETEST_MAXIMA.map(max => <option key={max}>{max}</option>)}</select>
+        <select aria-label={`Maximum ${rule.subjectId}`} className={input} value={rule.maxScore} onChange={event => update({ evidence: options.evidence === SCHOOL_GRADE8_PRETEST_REFERENCE ? '' : options.evidence, rules: options.rules.map((value, index) => index === i ? { ...value, maxScore: Number(event.target.value), confirmed: false } : value) })}><option value={0}>ពិន្ទុអតិបរមា</option>{SUPPORTED_PRETEST_MAXIMA.map(max => <option key={max}>{max}</option>)}</select>
         {rule.aggregation === 'sum' && rule.sourceColumns.map((col, component) => <input key={col} aria-label={`Component maximum ${component + 1}`} type="number" min="1" className={`${input} w-28`} placeholder={`អតិ. ${table.headers[col]}`} value={rule.componentMaxScores?.[component] || ''} onChange={event => {
                         const maxima = [...(rule.componentMaxScores || rule.sourceColumns.map(() => 0))];
                         maxima[component] = Number(event.target.value);
@@ -74,6 +76,7 @@ export default function SchoolPretestPasteControls({ text, students, grade, trac
         <span>{scoreBandDescription(rule.maxScore)}</span>
         <label className="font-bold"><input type="checkbox" checked={rule.confirmed} disabled={!rule.maxScore} onChange={event => update({ rules: options.rules.map((value, index) => index === i ? { ...value, confirmed: event.target.checked } : value) })}/> បញ្ជាក់ក្បួន{rule.aggregation === 'sum' ? 'បូកសមាសភាគ និងនិទ្ទេស' : 'និទ្ទេស'}</label>
       </div>)}
+      {options.rules.length > 0 && <button type="button" className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer" disabled={options.rules.some(rule => !rule.maxScore)} onClick={() => update({ rules: options.rules.map(rule => ({ ...rule, confirmed: true })) })}>បញ្ជាក់ក្បួននិទ្ទេសដែលបានបង្ហាញទាំងអស់</button>}
       <label>ពិន្ទុសូន្យ <select aria-label="Zero score policy" className={input} value={options.zeroPolicy} onChange={event => update({ zeroPolicy: event.target.value as PretestOptions['zeroPolicy'], confirmedZeroRows: [] })}><option value="">សូមបញ្ជាក់អត្ថន័យ</option><option value="score">ពិន្ទុពិត 0</option><option value="missing">មិនមានលទ្ធផល — រក្សានិទ្ទេសចាស់</option></select></label>
     </>}
     <p className="font-bold text-slate-600">ជួរ {preview.rows.length} · ផ្គូផ្គង {preview.matched} · មិនផ្គូផ្គង/ត្រូវពិនិត្យ {preview.rows.filter(row => !row.excluded && row.errors.length).length} · ថ្នាក់ខុស {preview.wrongClass} · ដកចេញ {preview.rows.filter(row => row.excluded).length} · ស្ទួន {preview.duplicateRows} · ពិន្ទុខុស {preview.invalidScores} · កែប្រែ {preview.changes.length} · ជំនួសនិទ្ទេសចាស់ {preview.replacements}</p>

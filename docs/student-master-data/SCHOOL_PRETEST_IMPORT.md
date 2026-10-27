@@ -41,7 +41,9 @@ Raw numeric 1–6 are examination points, never manual keyboard shortcuts. Exist
 
 Conversion delegates to the existing `getSubjectGradeLetter` exact scales in `StudentStudyPlanDocument.tsx`: supported maxima 25, 32, 33, 35, 37, 38, 50, 75, 100, 125 and 150. All five thresholds are shown for the chosen scale before confirmation. Boundary/decimal tests cover every scale. No formula or official curriculum threshold was changed.
 
-**No school-specific exam rubric is bundled as verified.** The workbook's headers and observed scores do not establish maxima, absence semantics or Khmer aggregation rules. Teachers must verify that the displayed existing bands match the actual examination instructions. Unsupported maxima or different cutoff rules are blocked; obtain the school's rubric before adding a tested mapping profile.
+**Owner-confirmed Grade 8 preset (2026-10-27):** for this school's 2026–2027 single-total Khmer template, Khmer total and Mathematics are out of 100, every other subject is out of 50, and 0 is a genuine score. The review offers an explicit school-named preset to fill those maxima, zero policy and provenance reference in one click. It does not automatically apply grades or confirm the displayed A–F bands. It is unavailable for other grades/years, mismatched detected metadata or two-component Khmer layouts whose component maxima remain unknown. All-zero rows still require deliberate per-row review.
+
+The workbook's headers and observed scores alone do not establish those rules; the owner supplied the confirmation. Teachers must still review that the displayed existing bands match the actual examination instructions, including the existing 100-point boundary at 50/F and 51/E. Unsupported maxima or different cutoff rules are blocked. Other grades have no verified preset in this implementation.
 
 ## Persistence and release
 
@@ -64,3 +66,5 @@ Apply migration 095 to staging after the existing study-plan migrations; test wi
 - Browser screenshot comparison was unavailable: Windows Computer Use stopped because it could not confidently determine the current browser URL. No further browser actions were attempted.
 
 Final local results (2026-10-27): **376 passed, 0 failed, 0 skipped** across `tests/reliability/*.test.ts`, `tests/grading/*.test.ts` and the required field-patch database test. The focused school-import/study-plan selection passed 89 tests. Type checking and the production build passed. New files passed ESLint; existing modified files gained zero lint findings. Build output reported incomplete local R2 credentials, unrelated to this clipboard workflow. Generated service-worker build changes were restored.
+
+Follow-up verification against `_Copy.xlsx` and the owner-confirmed Grade 8 rules: **93 focused tests passed, 0 failed, 0 skipped**. This includes single-column combined Khmer, the explicit preset, Khmer track headings and safe bulk exclusion of other sections. Type checking and changed-file ESLint passed.
