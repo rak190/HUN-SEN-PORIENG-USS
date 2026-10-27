@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { MassiveProfilingStudent } from '@/app/(dashboard)/students/types';
-import { X, UploadCloud, Image as ImageIcon, User, CheckCircle2, Loader2, AlertCircle, Trash2 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { X, UploadCloud, Image as ImageIcon, User, CheckCircle2, Loader2, Trash2 } from 'lucide-react';
 import { compareStudentsByName } from '@/lib/students/student-sort';
 
 interface BulkImageUploadModalProps {
@@ -29,11 +28,8 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, classI
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const supabase = createClient();
 
   useEffect(() => setMounted(true), []);
-
-  if (!mounted || !isOpen) return null;
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
@@ -227,6 +223,9 @@ export default function BulkImageUploadModal({ isOpen, onClose, students, classI
       onClose();
     }, 1200);
   };
+
+  // Keep every hook above this guard so opening/closing preserves hook order.
+  if (!mounted || !isOpen) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fadeIn" onClick={onClose}>
