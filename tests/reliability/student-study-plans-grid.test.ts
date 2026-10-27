@@ -13,6 +13,8 @@ import {
 } from '../../app/(dashboard)/homeroom/student-study-plans/types';
 import { getSubjectGradeLetter } from '../../app/(dashboard)/homeroom/student-study-plans/StudentStudyPlanDocument';
 import { toLatinDigits } from '../../app/(dashboard)/homeroom/student-study-plans/StudentStudyPlanGridModal';
+import { buildStudyPlanPatches } from '../../lib/study-plans/field-patches';
+import { parseSchoolPretestClipboard, suggestScoreRules, buildPretestImportPreview } from '../../lib/study-plans/pretest-import';
 
 describe('Student Study Plans Grade-Based Architecture Suite (Phase 24)', () => {
   const modalFilePath = path.join(
@@ -404,18 +406,10 @@ describe('Student Study Plans Grade-Based Architecture Suite (Phase 24)', () => 
     });
 
     it('Bulk editing persistence submits ONLY changed students instead of full roster', () => {
-      const modalContent = fs.readFileSync(modalFilePath, 'utf-8');
-
-      assert.ok(
-        modalContent.includes('changedStudentIds = Array.from(') &&
-          modalContent.includes('changedStudentIds.map('),
-        'handleSaveAll must build plansPayload containing ONLY changedStudentIds'
-      );
-
-      assert.ok(
-        modalContent.includes('មិនមានការផ្លាស់ប្តូរណាមួយត្រូវបានកែប្រែទេ'),
-        'handleSaveAll must warn and exit early if no cells were modified'
-      );
+      const original = { a: { math: { initial: 'C', plan: { nov: 'B' } } }, b: { math: { initial: 'A' } } };
+      const draft = structuredClone(original); draft.a.math.initial = 'A';
+      assert.deepEqual(buildStudyPlanPatches(original, draft), [{ studentId: 'a', subjectId: 'math', path: 'initial', previousGrade: 'C', newGrade: 'A' }]);
+      assert.deepEqual(buildStudyPlanPatches(original, original), []);
     });
   });
 
@@ -498,24 +492,12 @@ describe('Student Study Plans Grade-Based Architecture Suite (Phase 24)', () => 
     });
 
     it('Grid modal provides Paste Preview Confirmation before applying clipboard changes', () => {
-      const modalContent = fs.readFileSync(modalFilePath, 'utf-8');
-
-      assert.ok(
-        modalContent.includes('setPastePreview(') &&
-          modalContent.includes('handleConfirmPaste'),
-        'Modal must stage paste into pastePreview and require handleConfirmPaste'
-      );
-
-      assert.ok(
-        modalContent.includes('isOfficialLocked = true') &&
-          modalContent.includes('lockedSkippedCount++'),
-        'Modal must protect published official grades from being overwritten by paste'
-      );
-
-      assert.ok(
-        modalContent.includes('duplicateIdsCount++'),
-        'Modal must detect and flag duplicate student IDs in clipboard data'
-      );
+      const table = parseSchoolPretestClipboard('Student ID\tName\tmath\n00123\tStudent A\tA\n00123\tStudent A\tB');
+      const current = { a: { math: { initial: 'C' } } };
+      const preview = buildPretestImportPreview(table, [{ id: 'a', full_name: 'Student A', student_id_number: '00123' }], { mode: 'letters', grade: 7, className: '7A', academicYear: '2026-2027', sourceYear: '', sourceGrade: 0, sourceTrack: '', evidence: '', rules: suggestScoreRules(table.roles), zeroPolicy: '', confirmedZeroRows: [], excludedRows: [], studentChoices: {} }, current);
+      assert.equal(preview.duplicateRows, 1);
+      assert.ok(preview.rows.every(row => row.errors.length > 0));
+      assert.equal(current.a.math.initial, 'C', 'Preview must not mutate the draft');
     });
   });
 
