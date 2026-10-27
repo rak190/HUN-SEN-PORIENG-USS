@@ -61,6 +61,7 @@ export default function SchoolPretestPasteControls({ text, students, grade, trac
             }}>{['unknown', 'ignore', 'uuid', 'id', 'name', 'gender', 'dob', 'class', 'composition', 'writing', ...PRETEST_SUBJECTS].map(role => <option key={role} value={role}>{labels[role] || STUDY_PLAN_SUBJECTS.find(subject => subject.id === role)?.label}</option>)}</select></label>)}</div>
     {options.mode === 'numeric' && <>
       <p className="font-bold text-amber-800">កុំប្រើអតិបរមាពិន្ទុប្រចាំខែដោយស្វ័យប្រវត្តិ។ ជ្រើសតែកម្រិត និងក្បួនដែលសាលាបានបញ្ជាក់សម្រាប់តេស្តនេះ។</p>
+      {grade === 8 && options.rules.some(rule => rule.subjectId === 'khmer' && rule.sourceColumns.length === 1 && table.roles[rule.sourceColumns[0]] === 'composition') && <p className="font-bold text-slate-600">គំរូថ្នាក់ទី៨៖ «តែង» ជាពិន្ទុភាសាខ្មែរសរុប (តែង + សរសេរ) ដែលសាលាបានបញ្ជាក់។ ប្រើពិន្ទុនេះតែម្តង មិនបូកស្ទួនទេ។ សូមបញ្ជាក់ពិន្ទុអតិបរមាដាច់ដោយឡែក។</p>}
       {options.rules.map((rule, i) => <div key={rule.subjectId} className="flex flex-wrap items-center gap-2">
         <strong>{STUDY_PLAN_SUBJECTS.find(subject => subject.id === rule.subjectId)?.label}</strong>
         <span>{rule.sourceColumns.map(col => `${col + 1}. ${table.headers[col]}`).join(rule.aggregation === 'sum' ? ' + ' : '')}</span>

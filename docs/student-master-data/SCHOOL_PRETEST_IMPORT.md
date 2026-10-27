@@ -19,7 +19,7 @@ The locally supplied school workbook was inspected read-only on 2026-10-27. No s
 - `7` is a roster, not a score source.
 - `7 SCOR`: row 8, subject columns G–Q; unnamed totals/extra columns need explicit handling.
 - `8`: row 7, subjects G–Q.
-- The newly supplied `_Copy.xlsx` differs from `_Copy (2).xlsx`: its `8` sheet has **one** Khmer column (`តែង`) and ten subjects G–P. The parser derives direct versus component rules from actual headers, never from grade alone. Both variants are supported. Direct-score status does not establish the maximum possible mark.
+- The newly supplied `_Copy.xlsx` differs from `_Copy (2).xlsx`: its `8` sheet has **one** Khmer column (`តែង`) and ten subjects G–P. The owner confirmed on 2026-10-27 that this Grade 8 column **already contains `តែង + សរសេរ`**. Use it directly once; do not add another component or double it. A review note identifies this confirmed meaning. This confirmation does not establish the maximum possible mark. In sheets with separate `តែង` and `សរសេរ`, Khmer uses their sum after component maxima are confirmed.
 - `9`: row 7, G is metadata; subjects H–R.
 - `10`, `11SC`, `11SS`, `12SC`, `12SS`: row 7, subjects G–P, single Khmer component.
 - `Sheet1` summaries are not score sources.

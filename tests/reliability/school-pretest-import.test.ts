@@ -28,6 +28,8 @@ test('current Copy workbook Grade 8 uses one Khmer column, not the older two-com
     assert.deepEqual(result.rows[0].errors, []);
     assert.equal(result.changes.length, 10);
     assert.equal(result.changes.find(change => change.subjectId === 'math')?.newGrade, 'A');
+    assert.equal(result.changes.find(change => change.subjectId === 'khmer')?.raw, '48 = 48', 'The confirmed combined score must be used once');
+    assert.equal(result.changes.find(change => change.subjectId === 'khmer')?.newGrade, 'F');
 });
 test('actual Khmer track titles and compact SC/SS names detect grade and track', () => {
     for (const [title, track] of [['ថ្នាក់ទី ១១ A (វិទ្យាសាស្ត្រ)', 'science'], ['ថ្នាក់ទី ១១ C (សង្គម)', 'social'], ['ថ្នាក់ទី ១២ B (វិទ្យាសាស្ត្រសង្គម)', 'social'], ['Grade 12SC', 'science'], ['Grade 11SS', 'social']]) {
