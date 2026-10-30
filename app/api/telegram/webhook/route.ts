@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurriculumSchemaForClass, fetchClassExamStandards } from '@/lib/curriculum';
 import { calculateStudentMonthlyGrade, computeStudentRank } from '@/lib/domain/grading';
 import { resolvePeriodDateRange } from '@/lib/domain/periods';
@@ -7,11 +7,6 @@ import { resolvePeriodDateRange } from '@/lib/domain/periods';
 const TELEGRAM_BOT_TOKEN = process.env.PARENT_TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const APP_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://hun-sen-porieng-uss.vercel.app';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 function getPersistentMenu() {
   return {
@@ -84,6 +79,11 @@ export async function POST(req: NextRequest) {
     }
 
     const update = await req.json();
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: 'Telegram service is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' }, { status: 503 });
+    }
+    const supabase = createAdminClient();
 
     // ============================================
     // Handle Callback Queries (Inline Keyboards)
@@ -165,7 +165,7 @@ export async function POST(req: NextRequest) {
         }
       }
       else if (data === 'check_scores') {
-        await handleScoreCheck(chatId);
+        await handleScoreCheck(chatId, supabase);
       }
 
       await answerCallbackQuery(callbackQuery.id);
@@ -317,7 +317,7 @@ export async function POST(req: NextRequest) {
         text === '/scores' || 
         text === '/report_card'
       ) {
-        await handleScoreCheck(chatId);
+        await handleScoreCheck(chatId, supabase);
       }
       else if (text === '⚠️ រាយការណ៍បញ្ហា' || text === '⚠️ មើលវត្តមានខែនេះ') {
         await sendMessage(chatId, '⚠️ បើមានបញ្ហាទាក់ទងនឹងប្រព័ន្ធ សូមទាក់ទងទៅកាន់ទីចាត់ការសាលា ឬលោកគ្រូ/អ្នកគ្រូបន្ទុកថ្នាក់ផ្ទាល់។ សូមអរគុណ!');
@@ -331,7 +331,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function handleScoreCheck(chatId: number) {
+async function handleScoreCheck(chatId: number, supabase: ReturnType<typeof createAdminClient>) {
   const { data: subs, error: subsError } = await supabase
     .from('telegram_parent_subscriptions')
     .select('student_id, students(id, full_name)')

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurriculumSchemaForClass, fetchClassExamStandards } from '@/lib/curriculum';
 import { calculateStudentMonthlyGrade, assignGradeRanks } from '@/lib/domain/grading';
 import { resolvePeriodDateRange } from '@/lib/domain/periods';
@@ -9,12 +9,6 @@ export const maxDuration = 300;
 const TELEGRAM_BOT_TOKEN = process.env.PARENT_TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const APP_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://hun-sen-porieng-uss.vercel.app';
-
-// Initialize Supabase with service role key to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 async function sendMessage(chatId: number, text: string) {
   return fetch(`${TELEGRAM_API_URL}/sendMessage`, {
@@ -55,7 +49,7 @@ export async function POST(req: NextRequest) {
   try {
     const { getServerAuth } = await import('@/lib/auth-server');
     const { user, profile, role } = await getServerAuth();
-    if (!user || (role !== 'admin' && role !== 'principal' && role !== 'teacher')) {
+    if (!user || !profile?.is_active || !profile.school_id || (role !== 'admin' && role !== 'principal' && role !== 'teacher')) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
     }
 
@@ -64,6 +58,11 @@ export async function POST(req: NextRequest) {
     if (!class_id || !month) {
       return NextResponse.json({ error: 'class_id and month are required' }, { status: 400 });
     }
+
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: 'Broadcast service is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' }, { status: 503 });
+    }
+    const supabase = createAdminClient();
 
     // 1. Get class info including school, academic year, grade, track, and teacher_id
     const { data: classData, error: classError } = await supabase
@@ -76,7 +75,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Class not found' }, { status: 404 });
     }
 
-    if ((role === 'principal' || role === 'teacher') && classData.school_id !== profile?.school_id) {
+    if (classData.school_id !== profile.school_id) {
       return NextResponse.json({ error: 'Forbidden: You cannot broadcast scores for a class outside your school.' }, { status: 403 });
     }
 

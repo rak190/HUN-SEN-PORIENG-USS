@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurriculumSchemaForClass, fetchClassExamStandards } from '@/lib/curriculum';
 import { calculateStudentMonthlyGrade, assignGradeRanks } from '@/lib/domain/grading';
 import { resolvePeriodDateRange } from '@/lib/domain/periods';
@@ -7,12 +7,6 @@ import { resolvePeriodDateRange } from '@/lib/domain/periods';
 const TELEGRAM_BOT_TOKEN = process.env.PARENT_TELEGRAM_BOT_TOKEN || '';
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const APP_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://hun-sen-porieng-uss.vercel.app';
-
-// Initialize Supabase with service role key to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 async function sendMessage(chatId: number, text: string) {
   return fetch(`${TELEGRAM_API_URL}/sendMessage`, {
@@ -61,7 +55,7 @@ export async function POST(req: NextRequest) {
   try {
     const { getServerAuth } = await import('@/lib/auth-server');
     const { user, profile, role } = await getServerAuth();
-    if (!user || (role !== 'admin' && role !== 'principal')) {
+    if (!user || !profile?.is_active || !profile.school_id || (role !== 'admin' && role !== 'principal')) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
     }
 
@@ -70,6 +64,12 @@ export async function POST(req: NextRequest) {
     if (!class_ids || !Array.isArray(class_ids) || !month) {
       return NextResponse.json({ error: 'class_ids array and month are required' }, { status: 400 });
     }
+
+    // Next.js imports route modules during builds. Privileged clients belong to authorized requests only.
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ error: 'Broadcast service is not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.' }, { status: 503 });
+    }
+    const supabase = createAdminClient();
 
     const summary: BroadcastSummary = {
       total: class_ids.length,
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
           throw new Error('Class not found');
         }
 
-        if (role === 'principal' && classData.school_id !== profile?.school_id) {
+        if (classData.school_id !== profile.school_id) {
           throw new Error('Forbidden: You cannot broadcast scores for a class outside your school.');
         }
 
@@ -278,7 +278,7 @@ export async function POST(req: NextRequest) {
     // Resolve class names for failed items that couldn't fetch it
     for (const f of summary.failed) {
        if (f.className === f.classId) {
-          const { data } = await supabase.from('classes').select('name').eq('id', f.classId).single();
+          const { data } = await supabase.from('classes').select('name').eq('id', f.classId).eq('school_id', profile.school_id).single();
           if (data) f.className = data.name;
        }
     }

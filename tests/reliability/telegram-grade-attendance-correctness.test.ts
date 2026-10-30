@@ -183,8 +183,9 @@ test('Telegram Grade, Attendance & Report Card Image Correctness Suite', async (
       // 1. Must check role and school authorization
       assert.ok(
         content.includes("role !== 'admin' && role !== 'principal'") &&
-        content.includes('classData.school_id !== profile?.school_id'),
-        `${name} must enforce admin/principal authorization and principal school boundary`
+        content.includes('!profile?.is_active') &&
+        /classData\.school_id\s*!==\s*profile(?:\?\.|\.)school_id/.test(content),
+        `${name} must enforce active-profile authorization and school boundaries`
       );
 
       // 2. Must filter grades by published status and academic year
