@@ -45,14 +45,21 @@ export default function SchoolPretestPasteControls({ text, students, grade, trac
     </label>
     <div className="flex flex-wrap gap-3 items-center">
       <label>ប្រភេទទិន្នន័យ <select className={input} value={options.mode} onChange={event => update({ mode: event.target.value as PretestOptions['mode'] })}><option value="numeric" disabled={!initialMode}>ពិន្ទុតេស្តលេខ → A–F</option><option value="letters">និទ្ទេស A–F (មិនប្រើលេខ 1–6)</option></select></label>
-      <label>ជួរចំណងជើង <select className={input} value={table.headerRow} onChange={event => parse(source, Number(event.target.value))}><option value={-1}>គ្មានចំណងជើង — ផ្គូផ្គងដោយដៃ</option>{table.rows.slice(0, 20).map((row, i) => <option key={i} value={i}>{i + 1}: {row.join(' | ').slice(0, 90)}</option>)}</select></label>
+    </div>
+    <details open={options.mode === 'numeric' && preview.errors.length > 0} className="rounded-xl border border-slate-200 p-3 space-y-2">
+      <summary className="font-bold text-slate-700 cursor-pointer">ផ្ទៀងផ្ទាត់ប្រភព និងឆ្នាំប្រឡង</summary>
+      <div className="flex flex-wrap gap-3 items-center">
       <label>ឆ្នាំប្រឡង <input aria-label="Source academic year" className={input} placeholder="2026-2027" value={options.sourceYear} onChange={event => update({ sourceYear: event.target.value })}/></label>
       <label>កម្រិតថ្នាក់ប្រភព <select aria-label="Source grade" className={input} value={options.sourceGrade} onChange={event => update({ sourceGrade: Number(event.target.value) })}><option value={0}>សូមបញ្ជាក់</option>{[7, 8, 9, 10, 11, 12].map(value => <option key={value}>{value}</option>)}</select></label>
       {grade >= 11 && <label>ផ្នែកប្រភព <select className={input} value={options.sourceTrack} onChange={event => update({ sourceTrack: event.target.value })}><option value="">សូមបញ្ជាក់</option><option value="science">វិទ្យាសាស្ត្រ</option><option value="social">វិទ្យាសាស្ត្រសង្គម</option></select> (ថ្នាក់៖ {normalizeTrack(track || '') || 'មិនទាន់បញ្ជាក់'})</label>}
-    </div>
+      </div>
     <label className="block font-bold text-slate-700">ប្រភពផ្ទៀងផ្ទាត់ឆ្នាំប្រឡង និងក្បួននិទ្ទេស (ឧ. សេចក្ដីណែនាំប្រឡង លេខ/កាលបរិច្ឆេទ)
       <input aria-label="Verified examination rubric reference" className={`${input} w-full mt-1`} value={options.evidence} onChange={event => update({ evidence: event.target.value })}/>
     </label>
+    </details>
+    <details open={table.roles.includes('unknown') || table.headerRow < 0} className="rounded-xl border border-slate-200 p-3 space-y-2">
+    <summary className="font-bold text-slate-700 cursor-pointer">ផ្គូផ្គងជួរឈរ {table.roles.includes('unknown') ? '— សូមពិនិត្យ' : '— បានស្គាល់ដោយស្វ័យប្រវត្តិ'}</summary>
+    <label>ជួរចំណងជើង <select className={input} value={table.headerRow} onChange={event => parse(source, Number(event.target.value))}><option value={-1}>គ្មានចំណងជើង — ផ្គូផ្គងដោយដៃ</option>{table.rows.slice(0, 20).map((row, i) => <option key={i} value={i}>{i + 1}: {row.join(' | ').slice(0, 90)}</option>)}</select></label>
     <div className="flex flex-wrap gap-2">{table.headers.map((header, col) => <label key={col} className="font-semibold text-slate-600">{col + 1}. {header.slice(0, 30)} <select aria-label={`Map column ${col + 1}`} className={input} value={table.roles[col]} onChange={event => {
                 const roles = [...table.roles];
                 roles[col] = event.target.value as ColumnRole;
@@ -60,7 +67,9 @@ export default function SchoolPretestPasteControls({ text, students, grade, trac
                 setTable(mapped);
                 update({ rules: suggestScoreRules(roles), evidence: '', zeroPolicy: '' });
             }}>{['unknown', 'ignore', 'uuid', 'id', 'name', 'gender', 'dob', 'class', 'composition', 'writing', ...PRETEST_SUBJECTS].map(role => <option key={role} value={role}>{labels[role] || STUDY_PLAN_SUBJECTS.find(subject => subject.id === role)?.label}</option>)}</select></label>)}</div>
-    {options.mode === 'numeric' && <>
+    </details>
+    {options.mode === 'numeric' && <details open className="rounded-xl border border-slate-200 p-3 space-y-2">
+      <summary className="font-bold text-slate-700 cursor-pointer">ផ្ទៀងផ្ទាត់ពិន្ទុអតិបរមា និងក្បួននិទ្ទេស</summary>
       <p className="font-bold text-amber-800">កុំប្រើអតិបរមាពិន្ទុប្រចាំខែដោយស្វ័យប្រវត្តិ។ ជ្រើសតែកម្រិត និងក្បួនដែលសាលាបានបញ្ជាក់សម្រាប់តេស្តនេះ។</p>
       {confirmedSchoolGrade8Rules(table, grade, academicYear) && <div className="flex flex-wrap items-center gap-2"><p className="font-bold text-slate-600">គំរូសាលាថ្នាក់ទី៨៖ ខ្មែរ /100 · គណិត /100 · មុខវិជ្ជាផ្សេង /50 · 0 ជាពិន្ទុពិត។ សូមពិនិត្យក្បួននិទ្ទេសខាងក្រោមមុនអនុវត្ត។</p><button type="button" className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer" onClick={() => update({ rules: confirmedSchoolGrade8Rules(table, grade, academicYear) || options.rules, evidence: SCHOOL_GRADE8_PRETEST_REFERENCE, zeroPolicy: 'score', confirmedZeroRows: [] })}>ប្រើគំរូ វិ.ហស ពោធិ៍រៀង ថ្នាក់ទី៨ ឆ្នាំ2026-2027</button></div>}
       {grade === 8 && options.rules.some(rule => rule.subjectId === 'khmer' && rule.sourceColumns.length === 1 && table.roles[rule.sourceColumns[0]] === 'composition') && <p className="font-bold text-slate-600">គំរូថ្នាក់ទី៨៖ «តែង» ជាពិន្ទុភាសាខ្មែរសរុប (តែង + សរសេរ) ដែលសាលាបានបញ្ជាក់។ ប្រើពិន្ទុនេះតែម្តង មិនបូកស្ទួនទេ។ សូមបញ្ជាក់ពិន្ទុអតិបរមាដាច់ដោយឡែក។</p>}
@@ -78,7 +87,7 @@ export default function SchoolPretestPasteControls({ text, students, grade, trac
       </div>)}
       {options.rules.length > 0 && <button type="button" className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer" disabled={options.rules.some(rule => !rule.maxScore)} onClick={() => update({ rules: options.rules.map(rule => ({ ...rule, confirmed: true })) })}>បញ្ជាក់ក្បួននិទ្ទេសដែលបានបង្ហាញទាំងអស់</button>}
       <label>ពិន្ទុសូន្យ <select aria-label="Zero score policy" className={input} value={options.zeroPolicy} onChange={event => update({ zeroPolicy: event.target.value as PretestOptions['zeroPolicy'], confirmedZeroRows: [] })}><option value="">សូមបញ្ជាក់អត្ថន័យ</option><option value="score">ពិន្ទុពិត 0</option><option value="missing">មិនមានលទ្ធផល — រក្សានិទ្ទេសចាស់</option></select></label>
-    </>}
+    </details>}
     <p className="font-bold text-slate-600">ជួរ {preview.rows.length} · ផ្គូផ្គង {preview.matched} · មិនផ្គូផ្គង/ត្រូវពិនិត្យ {preview.rows.filter(row => !row.excluded && row.errors.length).length} · ថ្នាក់ខុស {preview.wrongClass} · ដកចេញ {preview.rows.filter(row => row.excluded).length} · ស្ទួន {preview.duplicateRows} · ពិន្ទុខុស {preview.invalidScores} · កែប្រែ {preview.changes.length} · ជំនួសនិទ្ទេសចាស់ {preview.replacements}</p>
     {preview.rows.some(row => row.classStatus === 'other' && !row.excluded) && <button type="button" className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer" onClick={() => update({ excludedRows: [...new Set([...options.excludedRows, ...preview.rows.filter(row => row.classStatus === 'other').map(row => row.sourceRow)])] })}>ដកជួរថ្នាក់ផ្សេងចេញ ({preview.rows.filter(row => row.classStatus === 'other' && !row.excluded).length})</button>}
     {preview.errors.map((message, i) => <p key={i} className="font-bold text-red-600" role="alert">{message}</p>)}

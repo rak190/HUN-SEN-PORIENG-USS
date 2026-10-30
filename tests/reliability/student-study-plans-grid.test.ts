@@ -2,6 +2,10 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { JSDOM } from 'jsdom';
+import type { Classroom } from '../../types';
 import {
   GradeLetterSchema,
   SubjectPlanTargetSchema,
@@ -10,9 +14,10 @@ import {
   resolveAuthoritativeGradeLetter,
   resolveSubjectMaxScore,
   lookupScoreWithAliases,
+  type SubjectPlanTarget,
 } from '../../app/(dashboard)/homeroom/student-study-plans/types';
 import { getSubjectGradeLetter } from '../../app/(dashboard)/homeroom/student-study-plans/StudentStudyPlanDocument';
-import { toLatinDigits } from '../../app/(dashboard)/homeroom/student-study-plans/StudentStudyPlanGridModal';
+import StudentStudyPlanGridModal, { toLatinDigits } from '../../app/(dashboard)/homeroom/student-study-plans/StudentStudyPlanGridModal';
 import { buildStudyPlanPatches } from '../../lib/study-plans/field-patches';
 import { parseSchoolPretestClipboard, suggestScoreRules, buildPretestImportPreview } from '../../lib/study-plans/pretest-import';
 
@@ -224,27 +229,14 @@ describe('Student Study Plans Grade-Based Architecture Suite (Phase 24)', () => 
       );
     });
 
-    it('Grid modal supports Mode switching (Initial Pre-Test, Expected Outcomes, Actual Formative)', () => {
-      const content = fs.readFileSync(modalFilePath, 'utf-8');
-
-      assert.ok(
-        content.includes("'initial'") &&
-          content.includes("'expected'") &&
-          content.includes("'actual'"),
-        'Modal must support initial, expected, and actual modes'
-      );
-      assert.ok(
-        content.includes('១. តេស្តដើមឆ្នាំ (Pre-Test)'),
-        'Modal must render Mode A tab'
-      );
-      assert.ok(
-        content.includes('២. ផែនការរំពឹងទុក (Expected Targets)'),
-        'Modal must render Mode B tab'
-      );
-      assert.ok(
-        content.includes('៣. លទ្ធផលជាក់ស្តែង (Actual Results)'),
-        'Modal must render Mode C tab'
-      );
+    it('Grid modal renders all three mode buttons regardless of responsive label markup', () => {
+      const classInfo: Classroom = { id:'class',name:'8A',grade:'8',school_id:'school',teacher_id:'teacher',academic_year_id:'year',subjects:[],created_at:'' };
+      const html = renderToStaticMarkup(React.createElement(StudentStudyPlanGridModal,{isOpen:true,onClose:()=>{},students:[],classInfo,academicYearName:'2026-2027',onSaveSuccess:()=>{}}));
+      const dom = new JSDOM(html);
+      try {
+        const buttons = [...dom.window.document.querySelectorAll('button')];
+        for (const label of ['Pre-Test','Expected Targets','Actual Results']) assert.equal(buttons.filter(button=>button.textContent?.includes(label)).length,1);
+      } finally { dom.window.close(); }
     });
 
     it('Grid modal includes fast Excel copy/paste parser with Khmer header matching', () => {
@@ -395,8 +387,8 @@ describe('Student Study Plans Grade-Based Architecture Suite (Phase 24)', () => 
       const mergedKhmer = {
         ...existingPlan.khmer,
         ...editingTargets.khmer,
-        actual: { ...(existingPlan.khmer.actual || {}), ...(editingTargets.khmer as any).actual },
-        end_actual: (editingTargets.khmer as any).end_actual || existingPlan.khmer.end_actual || '',
+        actual: { ...(existingPlan.khmer.actual || {}), ...(editingTargets.khmer as SubjectPlanTarget).actual },
+        end_actual: (editingTargets.khmer as SubjectPlanTarget).end_actual || existingPlan.khmer.end_actual || '',
       };
 
       assert.equal(mergedKhmer.plan.dec, 'B', 'Expected target was updated to B');
@@ -461,7 +453,7 @@ describe('Student Study Plans Grade-Based Architecture Suite (Phase 24)', () => 
       // Missing score (undefined/null/empty)
       assert.equal(resolveAuthoritativeGradeLetter(undefined, '9', null, 'khmer'), '');
       assert.equal(resolveAuthoritativeGradeLetter(null, '9', null, 'khmer'), '');
-      assert.equal(resolveAuthoritativeGradeLetter('' as any, '9', null, 'khmer'), '');
+      assert.equal(resolveAuthoritativeGradeLetter('' as unknown as number, '9', null, 'khmer'), '');
     });
 
     it('Consumes identical resolver across Grid, Document, and Excel exports', () => {

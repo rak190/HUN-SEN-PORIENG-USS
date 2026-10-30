@@ -129,7 +129,8 @@ export function parseSchoolPretestClipboard(text: string, manualHeaderRow?: numb
         for (let i = 0; i < Math.min(20, rows.length); i++) {
             const roles = rows[i].map(identifySourceColumn);
             const subjects = roles.filter(role => PRETEST_SUBJECTS.includes(role as PretestSubject) || role === 'composition' || role === 'writing');
-            if (roles.includes('name') && (subjects.length >= 1 || (roles.includes('gender') && roles.includes('class')))) {
+            if ((roles.some(role => role === 'name' || role === 'id' || role === 'uuid') && subjects.length >= 1) ||
+                (roles.includes('name') && roles.includes('gender') && roles.includes('class'))) {
                 headerRow = i;
                 break;
             }

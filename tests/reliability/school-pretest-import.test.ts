@@ -11,6 +11,18 @@ function options(table: PretestTable, patch: Partial<PretestOptions> = {}): Pret
 const preview = (text: string, patch: Partial<PretestOptions> = {}, students = roster) => { const table = parseSchoolPretestClipboard(text); return buildPretestImportPreview(table, students, options(table, patch), {}); };
 const header = 'ល រ\tអត្ថលេខ\tគោត្តនាម នាម\tភេទ\tថ្ងៃខែឆ្នាំកំណើត\tថ្នាក់';
 const row = '1\t00123\tសុខ ដារ៉ា\tប្រុស\t02/01/2012\t7';
+
+test('ID-only and UUID-only grade headers are recognized without requiring a redundant name column', () => {
+    const students = [{ ...roster[0] }, { ...roster[1], student_id_number:'00124' }];
+    for (const [heading, keys] of [['Student ID',['00124','00123']], ['UUID',[id(2),id(1)]]] as const) {
+        const table = parseSchoolPretestClipboard(`${heading}\tMath\n${keys[0]}\tA\n${keys[1]}\tB`);
+        assert.equal(table.headerRow,0);
+        const result = buildPretestImportPreview(table,students,options(table,{mode:'letters'}),{});
+        assert.deepEqual(result.errors,[]);
+        assert.ok(result.rows.every(row=>!row.errors.length));
+        assert.deepEqual(result.changes.map(change=>[change.studentId,change.newGrade]),[[id(2),'A'],[id(1),'B']]);
+    }
+});
 test('current Copy workbook Grade 8 uses one Khmer column, not the older two-component layout', () => {
     const subjects = ['តែង', 'សីល', 'ភូមិ', 'ប្រវត្តិ', 'គណិត', 'ផែន', 'រូប', 'គីមី', 'ជីវៈ', 'អង់'];
     const text = ['បញ្ជីរាយនាមសិស្ស ថ្នាក់ទី ៨ C', 'ឆ្នាំសិក្សា ២០២៦-២០២៧', `${header}\t${subjects.join('\t')}`, `${row.replace(/\t7$/, '\t8C')}\t48\t25\t25\t25\t98\t25\t25\t25\t25\t25`].join('\n');

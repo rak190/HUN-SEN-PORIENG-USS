@@ -6,8 +6,6 @@ import {
   STUDY_PLAN_SUBJECTS,
   STUDY_PLAN_MONTHS,
   SubjectPlanTarget,
-  getGradeScoreBands,
-  getSubjectGradeLetter,
   toKhmerDigits,
 } from './StudentStudyPlanDocument';
 import {
@@ -15,7 +13,10 @@ import {
   GradeLetter,
   resolveAuthoritativeGradeLetter,
   lookupScoreWithAliases,
+  resolveSubjectMaxScore,
 } from './types';
+import { readStudyPlanPath } from '@/lib/study-plans/field-patches';
+import { nextEditableCell, previewGradeRange } from '@/lib/study-plans/grid-range';
 import { patchStudentStudyPlansAction } from './patch-actions';
 import { buildStudyPlanPatches, type StudyPlansMap } from '@/lib/study-plans/field-patches';
 import { parseSchoolPretestClipboard, type PretestPreview } from '@/lib/study-plans/pretest-import';
@@ -28,14 +29,9 @@ import {
   Loader2,
   Search,
   ClipboardPaste,
-  Sparkles,
-  Copy,
   Lock,
   ArrowRight,
-  Filter,
   CheckCircle2,
-  HelpCircle,
-  RotateCcw,
 } from 'lucide-react';
 
 export type StudyPlanGridMode = 'initial' | 'expected' | 'actual';
@@ -121,12 +117,22 @@ export default function StudentStudyPlanGridModal({
   const [baselinePlans, setBaselinePlans] = useState<StudyPlansMap>(() => JSON.parse(JSON.stringify(activePlansMap)));
   const wasOpen = useRef(false);
   const saveBusy = useRef(false);
+  const activeCell = useRef<{ row: number; column: number } | null>(null);
+  const [fillSubject, setFillSubject] = useState('khmer');
+  const [emptyOnly, setEmptyOnly] = useState(true);
+  const [allowReplacement, setAllowReplacement] = useState(false);
 
   // Grid Mode: 'initial' (តេស្តដើមឆ្នាំ), 'expected' (លទ្ធផលរំពឹងទុក), 'actual' (ពិន្ទុជាក់ស្តែង)
   const [activeMode, setActiveMode] = useState<StudyPlanGridMode>('initial');
 
   // Selected Month for Modes B and C (default: nov / វិច្ឆិកា)
   const [selectedMonth, setSelectedMonth] = useState<string>('nov');
+  const changeMode = (mode: StudyPlanGridMode) => {
+    if (pastePreview || saveBusy.current) return;
+    setActiveMode(mode);
+    setSelectedMonth(month => month === 'end_plan' || month === 'end_actual' ? mode === 'actual' ? 'end_actual' : 'end_plan' : month);
+    activeCell.current = null;
+  };
 
   // Search filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -136,8 +142,6 @@ export default function StudentStudyPlanGridModal({
     Record<string, Record<string, SubjectPlanTarget>>
   >(() => JSON.parse(JSON.stringify(activePlansMap)));
 
-  // Changed cells set: Set<`${student_id}:${subject_id}:${field_key}`>
-  const [changedCells, setChangedCells] = useState<Set<string>>(new Set());
 
   // Save states
   const [isSaving, setIsSaving] = useState(false);
@@ -161,16 +165,20 @@ export default function StudentStudyPlanGridModal({
     if (isOpen && !wasOpen.current) {
       setBaselinePlans(JSON.parse(JSON.stringify(activePlansMap)));
       setDraftPlansMap(JSON.parse(JSON.stringify(activePlansMap)));
-      setChangedCells(new Set());
       setFeedback(null);
       setPastePreview(null);
       setPasteText(null);
       setSaveConflicts([]);
+      activeCell.current = null;
+      setEmptyOnly(true);
+      setAllowReplacement(false);
     }
     wasOpen.current = isOpen;
   }, [isOpen, activePlansMap]);
 
   const fieldPatches = useMemo(() => buildStudyPlanPatches(baselinePlans, draftPlansMap), [baselinePlans, draftPlansMap]);
+  const changedKeys = useMemo(() => new Set(fieldPatches.map(patch => `${patch.studentId}:${patch.subjectId}:${patch.path}`)), [fieldPatches]);
+  const currentPath = activeMode === 'initial' ? 'initial' : activeMode === 'expected' ? selectedMonth === 'end_plan' ? 'end_plan' : `plan.${selectedMonth}` : selectedMonth === 'end_actual' ? 'end_actual' : `actual.${selectedMonth}`;
   useEffect(() => {
     if (!isOpen || !fieldPatches.length) return;
     const preventLoss = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
@@ -196,7 +204,7 @@ export default function StudentStudyPlanGridModal({
   // Published scores lookup map: student_id -> period -> subject_id -> score
   const publishedScoresByStudent = useMemo(() => {
     const map: Record<string, Record<string, Record<string, number>>> = {};
-    gradesData.forEach((g: any) => {
+    gradesData.forEach((g) => {
       if (g && g.student_id && g.period && g.scores) {
         if (!map[g.student_id]) map[g.student_id] = {};
         map[g.student_id][g.period] = g.scores;
@@ -210,16 +218,20 @@ export default function StudentStudyPlanGridModal({
     return parseInt(toLatinDigits(String(classInfo.grade || '')).replace(/[^0-9]/g, ''), 10) || 0;
   }, [classInfo.grade]);
 
-  // Get canonical max score for a subject
+  // Use the same curriculum/stream resolver as document rendering and official results.
   const getSubjectMaxScore = useCallback(
     (subId: string) => {
-      if (gradeLevelNum === 10 && (subId === 'khmer' || subId === 'math')) return 150;
-      if (gradeLevelNum >= 11 && (subId === 'khmer' || subId === 'math')) return 125;
-      if (gradeLevelNum <= 9 && (subId === 'khmer' || subId === 'math')) return 100;
-      return 50;
+      const subject = STUDY_PLAN_SUBJECTS.find(subject => subject.id === subId);
+      return resolveSubjectMaxScore(classInfo.grade, classInfo.track, subId, subject?.aliases, subject?.officialLabel);
     },
-    [gradeLevelNum]
+    [classInfo.grade, classInfo.track]
   );
+  const isOfficialCell = (studentId: string, subjectId: string) => {
+    const scores = publishedScoresByStudent[studentId]?.[selectedMonth === 'end_actual' ? 'annual' : selectedMonth];
+    const subject = STUDY_PLAN_SUBJECTS.find(subject => subject.id === subjectId);
+    const score = scores ? lookupScoreWithAliases(scores, subjectId, subject?.aliases) : null;
+    return activeMode === 'actual' && score !== undefined && score !== null;
+  };
 
   // Cell ID generator for keyboard navigation
   const getCellId = (studentIndex: number, subjectIndex: number) => {
@@ -238,7 +250,7 @@ export default function StudentStudyPlanGridModal({
   // Update a single grade value in draft state
   const handleUpdateGrade = useCallback(
     (studentId: string, subjectId: string, value: string) => {
-      if (saveBusy.current) return;
+      if (saveBusy.current || pastePreview) return;
       const canonicalVal = (value || '').toUpperCase().trim();
       const validGrade = ['', 'A', 'B', 'C', 'D', 'E', 'F'].includes(canonicalVal)
         ? canonicalVal
@@ -297,10 +309,8 @@ export default function StudentStudyPlanGridModal({
         };
       });
 
-      const cellKey = `${studentId}:${subjectId}:${activeMode}:${selectedMonth}`;
-      setChangedCells((prev) => new Set(prev).add(cellKey));
     },
-    [activeMode, selectedMonth]
+    [activeMode, selectedMonth, pastePreview, setDraftPlansMap]
   );
 
   // Keyboard navigation & instant grade shortcut handler
@@ -315,62 +325,14 @@ export default function StudentStudyPlanGridModal({
     const TOTAL_STUDENTS = filteredStudents.length;
     const TOTAL_SUBJECTS = STUDY_PLAN_SUBJECTS.length; // 10
 
-    // 1. Enter key: moves to next student (or previous with Shift)
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const nextStudent = e.shiftKey
-        ? Math.max(0, studentIndex - 1)
-        : Math.min(TOTAL_STUDENTS - 1, studentIndex + 1);
-      focusCell(nextStudent, subjectIndex);
-      return;
-    }
-
-    // 2. Tab key: moves to next subject (or previous with Shift)
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      if (e.shiftKey) {
-        if (subjectIndex > 0) {
-          focusCell(studentIndex, subjectIndex - 1);
-        } else if (studentIndex > 0) {
-          focusCell(studentIndex - 1, TOTAL_SUBJECTS - 1);
-        }
-      } else {
-        if (subjectIndex < TOTAL_SUBJECTS - 1) {
-          focusCell(studentIndex, subjectIndex + 1);
-        } else if (studentIndex < TOTAL_STUDENTS - 1) {
-          focusCell(studentIndex + 1, 0);
-        }
-      }
-      return;
-    }
-
-    // 3. Arrow Down
-    if (e.key === 'ArrowDown') {
-      if (e.altKey) return;
-      e.preventDefault();
-      focusCell(Math.min(TOTAL_STUDENTS - 1, studentIndex + 1), subjectIndex);
-      return;
-    }
-
-    // 4. Arrow Up
-    if (e.key === 'ArrowUp') {
-      if (e.altKey) return;
-      e.preventDefault();
-      focusCell(Math.max(0, studentIndex - 1), subjectIndex);
-      return;
-    }
-
-    // 5. Arrow Right
-    if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      focusCell(studentIndex, Math.min(TOTAL_SUBJECTS - 1, subjectIndex + 1));
-      return;
-    }
-
-    // 6. Arrow Left
-    if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      focusCell(studentIndex, Math.max(0, subjectIndex - 1));
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const directions = { Enter: e.shiftKey ? 'up' : 'down', Tab: e.shiftKey ? 'previous' : 'next', ArrowDown: 'down', ArrowUp: 'up', ArrowLeft: 'left', ArrowRight: 'right' } as const;
+    const direction = directions[e.key as keyof typeof directions];
+    if (direction) {
+      const next = nextEditableCell(studentIndex, subjectIndex, TOTAL_STUDENTS, TOTAL_SUBJECTS, direction,
+        (row, column) => !isOfficialCell(filteredStudents[row].id, STUDY_PLAN_SUBJECTS[column].id));
+      if (next) { e.preventDefault(); focusCell(next.row, next.column); }
+      else if (e.key !== 'Tab') e.preventDefault();
       return;
     }
 
@@ -396,9 +358,9 @@ export default function StudentStudyPlanGridModal({
         e.preventDefault();
         handleUpdateGrade(studentId, subjectId, gradeMap[keyUpper]);
         // Auto-advance down for fast column entry
-        if (studentIndex < TOTAL_STUDENTS - 1) {
-          focusCell(studentIndex + 1, subjectIndex);
-        }
+        const next = nextEditableCell(studentIndex, subjectIndex, TOTAL_STUDENTS, TOTAL_SUBJECTS, 'down',
+          (row, column) => !isOfficialCell(filteredStudents[row].id, STUDY_PLAN_SUBJECTS[column].id));
+        if (next) focusCell(next.row, next.column);
         return;
       }
 
@@ -411,70 +373,34 @@ export default function StudentStudyPlanGridModal({
     }
   };
 
-  // Quick fill all students with a specific grade for the current view
+  // Empty-only fill is the default; existing grades need a separate explicit confirmation.
   const handleQuickFill = (grade: GradeLetter) => {
-    if (saveBusy.current) return;
-    if (!confirm(`តើអ្នកពិតជាចង់កំណត់និទ្ទេស "${grade}" សម្រាប់គ្រប់សិស្ស និងគ្រប់មុខវិជ្ជាក្នុងទិដ្ឋភាពនេះមែនទេ?`)) {
-      return;
-    }
-
-    setDraftPlansMap((prev) => {
-      const next = { ...prev };
-      filteredStudents.forEach((student) => {
-        const studentRecord = { ...(next[student.id] || {}) };
-
-        STUDY_PLAN_SUBJECTS.forEach((sub) => {
-          // If in actual mode and published grade exists, skip
-          if (activeMode === 'actual') {
-            const periodKey = selectedMonth === 'end_actual' ? 'annual' : selectedMonth;
-            const studentScores = publishedScoresByStudent[student.id]?.[periodKey];
-            const publishedScore = studentScores ? lookupScoreWithAliases(studentScores, sub.id) : null;
-            if (publishedScore !== undefined && publishedScore !== null) return;
-          }
-
-          const subjectTarget = { ...(studentRecord[sub.id] || {}) };
-
-          if (activeMode === 'initial') {
-            subjectTarget.initial = grade;
-          } else if (activeMode === 'expected') {
-            if (selectedMonth === 'end_plan') {
-              subjectTarget.end_plan = grade;
-            } else {
-              subjectTarget.plan = {
-                ...(subjectTarget.plan || {}),
-                [selectedMonth]: grade,
-              };
-            }
-          } else {
-            if (selectedMonth === 'end_actual') {
-              subjectTarget.end_actual = grade;
-            } else {
-              subjectTarget.actual = {
-                ...(subjectTarget.actual || {}),
-                [selectedMonth]: grade,
-              };
-            }
-          }
-
-          studentRecord[sub.id] = subjectTarget;
-          setChangedCells((c) => new Set(c).add(`${student.id}:${sub.id}:${activeMode}:${selectedMonth}`));
-        });
-
-        next[student.id] = studentRecord;
-      });
-
+    if (saveBusy.current || pastePreview) return;
+    const subjects = STUDY_PLAN_SUBJECTS.filter(subject => fillSubject === 'all' || subject.id === fillSubject);
+    if (!confirm(emptyOnly ? 'បំពេញតែក្រឡាទទេក្នុងជម្រើសនេះ?' : 'ជំនួសនិទ្ទេសដែលមានស្រាប់ក្នុងជម្រើសនេះ?')) return;
+    setDraftPlansMap(previous => {
+      const next = { ...previous };
+      for (const student of filteredStudents) {
+        const record = { ...(next[student.id] || {}) };
+        for (const subject of subjects) {
+          if (isOfficialCell(student.id, subject.id)) continue;
+          const target = record[subject.id] || {};
+          if (emptyOnly && readStudyPlanPath(target, currentPath)) continue;
+          const [field, month] = currentPath.split('.');
+          record[subject.id] = field === 'plan' || field === 'actual'
+            ? { ...target, [field]: { ...target[field], [month]: grade } }
+            : { ...target, [field]: grade };
+        }
+        next[student.id] = record;
+      }
       return next;
     });
-
-    setFeedback({
-      type: 'success',
-      message: `បានបំពេញនិទ្ទេស ${grade} សម្រាប់គ្រប់សិស្សក្នុងទិដ្ឋភាពបច្ចុប្បន្នដោយជោគជ័យ`,
-    });
+    setFeedback({ type: 'warning', message: 'បានបំពេញទិន្នន័យព្រាង។ សូមពិនិត្យ ហើយរក្សាទុកទាំងអស់។' });
   };
 
   // Clone expected targets from selectedMonth to cloneTargetMonth
   const handleCloneMonthTargets = () => {
-    if (saveBusy.current) return;
+    if (saveBusy.current || pastePreview) return;
     if (selectedMonth === cloneTargetMonth) {
       alert('សូមជ្រើសរើសខែគោលដៅខុសពីខែបច្ចុប្បន្ន។');
       return;
@@ -487,7 +413,7 @@ export default function StudentStudyPlanGridModal({
 
     if (
       !confirm(
-        `តើអ្នកចង់ចម្លងផែនការរំពឹងទុកពីខែ "${sourceLabel}" ទៅកាន់ខែ "${targetLabel}" សម្រាប់គ្រប់សិស្សមែនទេ?`
+        `តើអ្នកចង់ចម្លងផែនការរំពឹងទុកពីខែ "${sourceLabel}" ទៅកាន់ខែ "${targetLabel}" សម្រាប់គ្រប់សិស្សមែនទេ?\n${emptyOnly ? 'បំពេញតែក្រឡាទទេ។' : 'និទ្ទេសដែលមានស្រាប់នឹងត្រូវជំនួស។'}`
       )
     ) {
       return;
@@ -504,16 +430,13 @@ export default function StudentStudyPlanGridModal({
           const subjectTarget = { ...(studentRecord[sub.id] || {}) };
           const sourceGrade = subjectTarget.plan?.[selectedMonth] || '';
 
-          if (sourceGrade) {
+          if (sourceGrade && (!emptyOnly || !subjectTarget.plan?.[cloneTargetMonth])) {
             subjectTarget.plan = {
               ...(subjectTarget.plan || {}),
               [cloneTargetMonth]: sourceGrade,
             };
             studentRecord[sub.id] = subjectTarget;
             clonedCount++;
-            setChangedCells((c) =>
-              new Set(c).add(`${student.id}:${sub.id}:expected:${cloneTargetMonth}`)
-            );
           }
         });
 
@@ -529,9 +452,22 @@ export default function StudentStudyPlanGridModal({
     });
   };
 
+  const openRangeReview = (text: string, start: { row: number; column: number }) => {
+    try {
+      const result = previewGradeRange(text, filteredStudents, STUDY_PLAN_SUBJECTS, start,
+        (studentId, subjectId) => readStudyPlanPath(draftPlansMap[studentId]?.[subjectId], currentPath), isOfficialCell);
+      setAllowReplacement(false);
+      setPasteText(null);
+      setPasteBlocking(result.errors.length > 0);
+      setPastePreview({ totalRows: result.rows, matchedStudentsCount: result.matched, unmatchedRowsCount: 0,
+        duplicateIdsCount: 0, invalidValuesCount: result.errors.length, lockedSkippedCount: result.changes.filter(change => change.isOfficialLocked).length,
+        proposedChanges: result.changes, warnings: result.errors });
+    } catch (error) { setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'ទិន្នន័យមិនត្រឹមត្រូវ' }); }
+  };
   const openPasteReview = (text: string) => {
     try {
       parseSchoolPretestClipboard(text);
+      setAllowReplacement(false);
       setPasteText(text);
       setPasteBlocking(true);
       setPastePreview({ totalRows: 0, matchedStudentsCount: 0, unmatchedRowsCount: 0, duplicateIdsCount: 0, invalidValuesCount: 0, lockedSkippedCount: 0, proposedChanges: [], warnings: [] });
@@ -544,8 +480,8 @@ export default function StudentStudyPlanGridModal({
   };
   const pasteCurrent = useMemo(() => Object.fromEntries(Object.entries(draftPlansMap).map(([studentId, targets]) => [studentId, Object.fromEntries(Object.entries(targets).map(([subjectId, target]) => [subjectId, { ...target, initial: activeMode === 'initial' ? target.initial : activeMode === 'expected' ? selectedMonth === 'end_plan' ? target.end_plan : target.plan?.[selectedMonth] : selectedMonth === 'end_actual' ? target.end_actual : target.actual?.[selectedMonth] }]))])), [draftPlansMap, activeMode, selectedMonth]);
   const receivePretestPreview = useCallback((preview: PretestPreview) => {
+    setAllowReplacement(false);
     const blocked = preview.errors.length > 0 || preview.rows.some(row => !row.excluded && row.errors.length > 0);
-    setPasteBlocking(blocked);
     const proposedChanges: PasteProposedChange[] = preview.changes.map(change => {
       const subject = STUDY_PLAN_SUBJECTS.find(subject => subject.id === change.subjectId);
       const period = selectedMonth === 'end_actual' ? 'annual' : selectedMonth;
@@ -553,12 +489,13 @@ export default function StudentStudyPlanGridModal({
       const official = activeMode === 'actual' && scores ? lookupScoreWithAliases(scores, change.subjectId, subject?.aliases) : null;
       return { ...change, subjectLabel: subject?.label || change.subjectId, isOfficialLocked: official !== undefined && official !== null };
     });
-    setPastePreview({ totalRows: preview.rows.length, matchedStudentsCount: preview.matched, unmatchedRowsCount: preview.rows.filter(row => !row.excluded && !row.studentId).length, duplicateIdsCount: preview.duplicateRows, invalidValuesCount: preview.invalidScores, lockedSkippedCount: proposedChanges.filter(change => change.isOfficialLocked).length, proposedChanges, warnings: preview.errors });
-  }, [activeMode, selectedMonth, publishedScoresByStudent]);
+    setPasteBlocking(blocked || proposedChanges.some(change => change.isOfficialLocked));
+    setPastePreview({ totalRows: preview.rows.length, matchedStudentsCount: preview.matched, unmatchedRowsCount: preview.rows.filter(row => !row.excluded && !row.studentId).length, duplicateIdsCount: preview.duplicateRows, invalidValuesCount: preview.invalidScores, lockedSkippedCount: proposedChanges.filter(change => change.isOfficialLocked).length, proposedChanges, warnings: [...preview.errors, ...(proposedChanges.some(change => change.isOfficialLocked) ? ['ពិន្ទុផ្លូវការជាប់សោ។ សូមដកជួរដែលជាប់សោចេញពីការអនុវត្ត ឬចម្លងតែក្រឡាដែលអាចកែបាន។'] : [])] });
+  }, [activeMode, selectedMonth, publishedScoresByStudent, setPastePreview, setPasteBlocking, setAllowReplacement]);
 
   // Confirm and apply paste preview proposed changes
   const handleConfirmPaste = () => {
-    if (!pastePreview || pasteBlocking) return;
+    if (!pastePreview || pasteBlocking || saveBusy.current || (pastePreview.proposedChanges.some(change => !change.isOfficialLocked && change.oldGrade) && !allowReplacement)) return;
 
     const appliedCount = pastePreview.proposedChanges.filter(change => !change.isOfficialLocked).length;
 
@@ -596,10 +533,6 @@ export default function StudentStudyPlanGridModal({
 
         studentRecord[change.subjectId] = subjectTarget;
         next[change.studentId] = studentRecord;
-
-        setChangedCells((c) =>
-          new Set(c).add(`${change.studentId}:${change.subjectId}:${activeMode}:${selectedMonth}`)
-        );
       });
 
       return next;
@@ -620,7 +553,7 @@ export default function StudentStudyPlanGridModal({
   const handleSaveAll = async () => {
     if (saveBusy.current || pastePreview) return;
     const changedStudentIds = Array.from(
-      new Set(Array.from(changedCells).map((k) => k.split(':')[0]))
+      new Set(fieldPatches.map(patch => patch.studentId))
     );
 
     if (fieldPatches.length === 0) {
@@ -653,17 +586,16 @@ export default function StudentStudyPlanGridModal({
         message: `បានរក្សាទុកផែនការសិក្សាសម្រាប់សិស្ស ${res.count ?? changedStudentIds.length} នាក់ដោយជោគជ័យ!`,
       });
 
-      setChangedCells(new Set());
       const updatedMap = { ...activePlansMap, ...res.plans };
       setBaselinePlans(JSON.parse(JSON.stringify(updatedMap)));
       setSaveConflicts([]);
       setDraftPlansMap(updatedMap);
       onSaveSuccess(updatedMap);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Fatal error during batch save:', err);
       setFeedback({
         type: 'error',
-        message: err?.message || 'មានបញ្ហាមិនរំពឹងទុកលើ Server',
+        message: err instanceof Error ? err.message : 'មានបញ្ហាមិនរំពឹងទុកលើ Server',
       });
     } finally {
       saveBusy.current = false;
@@ -694,17 +626,19 @@ export default function StudentStudyPlanGridModal({
   if (!isOpen) return null;
 
   return (
-    <div onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (!pastePreview) void handleSaveAll(); } }} onPaste={event => { if (isSaving || pastePreview || (event.target instanceof HTMLElement && event.target.closest('input,textarea'))) return; event.preventDefault(); openPasteReview(event.clipboardData.getData('text/plain')); }} className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+    <div role="dialog" aria-modal="true" aria-label="បញ្ចូលនិទ្ទេសទូទាំងថ្នាក់" onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (!pastePreview) void handleSaveAll(); } }} onPaste={event => { if (isSaving || pastePreview || (event.target instanceof HTMLElement && event.target.closest('input,textarea'))) return; event.preventDefault(); const text = event.clipboardData.getData('text/plain'); let table; try { table = parseSchoolPretestClipboard(text); } catch (error) { setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'ទិន្នន័យមិនត្រឹមត្រូវ' }); return; }
+      if (activeCell.current && table.headerRow < 0 && event.target instanceof HTMLElement && event.target.closest('[data-grade-cell]')) openRangeReview(text, activeCell.current);
+      else openPasteReview(text); }} className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
       <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-7xl max-h-[94vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 font-sans">
         {/* ----------------- TOP MODAL HEADER ----------------- */}
-        <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
-          <div>
+        <div className="relative px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
+          <div className="pr-8">
             <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
               <span className="w-8 h-8 rounded-xl bg-blue-100 text-[#155EEF] flex items-center justify-center text-sm">
                 🎯
               </span>
               <span>បញ្ចូលកម្រិតនិទ្ទេសផែនការសិក្សាទូទាំងថ្នាក់</span>
-              <span className="text-xs font-bold text-slate-400 bg-slate-200/60 px-2.5 py-0.5 rounded-lg font-sans">
+              <span className="shrink-0 whitespace-nowrap text-xs font-bold text-slate-400 bg-slate-200/60 px-2.5 py-0.5 rounded-lg font-sans">
                 ថ្នាក់ទី {toKhmerDigits(classInfo.name)}
               </span>
             </h2>
@@ -713,7 +647,7 @@ export default function StudentStudyPlanGridModal({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="absolute right-3 top-3 sm:right-6 sm:top-5 flex items-center gap-2">
             <button
               onClick={closeGrid}
               className="w-9 h-9 rounded-full bg-slate-200/70 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-colors cursor-pointer"
@@ -725,41 +659,41 @@ export default function StudentStudyPlanGridModal({
 
         {/* ----------------- MODE SELECTOR TABS ----------------- */}
         <div className="px-6 py-2.5 bg-slate-100/70 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 p-1 bg-white rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-white rounded-2xl border border-slate-200 shadow-2xs">
             <button
               type="button"
-              onClick={() => { if (!pastePreview && !isSaving) setActiveMode('initial'); }}
+              onClick={() => changeMode('initial')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 activeMode === 'initial'
                   ? 'bg-[#155EEF] text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              ១. តេស្តដើមឆ្នាំ (Pre-Test)
+              ១. តេស្តដើមឆ្នាំ <span className="hidden sm:inline">(Pre-Test)</span>
             </button>
 
             <button
               type="button"
-              onClick={() => { if (!pastePreview && !isSaving) setActiveMode('expected'); }}
+              onClick={() => changeMode('expected')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 activeMode === 'expected'
                   ? 'bg-purple-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              ២. ផែនការរំពឹងទុក (Expected Targets)
+              ២. រំពឹងទុក <span className="hidden sm:inline">(Expected Targets)</span>
             </button>
 
             <button
               type="button"
-              onClick={() => { if (!pastePreview && !isSaving) setActiveMode('actual'); }}
+              onClick={() => changeMode('actual')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 activeMode === 'actual'
                   ? 'bg-red-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              ៣. លទ្ធផលជាក់ស្តែង (Actual Results)
+              ៣. ជាក់ស្តែង <span className="hidden sm:inline">(Actual Results)</span>
             </button>
           </div>
 
@@ -769,7 +703,9 @@ export default function StudentStudyPlanGridModal({
               <span className="font-extrabold text-slate-700">ខែវាយតម្លៃ៖</span>
               <select
                 value={selectedMonth}
-                onChange={(e) => { if (!pastePreview && !isSaving) setSelectedMonth(e.target.value); }}
+                aria-label="Assessment month"
+                disabled={!!pastePreview || isSaving}
+                onChange={(e) => { if (!pastePreview && !isSaving) { activeCell.current = null; setSelectedMonth(e.target.value); } }}
                 className="bg-white border border-slate-300 rounded-xl px-3 py-1 font-bold text-slate-800 text-xs focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
               >
                 {STUDY_PLAN_MONTHS.map((m) => (
@@ -789,17 +725,22 @@ export default function StudentStudyPlanGridModal({
         </div>
 
         {/* ----------------- ACTION & QUICK TOOLS BAR ----------------- */}
-        <div className="px-6 py-2.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="px-3 sm:px-6 py-2.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
           {/* Left: Quick Fill Presets */}
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-extrabold text-slate-600">បំពេញលឿន៖</span>
+            <select aria-label="Fill subject" value={fillSubject} onChange={event => setFillSubject(event.target.value)} className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 font-bold">
+              <option value="all">គ្រប់មុខវិជ្ជា</option>{STUDY_PLAN_SUBJECTS.map(subject => <option key={subject.id} value={subject.id}>{subject.label}</option>)}
+            </select>
+            <label className="font-bold text-slate-600"><input type="checkbox" checked={emptyOnly} onChange={event => setEmptyOnly(event.target.checked)} /> បំពេញតែក្រឡាទទេ</label>
             {GRADE_LETTERS.map((ltr) => (
               <button
                 key={ltr}
                 type="button"
                 onClick={() => handleQuickFill(ltr)}
                 className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 font-black text-slate-800 text-xs transition-colors cursor-pointer flex items-center justify-center"
-                title={`កំណត់គ្រប់ក្រឡាជា ${ltr}`}
+                disabled={isSaving || !!pastePreview}
+                title={`បំពេញ ${ltr}`}
               >
                 {ltr}
               </button>
@@ -839,9 +780,10 @@ export default function StudentStudyPlanGridModal({
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                disabled={!!pastePreview || isSaving}
+                onChange={(e) => { activeCell.current = null; setSearchQuery(e.target.value); }}
                 placeholder="ស្វែងរកសិស្ស..."
-                className="pl-8 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold w-44 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="pl-8 pr-3 py-1 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold w-36 sm:w-44 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -858,6 +800,7 @@ export default function StudentStudyPlanGridModal({
           </div>
         </div>
 
+        <p className="px-6 py-2 text-xs font-semibold text-slate-500 bg-white border-b border-slate-100">ចុចក្រឡាដើម្បីបញ្ចូលនិទ្ទេស · ចម្លងពី Excel ហើយចុច Ctrl+V · ក្រឡាទទេរក្សាទិន្នន័យចាស់</p>
         {/* ----------------- FEEDBACK & NOTICE BANNERS ----------------- */}
         {clipboardNotice && (
           <div className="px-6 py-2 bg-emerald-50 border-b border-emerald-200 text-emerald-900 text-xs font-bold flex items-center justify-between">
@@ -895,18 +838,19 @@ export default function StudentStudyPlanGridModal({
         )}
 
         {/* ----------------- MAIN SPREADSHEET TABLE VIEWPORT ----------------- */}
-        <div className="flex-1 overflow-auto p-4 sm:p-6 bg-slate-50/50">
-          <table className="w-full border-collapse border border-slate-200 text-xs font-semibold text-center bg-white shadow-2xs rounded-xl overflow-hidden">
+        <div className="flex-1 min-h-48 overflow-auto scroll-pl-[232px] sm:scroll-pl-[312px] scroll-pt-20 p-2 sm:p-6 bg-slate-50/50">
+          <table className="w-full min-w-[1120px] table-fixed border-separate border-spacing-0 border border-slate-200 text-xs font-semibold text-center bg-white shadow-2xs">
+            <colgroup><col className="w-8 sm:w-10" /><col className="w-18 sm:w-24" /><col className="w-32 sm:w-44" /><col className="w-14" />{STUDY_PLAN_SUBJECTS.map(subject => <col key={subject.id} />)}</colgroup>
             <thead>
               <tr className="bg-slate-100 text-slate-800 font-bold sticky top-0 z-20 shadow-xs">
-                <th className="border border-slate-200 p-2 w-10 text-center">ល.រ</th>
-                <th className="border border-slate-200 p-2 w-24 text-center">អត្តលេខ</th>
-                <th className="border border-slate-200 p-2 w-44 text-left">គោត្តនាម និងនាម</th>
+                <th className="border border-slate-200 p-2 sticky left-0 z-30 bg-slate-100 text-center">ល.រ</th>
+                <th className="border border-slate-200 p-2 sticky left-8 sm:left-10 z-30 bg-slate-100 text-center">អត្តលេខ</th>
+                <th className="border border-slate-200 p-2 sticky left-26 sm:left-34 z-30 bg-slate-100 text-left">គោត្តនាម និងនាម</th>
                 <th className="border border-slate-200 p-2 w-14 text-center">ភេទ</th>
-                {STUDY_PLAN_SUBJECTS.map((sub, sIdx) => (
+                {STUDY_PLAN_SUBJECTS.map((sub) => (
                   <th
                     key={sub.id}
-                    className="border border-slate-200 p-2 w-16 text-center text-[#7030A0]"
+                    className="border border-slate-200 p-2 text-center text-[#7030A0]"
                   >
                     <div>{sub.label}</div>
                     <div className="text-[10px] text-slate-400 font-normal">
@@ -935,17 +879,17 @@ export default function StudentStudyPlanGridModal({
                   return (
                     <tr key={student.id} className="hover:bg-blue-50/40 transition-colors">
                       {/* Index */}
-                      <td className="border border-slate-200 p-1.5 text-center text-slate-400 font-mono text-[11px]">
+                      <td className="border border-slate-200 p-1.5 sticky left-0 z-10 bg-white text-center text-slate-400 font-mono text-[11px]">
                         {toKhmerDigits(rIdx + 1)}
                       </td>
 
                       {/* Student ID Number */}
-                      <td className="border border-slate-200 p-1.5 text-center font-mono font-bold text-slate-700 text-[11px]">
+                      <td className="border border-slate-200 p-1.5 sticky left-8 sm:left-10 z-10 bg-white text-center font-mono font-bold text-slate-700 text-[11px]">
                         {student.student_id_number || '-'}
                       </td>
 
                       {/* Full Name */}
-                      <td className="border border-slate-200 p-1.5 text-left font-bold text-slate-900 truncate max-w-[170px]">
+                      <td className="border border-slate-200 p-1.5 sticky left-26 sm:left-34 z-10 bg-white text-left font-bold text-slate-900">
                         {student.full_name}
                       </td>
 
@@ -982,7 +926,7 @@ export default function StudentStudyPlanGridModal({
                             cellValue = resolveAuthoritativeGradeLetter(
                               publishedScore,
                               classInfo.grade,
-                              (classInfo as any).track,
+                              classInfo.track,
                               sub.id,
                               sub.aliases,
                               sub.officialLabel
@@ -997,7 +941,7 @@ export default function StudentStudyPlanGridModal({
                           }
                         }
 
-                        const isChanged = fieldPatches.some(patch => patch.studentId === student.id && patch.subjectId === sub.id && patch.path === (activeMode === 'initial' ? 'initial' : activeMode === 'expected' ? selectedMonth === 'end_plan' ? 'end_plan' : `plan.${selectedMonth}` : selectedMonth === 'end_actual' ? 'end_actual' : `actual.${selectedMonth}`));
+                        const isChanged = changedKeys.has(`${student.id}:${sub.id}:${currentPath}`);
 
                         return (
                           <td
@@ -1021,11 +965,23 @@ export default function StudentStudyPlanGridModal({
                             ) : (
                               <select
                                 id={getCellId(rIdx, cIdx)}
-                                disabled={isSaving}
+                                data-grade-cell="true"
+                                aria-label={`${student.full_name} · ${sub.label}`}
+                                onPointerDown={event => {
+                                  // Click the grade to focus for typing/paste; the native arrow still opens the mouse dropdown.
+                                  if (event.pointerType === 'mouse' && event.clientX < event.currentTarget.getBoundingClientRect().right - 20) {
+                                    event.preventDefault();
+                                    event.currentTarget.focus();
+                                  }
+                                }}
+                                onFocus={() => { activeCell.current = { row: rIdx, column: cIdx }; }}
+                                disabled={isSaving || !!pastePreview}
                                 value={cellValue}
-                                onChange={(e) =>
-                                  handleUpdateGrade(student.id, sub.id, e.target.value)
-                                }
+                                onChange={(e) => {
+                                  handleUpdateGrade(student.id, sub.id, e.target.value);
+                                  const next = nextEditableCell(rIdx, cIdx, filteredStudents.length, STUDY_PLAN_SUBJECTS.length, 'down', (row, column) => !isOfficialCell(filteredStudents[row].id, STUDY_PLAN_SUBJECTS[column].id));
+                                  if (next && e.target.value) focusCell(next.row, next.column);
+                                }}
                                 onKeyDown={(e) =>
                                   handleCellKeyDown(e, rIdx, cIdx, student.id, sub.id, isLocked)
                                 }
@@ -1064,7 +1020,7 @@ export default function StudentStudyPlanGridModal({
             <span>•</span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-              កែប្រែ <strong>{toKhmerDigits(fieldPatches.length)}</strong> ក្រឡា
+              មិនទាន់រក្សាទុក <strong>{toKhmerDigits(fieldPatches.length)}</strong> ក្រឡា
             </span>
             <span>•</span>
             <span className="hidden sm:inline text-slate-400">
@@ -1084,7 +1040,7 @@ export default function StudentStudyPlanGridModal({
             <button
               type="button"
               onClick={handleSaveAll}
-              disabled={isSaving}
+              disabled={isSaving || !!pastePreview || !fieldPatches.length}
               className="px-5 py-2 bg-[#155EEF] hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
             >
               {isSaving ? (
@@ -1092,7 +1048,7 @@ export default function StudentStudyPlanGridModal({
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              <span>រក្សាទុកទាំងអស់ ({toKhmerDigits(fieldPatches.length)})</span>
+              <span>{isSaving ? 'កំពុងរក្សាទុក…' : `រក្សាទុកទាំងអស់ (${toKhmerDigits(fieldPatches.length)})`}</span>
             </button>
           </div>
         </div>
@@ -1100,7 +1056,7 @@ export default function StudentStudyPlanGridModal({
 
       {/* ----------------- PASTE PREVIEW & CONFIRMATION MODAL ----------------- */}
       {pastePreview && (
-        <div className="fixed inset-0 z-60 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
+        <div role="dialog" aria-modal="true" aria-label="ពិនិត្យការផ្លាស់ប្តូរ Excel" className="fixed inset-0 z-60 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Header */}
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
@@ -1146,7 +1102,7 @@ export default function StudentStudyPlanGridModal({
               {pastePreview.lockedSkippedCount > 0 && (
                 <span className="bg-red-50 text-red-700 px-3 py-1 rounded-xl border border-red-200 flex items-center gap-1">
                   <Lock className="w-3.5 h-3.5 text-red-600" />
-                  <span>ពិន្ទុផ្លូវការជាប់សោ (រំលង)៖ {toKhmerDigits(pastePreview.lockedSkippedCount)}</span>
+                  <span>ពិន្ទុផ្លូវការជាប់សោ៖ {toKhmerDigits(pastePreview.lockedSkippedCount)}</span>
                 </span>
               )}
               {pastePreview.unmatchedRowsCount > 0 && (
@@ -1173,6 +1129,7 @@ export default function StudentStudyPlanGridModal({
               </div>
             )}
 
+            {pastePreview.proposedChanges.some(change => !change.isOfficialLocked && change.oldGrade) && <label className="px-6 py-3 text-xs font-bold text-amber-900 bg-amber-50"><input type="checkbox" checked={allowReplacement} onChange={event => setAllowReplacement(event.target.checked)} /> បញ្ជាក់ជំនួសនិទ្ទេសចាស់ ({pastePreview.proposedChanges.filter(change => !change.isOfficialLocked && change.oldGrade).length} ក្រឡា)</label>}
             {/* Proposed changes table */}
             <div className="flex-1 overflow-auto p-6">
               <table className="w-full border-collapse border border-slate-200 text-xs">
@@ -1245,7 +1202,7 @@ export default function StudentStudyPlanGridModal({
               <button
                 type="button"
                 onClick={handleConfirmPaste}
-                disabled={pasteBlocking || pastePreview.proposedChanges.filter((c) => !c.isOfficialLocked).length === 0}
+                disabled={pasteBlocking || (pastePreview.proposedChanges.some(change => !change.isOfficialLocked && change.oldGrade) && !allowReplacement) || pastePreview.proposedChanges.filter((c) => !c.isOfficialLocked).length === 0}
                 className="px-5 py-2 bg-[#155EEF] hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 <CheckCircle2 className="w-4 h-4 text-white" />
