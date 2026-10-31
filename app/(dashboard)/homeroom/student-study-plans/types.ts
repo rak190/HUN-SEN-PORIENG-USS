@@ -117,9 +117,10 @@ export function resolveSubjectMaxScore(
   track: string | undefined | null,
   subjectId: string,
   aliases?: string[],
-  officialLabel?: string
+  officialLabel?: string,
+  curriculumSchema?: CurriculumSchema
 ): number {
-  const schema: CurriculumSchema = getCurriculumSchemaForClass(grade, track);
+  const schema: CurriculumSchema = curriculumSchema || getCurriculumSchemaForClass(grade, track);
   const gradeLevelNum = parseInt(String(grade || '12').replace(/[^0-9]/g, ''), 10) || 12;
 
   // 1. Check direct ID or alias in curriculum schema
@@ -130,7 +131,7 @@ export function resolveSubjectMaxScore(
     return false;
   });
 
-  if (schemaSub && schemaSub.maxScore) {
+  if (schemaSub && Number.isFinite(schemaSub.maxScore)) {
     return schemaSub.maxScore;
   }
 
@@ -161,12 +162,14 @@ export function resolveAuthoritativeGradeLetter(
   track: string | undefined | null,
   subjectId: string,
   aliases?: string[],
-  officialLabel?: string
+  officialLabel?: string,
+  curriculumSchema?: CurriculumSchema
 ): string {
   if (score === undefined || score === null || isNaN(Number(score)) || (score as any) === '') {
     return '';
   }
-  const maxScore = resolveSubjectMaxScore(grade, track, subjectId, aliases, officialLabel);
+  const maxScore = resolveSubjectMaxScore(grade, track, subjectId, aliases, officialLabel, curriculumSchema);
+  if (maxScore <= 0) return '';
   const gradeLevelNum = parseInt(String(grade || '12').replace(/[^0-9]/g, ''), 10) || 12;
   return getSubjectGradeLetter(Number(score), maxScore, gradeLevelNum);
 }

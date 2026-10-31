@@ -1,40 +1,32 @@
-import { NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { getServerAuth } from '@/lib/auth-server';
-
+﻿import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
+import { curriculumAdmin, curriculumError } from "@/lib/exam-standards-server";
+import {
+  cloneCurriculumSchema,
+  curriculumSnapshot,
+} from "@/lib/exam-standards";
 export async function POST(req: Request) {
-  const { user, role } = await getServerAuth();
-
-  if (!user || (role !== 'admin' && role !== 'principal')) {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
+  try {
+    const { db } = await curriculumAdmin();
+    const input = cloneCurriculumSchema.parse(await req.json());
+    const { data, error } = await db.rpc("clone_exam_curriculum", {
+      p_source: input.sourceYearId,
+      p_target: input.targetYearId,
+      p_source_revision: input.sourceRevision,
+      p_target_revision: input.targetRevision,
+      p_replace: input.replace,
+    });
+    if (error) throw error;
+    const standards = curriculumSnapshot(data);
+    for (const route of [
+      "/admin/exam-standards",
+      "/grades",
+      "/homeroom/student-study-plans",
+      "/report-cards",
+    ])
+      revalidatePath(route);
+    return NextResponse.json({ success: true, standards });
+  } catch (error) {
+    return curriculumError(error);
   }
-
-  const body = await req.json();
-  const { sourceYearId, targetYearId } = body;
-
-  if (!sourceYearId || !targetYearId) {
-    return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
-  }
-
-  const adminClient = createAdminClient();
-  if (!adminClient) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
-  }
-
-  const { data, error } = await adminClient.rpc('clone_exam_standards_to_year', {
-    p_source_year_id: sourceYearId,
-    p_target_year_id: targetYearId
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  await adminClient.from('audit_logs').insert([{
-    action: `បានចម្លងស្តង់ដារការប្រលងពីឆ្នាំចាស់ទៅឆ្នាំថ្មី`,
-    type: 'info',
-    user_id: user.id
-  }]);
-
-  return NextResponse.json({ success: true, data });
 }

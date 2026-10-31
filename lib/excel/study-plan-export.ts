@@ -479,7 +479,7 @@ export function renderStudentStudyPlanBlock(params: RenderStudentBlockParams): {
       (classInfo as any).track,
       sub.id,
       sub.aliases,
-      sub.officialLabel
+      sub.officialLabel, classInfo.curriculumSchema
     );
     const initialDisplay = target.initial || preTestLetter || '';
 
@@ -490,7 +490,7 @@ export function renderStudentStudyPlanBlock(params: RenderStudentBlockParams): {
       (classInfo as any).track,
       sub.id,
       sub.aliases,
-      sub.officialLabel
+      sub.officialLabel, classInfo.curriculumSchema
     );
 
     // Col 1: Subject Name
@@ -522,7 +522,7 @@ export function renderStudentStudyPlanBlock(params: RenderStudentBlockParams): {
         (classInfo as any).track,
         sub.id,
         sub.aliases,
-        sub.officialLabel
+        sub.officialLabel, classInfo.curriculumSchema
       );
       const monthActualLetter = officialActual || target.actual?.[m.id] || '';
 
@@ -651,7 +651,7 @@ export function generateStudyPlanWorkbook(options: GenerateStudyPlanWorkbookOpti
   workbook.created = new Date();
 
   const gradeLevelNum = parseInt(String(classInfo.grade || '12').replace(/[^0-9]/g, ''), 10) || 12;
-  const schema = getCurriculumSchemaForClass(classInfo.grade, (classInfo as any).track);
+  const schema = classInfo.curriculumSchema || getCurriculumSchemaForClass(classInfo.grade, classInfo.track);
 
   const gradeSubtitle =
     gradeLevelNum === 11 || gradeLevelNum === 12
@@ -772,7 +772,7 @@ export function generateSingleSheetClassWorkbook(options: GenerateStudyPlanWorkb
   setStudyPlanColumnWidths(ws);
 
   const gradeLevelNum = parseInt(String(classInfo.grade || '12').replace(/[^0-9]/g, ''), 10) || 12;
-  const schema = getCurriculumSchemaForClass(classInfo.grade, (classInfo as any).track);
+  const schema = classInfo.curriculumSchema || getCurriculumSchemaForClass(classInfo.grade, classInfo.track);
 
   const gradeSubtitle =
     gradeLevelNum === 11 || gradeLevelNum === 12

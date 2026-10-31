@@ -1,5 +1,6 @@
 import React from 'react';
 import { createClient } from '@/lib/supabase/server';
+import { getDynamicCurriculumSchemaForClass } from '@/lib/curriculum';
 import { getServerAuth } from '@/lib/auth-server';
 import { redirect } from 'next/navigation';
 import StudentStudyPlansClient from './StudentStudyPlansClient';
@@ -32,6 +33,7 @@ export default async function StudentStudyPlansPage({ searchParams }: PageProps)
     .from('academic_years')
     .select('id, name')
     .eq('is_active', true)
+    .eq('school_id', profile.school_id)
     .maybeSingle();
 
   if (!activeYear) {
@@ -119,6 +121,8 @@ export default async function StudentStudyPlansPage({ searchParams }: PageProps)
       classroom = availableClasses[0];
     }
   }
+
+  if (classroom) classroom = { ...classroom, curriculumSchema: await getDynamicCurriculumSchemaForClass(classroom.grade, classroom.track || '', activeYear.id, supabase) };
 
   // Unassigned teacher state
   if (!classroom || !effectiveClassId) {

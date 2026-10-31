@@ -478,7 +478,7 @@ export default function StudentStudyPlanDocument({
   className = '',
 }: StudentStudyPlanDocumentProps) {
   // Curriculum Schema for subject max score resolution
-  const schema = getCurriculumSchemaForClass(classInfo.grade, (classInfo as any).track);
+  const schema = classInfo.curriculumSchema || getCurriculumSchemaForClass(classInfo.grade, classInfo.track);
   const gradeLevelNum = parseInt(String(classInfo.grade || '12').replace(/[^0-9]/g, ''), 10) || 12;
 
   // Map published grades strictly for this student
@@ -760,7 +760,7 @@ export default function StudentStudyPlanDocument({
                 (s) =>
                   s.id === sub.id ||
                   (sub.aliases && sub.aliases.includes(s.id)) ||
-                  s.label === sub.officialLabel
+                  s.label === sub.officialLabel, classInfo.curriculumSchema
               );
               // Score resolver using authoritative curriculum & aliases
               const getAuthoritativeScoreLetter = (periodId: string) => {
@@ -773,7 +773,7 @@ export default function StudentStudyPlanDocument({
                   (classInfo as any).track,
                   sub.id,
                   sub.aliases,
-                  sub.officialLabel
+                  sub.officialLabel, classInfo.curriculumSchema
                 );
               };
 

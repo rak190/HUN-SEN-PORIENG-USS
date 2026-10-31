@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Student } from '@/types';
-import { CURRICULUM_SCHEMAS, SubjectSchema, getCurriculumSchemaForClass } from '@/lib/curriculum';
+import { SubjectSchema } from '@/lib/curriculum';
+import { useClassCurriculum } from '@/hooks/useClassCurriculum';
 import { ACADEMIC_PERIODS } from '@/lib/academic-periods';
 import { computeSummaryGrades, calculateScale50Grade, assignGradeRanks } from '@/lib/domain/grading';
 import {
@@ -32,9 +33,8 @@ export default function GradesPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
-  const activeSchema = useMemo(() => {
-    return getCurriculumSchemaForClass(activeClass?.grade, activeClass?.track);
-  }, [activeClass?.grade, activeClass?.track]);
+  const curriculum = useClassCurriculum(activeClass?.academic_year_id || activeAcademicYear?.id, activeClass?.grade, activeClass?.track);
+  const activeSchema = curriculum.schema;
   
   const curriculumType = activeSchema.id;
   const maxTotalScore = activeSchema.subjects.reduce((sum, sub) => sum + sub.maxScore, 0);
@@ -170,6 +170,7 @@ export default function GradesPage() {
   }, [activeSchema]);
 
   const loadData = useCallback(async () => {
+    if (curriculum.loading || curriculum.error) return;
     if (!activeClass?.id) {
       setStudents([]);
       setMatrixData({});
@@ -238,7 +239,7 @@ export default function GradesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [activeClass?.id, activeClass?.academic_year_id, profile?.id, profile?.role, profile?.school_id, activeAcademicYear?.id, selectedPeriod, flatColumns, activeSchema, supabase]);
+  }, [activeClass?.id, activeClass?.academic_year_id, profile?.id, profile?.role, profile?.school_id, activeAcademicYear?.id, selectedPeriod, flatColumns, activeSchema, supabase, curriculum.loading, curriculum.error]);
 
   useEffect(() => {
     loadData();
@@ -295,7 +296,7 @@ export default function GradesPage() {
     const isSem1 = selectedPeriod === 'sem1-summary';
     const isSem2 = selectedPeriod === 'sem2-summary';
     const isAnnual = selectedPeriod === 'annual';
-    const totalCoefficient = maxTotalScore / 50;
+    const totalCoefficient = curriculum.totalCoefficient;
 
     const computedList = [...filteredStudents].map((std) => {
       const studentScores = matrixData[std.id] || {};
@@ -379,7 +380,8 @@ export default function GradesPage() {
         average = totalScore / totalCoefficient;
       }
 
-      const grade = calculateScale50Grade(average).letter;
+      // Letter bands use percentage of the configured maximum, matching the shared engine.
+      const grade = calculateScale50Grade(maxTotalScore > 0 ? totalScore / maxTotalScore * 50 : 0, curriculum.gradingScales).letter;
 
       return { ...std, totalScore, grade, percentage: average, breakdown };
     });
@@ -413,7 +415,7 @@ export default function GradesPage() {
     }
 
     return withRank;
-  }, [filteredStudents, matrixData, rawGradesData, activeSchema, maxTotalScore, selectedPeriod, sortState]);
+  }, [filteredStudents, matrixData, rawGradesData, activeSchema, maxTotalScore, selectedPeriod, sortState, curriculum.totalCoefficient, curriculum.gradingScales]);
 
   const renderSortHeader = (label: React.ReactNode, field: string, align: 'left' | 'center' | 'right' = 'center', className: string = '') => {
     const isActive = sortState.field === field && sortState.direction !== null;
@@ -440,6 +442,7 @@ export default function GradesPage() {
     );
   };
 
+  if (curriculum.loading || curriculum.error) return <div role={curriculum.error ? 'alert' : 'status'} className="p-8 bg-white rounded-3xl border border-slate-200 text-sm font-bold text-slate-600">{curriculum.error || 'កំពុងផ្ទុកកម្មវិធីសិក្សា...'}</div>;
   return (
     <div className="space-y-6 animate-fadeIn select-none">
       {/* Top Header Bar */}

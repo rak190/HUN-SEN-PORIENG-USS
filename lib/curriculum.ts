@@ -111,177 +111,54 @@ export function getCurriculumSchemaForClass(grade?: string | number | null, trac
   return CURRICULUM_SCHEMAS['upper-sec-sci'];
 }
 
-/**
- * Asynchronously fetches dynamic curriculum schema from exam_subject_standards in DB.
- * Can be used by score engines to override hardcoded values.
- */
-export async function getDynamicCurriculumSchemaForClass(
-  grade: string | number, 
-  track: string, 
-  academicYearId: string,
-  supabaseClient: any
-): Promise<CurriculumSchema> {
-  const g = parseInt(String(grade).trim()) || 12;
-  const isLower = g <= 9;
-  
-  const streamType = isLower ? 'general' : 
-    (String(track).toLowerCase().includes('សង្គម') || String(track).toLowerCase().includes('soc') ? 'social' : 'science');
-
-  let query = supabaseClient
-    .from('exam_subject_standards')
-    .select('*')
-    .eq('grade_level', g > 9 ? 11 : g) // using 11 for all upper sec for now based on UI (11-12)
-    .eq('stream_type', streamType);
-    
-  if (academicYearId) {
-    query = query.eq('academic_year_id', academicYearId);
-  }
-
-  const { data, error } = await query;
-
-  // Fallback to static if no dynamic data found
-  if (error || !data || data.length === 0) {
-    return getCurriculumSchemaForClass(grade, track);
-  }
-
-  // Build schema from DB
-  const subjects: SubjectSchema[] = data.map((row: any) => {
-    const subjectId = row.subject_name === 'ភាសាខ្មែរ' ? 'khmer' 
-      : row.subject_name === 'គណិតវិទ្យា' ? 'math'
-      : row.subject_name === 'រូបវិទ្យា' ? 'physics'
-      : row.subject_name === 'គីមីវិទ្យា' ? 'chemistry'
-      : row.subject_name === 'ជីវវិទ្យា' ? 'biology'
-      : row.subject_name === 'ប្រវត្តិវិទ្យា' ? 'history'
-      : row.subject_name === 'ភូមិវិទ្យា' ? 'geography'
-      : row.subject_name.includes('សីលធម៌') ? 'morals'
-      : row.subject_name.includes('ផែនដី') ? 'earth_science'
-      : row.subject_name === 'ភាសាបរទេស' ? 'foreign_lang'
-      : 'unknown';
-
-    const subMetrics = subjectId === 'khmer' ? [
-      { id: 'dictation', label: 'សរសេរតាមអាន', maxScore: 40 },
-      { id: 'composition', label: 'តែងសេចក្តី', maxScore: parseFloat(row.max_score) - 40 }
-    ] : undefined;
-
-    return {
-      id: subjectId,
-      label: row.subject_name,
-      maxScore: parseFloat(row.max_score),
-      coefficient: row.coefficient !== undefined && row.coefficient !== null ? parseFloat(row.coefficient) : (parseFloat(row.max_score) / 50.0),
-      subMetrics
-    };
+export type CurriculumStandardRow = { subject_name: string; grade_level: number; stream_type: string; coefficient: number; max_score: number; is_core?: boolean };
+export function curriculumStream(grade: number, track?: string | null): 'general' | 'science' | 'social' {
+  if (grade <= 9) return 'general';
+  const value = String(track || '').toLowerCase();
+  if (value.includes('សង្គម') || value.includes('art') || value.includes('soc')) return 'social';
+  if (value.includes('ទូទៅ') || value.includes('gen') || (grade === 10 && !value)) return 'general';
+  return 'science';
+}
+export function curriculumSubjectId(name: string): string {
+  const known = Object.values(CURRICULUM_SCHEMAS).flatMap(schema => schema.subjects).find(subject => subject.label === name);
+  if (known) return known.id;
+  if (name.includes('សីលធម៌') || name.includes('ពលរដ្ឋ')) return 'morals';
+  if (name.includes('ផែនដី')) return 'earth_science';
+  return `subject:${encodeURIComponent(name)}`;
+}
+/** Exact grade and track; general rows are a same-grade fallback, never another grade/year. */
+export function buildDynamicSchemaSync(grade: string | number, track: string, standardsData: CurriculumStandardRow[]): CurriculumSchema {
+  const g = Number.parseInt(String(grade).trim(), 10);
+  const stream = curriculumStream(g, track);
+  const exact = standardsData.filter(row => Number(row.grade_level) === g && row.stream_type === stream);
+  const rows = exact.length || stream === 'general' ? exact : standardsData.filter(row => Number(row.grade_level) === g && row.stream_type === 'general');
+  if (!rows.length) return getCurriculumSchemaForClass(grade, track);
+  const subjects = rows.map(row => {
+    const id = curriculumSubjectId(row.subject_name), maxScore = Number(row.max_score), coefficient = Number(row.coefficient);
+    if (!Number.isFinite(maxScore) || maxScore < 0 || !Number.isFinite(coefficient) || coefficient < 0) throw new Error('ស្តង់ដារមុខវិជ្ជាមិនត្រឹមត្រូវ');
+    const subMetrics = id === 'khmer' && maxScore >= 40 ? [{ id: 'dictation', label: 'សរសេរតាមអាន', maxScore: 40 }, { id: 'composition', label: 'តែងសេចក្តី', maxScore: maxScore - 40 }] : undefined;
+    return { id, label: row.subject_name, maxScore, coefficient, subMetrics };
   });
-
-  return {
-    id: `dynamic-grade-${g}-${streamType}`,
-    label: `Grade ${g} ${streamType} (Dynamic)`,
-    subjects
-  };
+  return { id: `dynamic-grade-${g}-${stream}`, label: `ថ្នាក់ទី ${g} · ${stream === 'general' ? 'ទូទៅ' : stream === 'science' ? 'វិទ្យាសាស្ត្រ' : 'សង្គម'}`, subjects };
 }
-
-export interface ClassExamStandards {
-  schema: CurriculumSchema;
-  gradingScales: any[];
-  totalCoefficient: number;
+export async function getDynamicCurriculumSchemaForClass(grade: string | number, track: string, academicYearId: string, supabaseClient: any): Promise<CurriculumSchema> {
+  if (!academicYearId) throw new Error('ត្រូវការឆ្នាំសិក្សាដើម្បីផ្ទុកកម្មវិធីសិក្សា');
+  const g = Number.parseInt(String(grade).trim(), 10);
+  const { data, error } = await supabaseClient.from('exam_subject_standards').select('*').eq('grade_level', g).eq('academic_year_id', academicYearId).order('created_at').order('id');
+  if (error) throw new Error('មិនអាចផ្ទុកស្តង់ដារមុខវិជ្ជាបានទេ');
+  return buildDynamicSchemaSync(grade, track, data || []);
 }
-
-/**
- * Fetches both dynamic subject standards and dynamic grading scales for a class/academic year.
- * Returns the resolved schema, grading scales, and the authoritative divisor (totalCoefficient).
- */
-export async function fetchClassExamStandards(
-  supabaseClient: any,
-  academicYearId?: string | null,
-  grade?: string | number | null,
-  track?: string | null
-): Promise<ClassExamStandards> {
-  // 1. Fetch dynamic curriculum schema
-  let schema: CurriculumSchema;
-  if (academicYearId) {
-    schema = await getDynamicCurriculumSchemaForClass(grade || 12, track || '', academicYearId, supabaseClient);
-  } else {
-    schema = getCurriculumSchemaForClass(grade, track);
-  }
-
-  // 2. Fetch dynamic grading scales (exam_grading_scales)
+export interface ClassExamStandards { schema: CurriculumSchema; gradingScales: any[]; totalCoefficient: number }
+export async function fetchClassExamStandards(supabaseClient: any, academicYearId?: string | null, grade?: string | number | null, track?: string | null): Promise<ClassExamStandards> {
+  const schema = academicYearId ? await getDynamicCurriculumSchemaForClass(grade ?? 12, track ?? '', academicYearId, supabaseClient) : getCurriculumSchemaForClass(grade, track);
   let gradingScales: any[] = [];
   if (academicYearId) {
-    const { data: scales } = await supabaseClient
-      .from('exam_grading_scales')
-      .select('grade_letter, min_percentage, max_percentage, gpa_point, description_khmer')
-      .eq('academic_year_id', academicYearId);
-    if (scales && scales.length > 0) {
-      gradingScales = scales;
-    }
+    const { data, error } = await supabaseClient.from('exam_grading_scales').select('grade_letter,min_percentage,max_percentage,gpa_point,description_khmer').eq('academic_year_id', academicYearId);
+    if (error) throw new Error('មិនអាចផ្ទុកនិទ្ទេសកម្មវិធីសិក្សាបានទេ');
+    gradingScales = data || [];
   }
-
-  // 3. Compute total coefficient divisor (ផលបូកមេគុណ / លេខដែលយកទៅចែក)
-  const coeffSum = schema.subjects.reduce((sum, s) => {
-    const c = s.coefficient !== undefined && s.coefficient !== null ? s.coefficient : (s.maxScore / 50);
-    return sum + c;
-  }, 0);
-  const maxTotal = schema.subjects.reduce((sum, s) => sum + s.maxScore, 0);
-  const totalCoefficient = coeffSum > 0 ? parseFloat(coeffSum.toFixed(2)) : (maxTotal > 0 ? parseFloat((maxTotal / 50).toFixed(2)) : 1);
-
+  const coefficient = schema.subjects.reduce((sum, subject) => sum + (subject.coefficient ?? subject.maxScore / 50), 0);
+  const maxTotal = schema.subjects.reduce((sum, subject) => sum + subject.maxScore, 0);
+  const totalCoefficient = coefficient > 0 ? Number(coefficient.toFixed(2)) : maxTotal > 0 ? Number((maxTotal / 50).toFixed(2)) : 1;
   return { schema, gradingScales, totalCoefficient };
-}
-
-/**
- * Synchronously builds dynamic curriculum schema from pre-fetched exam_subject_standards data.
- * Useful for client-side processing of large datasets without N+1 queries.
- */
-export function buildDynamicSchemaSync(
-  grade: string | number,
-  track: string,
-  standardsData: any[]
-): CurriculumSchema {
-  const g = parseInt(String(grade).trim()) || 12;
-  const isLower = g <= 9;
-  
-  const streamType = isLower ? 'general' : 
-    (String(track).toLowerCase().includes('សង្គម') || String(track).toLowerCase().includes('soc') ? 'social' : 'science');
-
-  // Find matching records
-  const matchingData = standardsData.filter(row => 
-    row.grade_level === (g > 9 ? 11 : g) && 
-    row.stream_type === streamType
-  );
-
-  // Fallback to static if no dynamic data found for this specific grade/stream
-  if (matchingData.length === 0) {
-    return getCurriculumSchemaForClass(grade, track);
-  }
-
-  const subjects: SubjectSchema[] = matchingData.map(row => {
-    const subjectId = row.subject_name === 'ភាសាខ្មែរ' ? 'khmer' 
-      : row.subject_name === 'គណិតវិទ្យា' ? 'math'
-      : row.subject_name === 'រូបវិទ្យា' ? 'physics'
-      : row.subject_name === 'គីមីវិទ្យា' ? 'chemistry'
-      : row.subject_name === 'ជីវវិទ្យា' ? 'biology'
-      : row.subject_name === 'ប្រវត្តិវិទ្យា' ? 'history'
-      : row.subject_name === 'ភូមិវិទ្យា' ? 'geography'
-      : row.subject_name.includes('សីលធម៌') ? 'morals'
-      : row.subject_name.includes('ផែនដី') ? 'earth_science'
-      : row.subject_name === 'ភាសាបរទេស' ? 'foreign_lang'
-      : 'unknown';
-
-    const subMetrics = subjectId === 'khmer' ? [
-      { id: 'dictation', label: 'សរសេរតាមអាន', maxScore: 40 },
-      { id: 'composition', label: 'តែងសេចក្តី', maxScore: parseFloat(row.max_score) - 40 }
-    ] : undefined;
-
-    return {
-      id: subjectId,
-      label: row.subject_name,
-      maxScore: parseFloat(row.max_score),
-      coefficient: row.coefficient !== undefined && row.coefficient !== null ? parseFloat(row.coefficient) : (parseFloat(row.max_score) / 50.0),
-      subMetrics
-    };
-  });
-
-  return {
-    id: `dynamic-grade-${g}-${streamType}`,
-    label: `Grade ${g} ${streamType} (Dynamic)`,
-    subjects
-  };
 }

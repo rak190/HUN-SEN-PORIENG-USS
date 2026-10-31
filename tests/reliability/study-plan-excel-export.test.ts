@@ -6,6 +6,8 @@ import {
   generateSingleSheetClassWorkbook,
 } from '../../lib/excel/study-plan-export';
 import { Classroom, Student } from '../../types';
+import { buildDynamicSchemaSync } from '../../lib/curriculum';
+import { getSubjectGradeLetter } from '../../app/(dashboard)/homeroom/student-study-plans/types';
 
 describe('Study Plan Excel Export Suite', () => {
   const sampleClass: Classroom = {
@@ -56,6 +58,27 @@ describe('Study Plan Excel Export Suite', () => {
     { period: 'dec', scores: { khmer: 145, math: 146, physics: 49 }, student_id: 'student-1' },
     { period: 'annual', scores: { khmer: 148, math: 149, physics: 50 }, student_id: 'student-1' },
   ];
+
+  it('uses the class year/grade curriculum maximum in exported actual results after XLSX round-trip', async () => {
+    const classInfo = {
+      ...sampleClass,
+      curriculumSchema: buildDynamicSchemaSync(12, 'science', [{
+        subject_name: 'គណិតវិទ្យា', grade_level: 12, stream_type: 'science',
+        coefficient: 2.5, max_score: 125, is_core: true,
+      }]),
+    };
+    const wb = generateStudyPlanWorkbook({
+      classInfo,
+      academicYearName: '2026-2027',
+      studentsData: [{ student: sampleStudent1, planTargets: {} }],
+      gradesData: [{ period: 'nov', scores: { math: 100 }, student_id: sampleStudent1.id }],
+    });
+    const restored = new ExcelJS.Workbook();
+    await restored.xlsx.load(await wb.xlsx.writeBuffer());
+    // Math is the second subject; D is November's actual-result column.
+    assert.equal(restored.worksheets[0].getCell('D15').value, getSubjectGradeLetter(100, 125, 12));
+    assert.notEqual(restored.worksheets[0].getCell('D15').value, getSubjectGradeLetter(100, 150, 12));
+  });
 
   it('Scenario 1: Generates valid landscape A4 page setup with exact margins', () => {
     const wb = generateStudyPlanWorkbook({

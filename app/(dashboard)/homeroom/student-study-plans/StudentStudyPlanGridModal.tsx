@@ -222,9 +222,9 @@ export default function StudentStudyPlanGridModal({
   const getSubjectMaxScore = useCallback(
     (subId: string) => {
       const subject = STUDY_PLAN_SUBJECTS.find(subject => subject.id === subId);
-      return resolveSubjectMaxScore(classInfo.grade, classInfo.track, subId, subject?.aliases, subject?.officialLabel);
+      return resolveSubjectMaxScore(classInfo.grade, classInfo.track, subId, subject?.aliases, subject?.officialLabel, classInfo.curriculumSchema);
     },
-    [classInfo.grade, classInfo.track]
+    [classInfo.grade, classInfo.track, classInfo.curriculumSchema]
   );
   const isOfficialCell = (studentId: string, subjectId: string) => {
     const scores = publishedScoresByStudent[studentId]?.[selectedMonth === 'end_actual' ? 'annual' : selectedMonth];
@@ -929,7 +929,7 @@ export default function StudentStudyPlanGridModal({
                               classInfo.track,
                               sub.id,
                               sub.aliases,
-                              sub.officialLabel
+                              sub.officialLabel, classInfo.curriculumSchema
                             );
                             isLocked = true;
                             isOfficial = true;

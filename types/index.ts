@@ -62,6 +62,8 @@ export interface Subject {
 }
 
 export interface Classroom {
+  /** Resolved for a view/export from this class's year; not a database column. */
+  curriculumSchema?: import('@/lib/curriculum').CurriculumSchema;
   id: string;
   school_id: string;
   teacher_id?: string | null;

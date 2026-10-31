@@ -1,684 +1,823 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { 
-  Save, Trash2, PencilLine, Check, Plus, BookText, SlidersHorizontal, Trophy, CheckCircle2, Loader2,
-  Languages, Calculator, FlaskConical, Atom, TestTube, History, Globe2, HeartHandshake, Activity
-} from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
-
-const getSubjectTheme = (name: string) => {
-  if (name.includes('ភាសា')) return {
-    icon: <Languages className="w-4 h-4" />,
-    style: 'bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-sm'
-  };
-  if (name.includes('គណិត')) return {
-    icon: <Calculator className="w-4 h-4" />,
-    style: 'bg-amber-50 text-amber-600 border border-amber-100 shadow-sm'
-  };
-  if (['រូប', 'គីមី', 'ជីវ'].some(k => name.includes(k))) {
-    const Icon = name.includes('រូប') ? Atom : name.includes('គីមី') ? FlaskConical : TestTube;
-    return {
-      icon: <Icon className="w-4 h-4" />,
-      style: 'bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-sm'
-    };
-  }
-  if (['ប្រវត្តិ', 'ភូមិ', 'សីលធម៌'].some(k => name.includes(k))) {
-    const Icon = name.includes('ប្រវត្តិ') ? History : name.includes('ភូមិ') ? Globe2 : HeartHandshake;
-    return {
-      icon: <Icon className="w-4 h-4" />,
-      style: 'bg-rose-50 text-rose-600 border border-rose-100 shadow-sm'
-    };
-  }
-  return {
-    icon: <Activity className="w-4 h-4" />,
-    style: 'bg-purple-50 text-purple-600 border border-purple-100 shadow-sm'
-  };
-};
-
+﻿"use client";
+import React, { useEffect, useState } from "react";
+import {
+  Save,
+  Trash2,
+  Plus,
+  BookText,
+  SlidersHorizontal,
+  Trophy,
+  CheckCircle2,
+  Loader2,
+  History,
+  X,
+  AlertCircle,
+} from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import Modal from "@/components/ui/Modal";
+import {
+  CURRICULUM_GRADES,
+  CURRICULUM_STREAMS,
+  STREAM_LABELS,
+  curriculumSnapshot,
+  type CurriculumSnapshot,
+} from "@/lib/exam-standards";
+import { useCurriculumEditor } from "./useCurriculumEditor";
+const inputStyle =
+  "w-full min-w-16 px-2 py-2 bg-transparent border border-transparent hover:border-slate-200 focus:bg-white focus:border-[#155EEF] rounded-lg text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#155EEF]/20 disabled:text-slate-500";
+const primary =
+  "px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+const secondary =
+  "px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50";
 export default function AdminExamStandardsPage() {
-  const { activeAcademicYear } = useAuth();
-  const searchParams = useSearchParams();
-  const validTabs = ['subjects', 'grading'];
-  const initialTab = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState<'subjects' | 'grading'>(
-    (initialTab && validTabs.includes(initialTab)) ? initialTab as any : 'subjects'
+  const editor = useCurriculumEditor();
+  const params = useSearchParams();
+  const [tab, setTab] = useState(
+    params.get("tab") === "grading" ? "grading" : "subjects",
   );
-  
-  const [academicYears, setAcademicYears] = useState<any[]>([]);
-  const [selectedYearId, setSelectedYearId] = useState<string>('');
-  
-  // Set default selected year when loaded
+  const [gradeFilter, setGradeFilter] = useState("all");
+  const [review, setReview] = useState(false),
+    [confirmDelete, setConfirmDelete] = useState(false);
+  const [cloneOpen, setCloneOpen] = useState(false),
+    [sourceId, setSourceId] = useState(""),
+    [source, setSource] = useState<CurriculumSnapshot | null>(null),
+    [previewError, setPreviewError] = useState(""),
+    [previewLoading, setPreviewLoading] = useState(false),
+    [replace, setReplace] = useState(false);
+  const eligibleYears = editor.years.filter(
+    (year) =>
+      year.id !== editor.yearId &&
+      editor.year &&
+      year.start_date < editor.year.start_date,
+  );
   useEffect(() => {
-    if (activeAcademicYear?.id && !selectedYearId) {
-      setSelectedYearId(activeAcademicYear.id);
-    }
-  }, [activeAcademicYear, selectedYearId]);
-
-  useEffect(() => {
-    async function loadYears() {
+    if (!cloneOpen || !sourceId) return;
+    const controller = new AbortController();
+    async function load() {
+      setPreviewLoading(true);
+      setSource(null);
+      setPreviewError("");
       try {
-        const res = await fetch('/api/admin/academic-years');
-        if (res.ok) {
-          const { data } = await res.json();
-          setAcademicYears(data || []);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    loadYears();
-  }, []);
-
-  const selectedYear = academicYears.find(y => y.id === selectedYearId) || activeAcademicYear;
-  const isReadOnly = selectedYear?.status === 'closed' || selectedYear?.status === 'archived';
-
-  const [coefficientView, setCoefficientView] = useState('11-12-sci');
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [isEditingGrades, setIsEditingGrades] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
-  const [loading, setLoading] = useState(true);
-  
-  const [gradingRanges, setGradingRanges] = useState([
-    { id: 'A', label: 'ល្អប្រសើរ (Excellent)', min: 85, max: 100, color: 'emerald' },
-    { id: 'B', label: 'ល្អណាស់ (Very Good)', min: 80, max: 84, color: 'emerald' },
-    { id: 'C', label: 'ល្អ (Good)', min: 70, max: 79, color: 'blue' },
-    { id: 'D', label: 'បង្គួរ (Fair)', min: 60, max: 69, color: 'amber' },
-    { id: 'E', label: 'មធ្យម (Average)', min: 50, max: 59, color: 'orange' },
-    { id: 'F', label: 'ធ្លាក់ (Fail)', min: 0, max: 49, color: 'rose' },
-  ]);
-  
-  const [globalSubjects, setGlobalSubjects] = useState<any[]>([]);
-
-  useEffect(() => {
-    async function loadStandards() {
-      if (!selectedYearId) return;
-      setLoading(true);
-      try {
-        const res = await fetch(`/api/admin/exam-standards?academicYearId=${selectedYearId}`);
-        if (res.ok) {
-          const { standards } = await res.json();
-          if (standards) {
-            if (standards.gradingRanges && standards.gradingRanges.length > 0) setGradingRanges(standards.gradingRanges);
-            if (standards.globalSubjects) setGlobalSubjects(standards.globalSubjects);
-          } else {
-            setGlobalSubjects([]);
-          }
-        }
-      } catch (e) {
-        console.error(e);
+        const response = await fetch(
+          `/api/admin/exam-standards?academicYearId=${sourceId}`,
+          { signal: controller.signal, cache: "no-store" },
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        if (!controller.signal.aborted)
+          setSource(curriculumSnapshot(data.standards));
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setPreviewError(
+            error instanceof Error ? error.message : "មិនអាចផ្ទុកប្រភពបានទេ",
+          );
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setPreviewLoading(false);
       }
     }
-    loadStandards();
-  }, [selectedYearId]);
-
-  const handleSaveStandards = async () => {
-    setIsSaving(true);
-    try {
-      const res = await fetch('/api/admin/exam-standards', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          academicYearId: selectedYearId,
-          standards: {
-            gradingRanges,
-            globalSubjects
-          }
-        })
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to save standards');
-      }
-
-      setHasUnsavedChanges(false);
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
-    } catch (err: any) {
-      alert('កំហុសក្នុងការរក្សាទុក៖ ' + err.message);
-    } finally {
-      setIsSaving(false);
-    }
+    void load();
+    return () => controller.abort();
+  }, [sourceId, cloneOpen]);
+  const start = () => {
+    editor.addSubject();
+    setTab("subjects");
+    setGradeFilter("all");
   };
-
+  const openClone = () => {
+    if (editor.dirty && !confirm("ការចម្លងនឹងជំនួសទិន្នន័យព្រាង។ បន្តមែនទេ?"))
+      return;
+    setSource(null);
+    setPreviewLoading(false);
+    setSourceId("");
+    setReplace(false);
+    setPreviewError("");
+    setCloneOpen(true);
+  };
+  const hasTarget = !!(
+    editor.baseline?.subjects.length || editor.baseline?.gradingScales.length
+  );
+  const removed = editor.removedSubjects.length + editor.removedScales.length;
   return (
     <div className="space-y-6 animate-fadeIn select-none">
-      
-      {/* Top Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-3">
-            ស្តង់ដារការប្រលង និងមុខវិជ្ជា
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight flex flex-wrap items-center gap-3">
+            ស្តង់ដារការប្រឡង និងមុខវិជ្ជា
             <select
-              value={selectedYearId}
-              onChange={(e) => setSelectedYearId(e.target.value)}
+              aria-label="ឆ្នាំសិក្សា"
+              value={editor.yearId}
+              disabled={editor.saving}
+              onChange={(event) => {
+                if (editor.switchYear(event.target.value)) {
+                  setReview(false);
+                  setCloneOpen(false);
+                }
+              }}
               className="text-sm border border-slate-300 rounded-lg px-2 py-1 font-semibold text-slate-700 focus:ring-2 focus:ring-[#155EEF] cursor-pointer"
             >
-              {academicYears.map(y => (
-                <option key={y.id} value={y.id}>
-                  ឆ្នាំសិក្សា {y.name} {y.is_active ? '(កំពុងដំណើរការ)' : ''} {y.status === 'closed' || y.status === 'archived' ? '🔒' : ''}
+              <option value="" disabled>
+                ជ្រើសរើសឆ្នាំសិក្សា
+              </option>
+              {editor.years.map((year) => (
+                <option key={year.id} value={year.id}>
+                  {year.name} {year.is_active ? "(កំពុងដំណើរការ)" : ""}
                 </option>
               ))}
             </select>
           </h1>
           <p className="text-xs font-semibold text-[#64748B] mt-0.5">
-            រៀបចំកម្មវិធីសិក្សា និងប្រព័ន្ធដាក់ពិន្ទុ (MoEYS Standard) តាមឆ្នាំសិក្សា
+            រៀបចំកម្មវិធីសិក្សា និងប្រព័ន្ធដាក់ពិន្ទុ តាមឆ្នាំសិក្សា
           </p>
         </div>
-        
-        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-          <button 
-            onClick={handleSaveStandards} 
-            disabled={isSaving || isReadOnly}
-            className={`px-6 py-3 font-bold rounded-full text-sm transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap group cursor-pointer ${isReadOnly ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-[#155EEF] hover:bg-blue-700 text-white'}`}
+        <div className="flex flex-wrap gap-2">
+          <button
+            className={secondary}
+            disabled={!editor.dirty || editor.saving}
+            onClick={editor.cancel}
           >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 group-hover:scale-110 transition-transform" />}
-            <span>{isSaving ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកទិន្នន័យ'}</span>
+            <X className="w-4 h-4" />
+            បោះបង់
+          </button>
+          <button
+            className={primary}
+            disabled={!editor.editable || !editor.dirty}
+            onClick={() => {
+              setConfirmDelete(false);
+              setReview(true);
+            }}
+          >
+            <Save className="w-4 h-4" />
+            ពិនិត្យ និងរក្សាទុក
           </button>
         </div>
       </header>
-
-      {/* Lock Banner */}
-      {isReadOnly && (
-        <div className="bg-slate-100 border border-slate-300 text-slate-700 px-4 py-3 rounded-xl flex items-center gap-3 text-sm font-bold animate-fadeIn shadow-sm">
-          <span className="text-lg">🔒</span>
-          <span>ឆ្នាំសិក្សានេះត្រូវបានបិទបញ្ចប់រួចរាល់ហើយ — ទិន្នន័យស្ថិតក្នុងទម្រង់មើលតែប៉ុណ្ណោះ (Read-Only)។ មិនអាចកែប្រែស្តង់ដារពិន្ទុបានទេ។</span>
+      {editor.readOnly && editor.year && (
+        <div className="bg-slate-100 border border-slate-300 text-slate-700 px-4 py-3 rounded-xl text-sm font-bold">
+          ឆ្នាំសិក្សានេះត្រូវបានចាក់សោ។ អាចមើលបានតែប៉ុណ្ណោះ។
         </div>
       )}
-
-      {/* Success Alert */}
-      {savedSuccess && !isReadOnly && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center gap-2 text-sm font-bold animate-fadeIn">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          <span>ការកំណត់ស្តង់ដារប្រលង និងពិន្ទុត្រូវបានរក្សាទុកជោគជ័យ!</span>
+      {editor.error && (
+        <div
+          role="alert"
+          className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-xl text-sm font-bold"
+        >
+          <AlertCircle className="w-4 h-4 inline mr-2" />
+          {editor.error}
+          <button
+            className="ml-3 underline"
+            disabled={editor.saving}
+            onClick={editor.retry}
+          >
+            ផ្ទុកឡើងវិញ
+          </button>
         </div>
       )}
-
-      {/* Action Switcher */}
+      {editor.success && (
+        <div
+          role="status"
+          className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center gap-2 text-sm font-bold"
+        >
+          <CheckCircle2 className="w-5 h-5" />
+          បានរក្សាទុកកម្មវិធីសិក្សាដោយជោគជ័យ!
+        </div>
+      )}
+      {editor.dirty && (
+        <p className="text-sm font-bold text-amber-700">
+          មានការកែប្រែមិនទាន់រក្សាទុក · {editor.subjects.length}{" "}
+          ការកំណត់មុខវិជ្ជា · {removed} ស្នើលុប
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2 pt-1 border-b border-slate-200/60 pb-4">
         <div className="flex gap-1.5 p-1 bg-white rounded-xl border border-slate-100 shadow-xs">
-          <button 
-            type="button" 
-            onClick={() => setActiveTab('subjects')} 
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all cursor-pointer ${activeTab === 'subjects' ? 'bg-purple-600 text-white shadow-2xs font-extrabold' : 'bg-transparent text-slate-600 hover:bg-slate-50'}`}
-          >
-            <BookText className="w-3.5 h-3.5" /> មុខវិជ្ជា
-          </button>
-          <button 
-            type="button" 
-            onClick={() => setActiveTab('grading')} 
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all cursor-pointer ${activeTab === 'grading' ? 'bg-emerald-600 text-white shadow-2xs font-extrabold' : 'bg-transparent text-slate-600 hover:bg-slate-50'}`}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" /> ការកំណត់ពិន្ទុ
-          </button>
+          {[
+            {
+              id: "subjects",
+              label: "មុខវិជ្ជា",
+              Icon: BookText,
+              color: "bg-purple-600",
+            },
+            {
+              id: "grading",
+              label: "ការកំណត់ពិន្ទុ",
+              Icon: SlidersHorizontal,
+              color: "bg-emerald-600",
+            },
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all ${tab === item.id ? item.color + " text-white shadow-2xs" : "text-slate-600 hover:bg-slate-50"}`}
+            >
+              <item.Icon className="w-3.5 h-3.5" />
+              {item.label}
+            </button>
+          ))}
         </div>
       </div>
-
-      {/* TAB CONTENT: SUBJECTS */}
-      {activeTab === 'subjects' && (
-        <div className="space-y-6 animate-fadeIn max-w-6xl">
-          
-          {/* Empty State / Cloning */}
-          {globalSubjects.length === 0 && !loading && (
-            <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl p-12 text-center flex flex-col items-center justify-center max-w-2xl mx-auto my-12">
-              <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6">
-                <BookText className="w-10 h-10 text-blue-500" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-800 mb-2">មិនទាន់មានស្តង់ដារមុខវិជ្ជាទេ</h3>
-              <p className="text-slate-500 text-sm mb-8 max-w-md leading-relaxed">
-                ឆ្នាំសិក្សានេះមិនទាន់បានរៀបចំកម្មវិធីសិក្សា និងស្តង់ដារពិន្ទុនៅឡើយទេ។ អ្នកអាចបង្កើតថ្មី ឬចម្លងពីឆ្នាំសិក្សាចាស់។
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
-                <button
-                  disabled={isReadOnly || isSaving}
-                  onClick={async () => {
-                    const sourceYearId = prompt("សូមបញ្ចូល ID ឆ្នាំសិក្សាចាស់ដែលចង់ចម្លង (e.g. latest year UUID):");
-                    if (!sourceYearId) return;
-                    setIsSaving(true);
-                    try {
-                      const res = await fetch('/api/admin/exam-standards/clone', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          sourceYearId,
-                          targetYearId: selectedYearId
-                        })
-                      });
-                      if (!res.ok) throw new Error('បរាជ័យក្នុងការចម្លង');
-                      alert('ចម្លងបានជោគជ័យ! សូម Refresh ទំព័រនេះ។');
-                      window.location.reload();
-                    } catch (err: any) {
-                      alert(err.message);
-                    } finally {
-                      setIsSaving(false);
-                    }
-                  }}
-                  className="px-6 py-3 bg-[#155EEF] hover:bg-blue-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <History className="w-4 h-4" />
-                  ចម្លងពីឆ្នាំសិក្សាមុន
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Stats Cards */}
-          {globalSubjects.length > 0 && (
-          <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            <div className="bg-[#155EEF] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-md shadow-blue-500/20 text-white flex flex-col justify-between min-h-[130px] cursor-pointer border border-blue-400/30">
-              <div className="flex justify-between items-start">
-                <h2 className="text-4xl font-black text-white tracking-tight leading-none">{globalSubjects.length}</h2>
-                <div className="w-9 h-9 rounded-full border border-white/30 flex items-center justify-center group-hover:bg-white group-hover:text-[#155EEF] transition-all shadow-2xs">
-                  <BookText className="w-4 h-4 text-white group-hover:text-[#155EEF] transition-colors" />
-                </div>
-              </div>
-              <p className="text-sm font-bold text-blue-100 mt-4">មុខវិជ្ជាសរុប</p>
-            </div>
-            
-            <div className="bg-[#FFCF59] rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-yellow-400/30">
-              <div className="flex justify-between items-start">
-                <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{globalSubjects.filter(s => s.grades.some((g: any) => parseInt(g) < 10)).length}</h2>
-                <div className="w-9 h-9 bg-yellow-100 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
-                  <BookText className="w-4 h-4 text-yellow-900" />
-                </div>
-              </div>
-              <p className="text-sm font-bold text-yellow-950 mt-4">អនុវិទ្យាល័យ</p>
-            </div>
-            
-            <div className="bg-white rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-slate-100 hover:border-slate-200">
-              <div className="flex justify-between items-start">
-                <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{globalSubjects.filter(s => s.grades.some((g: any) => parseInt(g) >= 10)).length}</h2>
-                <div className="w-9 h-9 bg-indigo-50 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
-                  <BookText className="w-4 h-4 text-indigo-600" />
-                </div>
-              </div>
-              <p className="text-sm font-bold text-slate-500 mt-4">វិទ្យាល័យ</p>
-            </div>
-            
-            <div className="bg-white rounded-[24px] p-6 relative group hover:-translate-y-1 transition-all shadow-sm flex flex-col justify-between min-h-[130px] cursor-pointer border border-slate-100 hover:border-slate-200">
-              <div className="flex justify-between items-start">
-                <h2 className="text-4xl font-black text-slate-900 tracking-tight leading-none">{globalSubjects.filter(s => s.type === 'កំហិត').length}</h2>
-                <div className="w-9 h-9 bg-rose-50 rounded-full flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-transform shadow-2xs">
-                  <BookText className="w-4 h-4 text-rose-600" />
-                </div>
-              </div>
-              <p className="text-sm font-bold text-slate-500 mt-4">មុខវិជ្ជាកំហិត</p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-[24px] shadow-sm border border-slate-100/80 flex flex-col h-[550px] overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-6 shrink-0 gap-3">
-              <div>
-                <h3 className="font-extrabold text-slate-900 text-[17px] flex items-center gap-2">
-                  <span>កម្មវិធីសិក្សាតាមមុខវិជ្ជា</span>
-                </h3>
-                <p className="text-[12px] text-slate-400 font-medium mt-1">គ្រប់គ្រងបញ្ជីមុខវិជ្ជា និងកំណត់កម្រិតថ្នាក់បង្រៀនដោយផ្ទាល់</p>
-              </div>
-              <button 
-                onClick={() => { setGlobalSubjects([...globalSubjects, { id: Date.now().toString(), name: 'មុខវិជ្ជាថ្មី', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1, maxSci: 50, maxSoc: 50, maxGen: 50 }]); setHasUnsavedChanges(true); }}
-                className="px-4 py-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 hover:bg-slate-50 rounded-full text-[13px] font-bold transition-all flex items-center gap-2 shadow-sm whitespace-nowrap cursor-pointer"
-              >
-                <Plus className="w-4 h-4 text-emerald-600" /> បន្ថែមមុខវិជ្ជា
-              </button>
-            </div>
-
-            <div className="overflow-y-auto flex-1 h-full pb-4 px-4 sm:px-6">
-              <table className="w-full text-left border-collapse min-w-[700px]" style={{borderSpacing: '0 8px', borderCollapse: 'separate'}}>
-                <thead className="sticky top-0 z-10">
-                  <tr>
-                    <th className="px-4 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider w-[40%] rounded-l-[16px] bg-[#f8fafc]">មុខវិជ្ជា (SUBJECT)</th>
-                    <th className="px-4 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider bg-[#f8fafc]">កម្រិតថ្នាក់ (GRADES)</th>
-                    <th className="px-4 py-3 text-[11px] font-black text-slate-400 uppercase tracking-wider w-12 text-right rounded-r-[16px] bg-[#f8fafc]"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {globalSubjects.map((subject, idx) => (
-                    <tr key={subject.id} className="bg-white hover:bg-emerald-50/30 hover:shadow-xs transition-all duration-200 group rounded-xl relative">
-                      <td className="px-4 py-1.5 transition-all duration-300 rounded-l-[16px] border-y border-l border-slate-200 group-hover:border-slate-300 relative">
-                        <div className="flex items-center gap-2">
-                          <div className={`p-1.5 rounded-lg shrink-0 group-hover:scale-105 transition-all ${getSubjectTheme(subject.name).style}`}>
-                            {getSubjectTheme(subject.name).icon}
-                          </div>
-                          <input 
-                            type="text" 
-                            value={subject.name}
-                            placeholder="បញ្ចូលឈ្មោះមុខវិជ្ជា..."
-                            onChange={(e) => {
-                              const newSubjects = [...globalSubjects];
-                              newSubjects[idx].name = e.target.value;
-                              setGlobalSubjects(newSubjects);
-                              setHasUnsavedChanges(true);
-                            }}
-                            className="bg-transparent border border-transparent outline-none font-black text-slate-900 text-[13px] hover:bg-slate-50 focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 rounded-md px-2 py-1.5 w-full transition-all" 
-                          />
-                        </div>
-                      </td>
-                      <td className="px-4 py-1.5 border-y border-slate-200 group-hover:border-emerald-200 transition-colors">
-                        <div className="flex gap-1 flex-wrap items-center">
-                          {['7','8','9','10','11','12'].map(g => {
-                            const isActive = subject.grades.includes(g);
-                            return (
-                              <button 
-                                key={g} 
-                                onClick={() => {
-                                  const newSubjects = [...globalSubjects];
-                                  if (isActive) {
-                                    newSubjects[idx].grades = subject.grades.filter((grade: any) => grade !== g);
-                                  } else {
-                                    newSubjects[idx].grades = [...subject.grades, g].sort((a,b) => parseInt(a) - parseInt(b));
-                                  }
-                                  setGlobalSubjects(newSubjects);
-                                  setHasUnsavedChanges(true);
-                                }}
-                                  className={`w-7 h-6 rounded-md text-[11px] font-black border transition-all cursor-pointer flex items-center justify-center ${
-                                    isActive 
-                                      ? 'bg-blue-50 text-[#155EEF] border-blue-200' 
-                                      : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-100 hover:text-slate-600'
-                                  }`}
-                                title={`ថ្នាក់ទី ${g}`}
-                              >
-                                {g}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </td>
-                      <td className="px-4 py-1.5 rounded-r-[16px] border-y border-r border-slate-200 group-hover:border-emerald-200 text-right transition-colors relative">
-                        <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                          <button onClick={() => { setGlobalSubjects(globalSubjects.filter(s => s.id !== subject.id)); setHasUnsavedChanges(true); }} className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors cursor-pointer">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            </div>
-            </>
-          )}
+      {editor.loading ? (
+        <div
+          role="status"
+          className="p-12 flex justify-center gap-3 text-slate-500"
+        >
+          <Loader2 className="w-5 h-5 animate-spin" />
+          កំពុងផ្ទុកកម្មវិធីសិក្សា...
         </div>
-      )}
-
-      {/* TAB CONTENT: GRADING */}
-      {activeTab === 'grading' && (
-        <div className="space-y-6 animate-fadeIn max-w-6xl">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
-            <div>
-              <h2 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
-                <SlidersHorizontal className="w-6 h-6 text-[#155EEF]" /> ការកំណត់ប្រព័ន្ធពិន្ទុ (MoEYS Standard)
-              </h2>
-              <p className="text-sm font-semibold text-slate-500 mt-1">រៀបចំមេគុណមុខវិជ្ជា រូបមន្ត និងនិទ្ទេសស្របតាមស្តង់ដារក្រសួងអប់រំ យុវជន និងកីឡា</p>
-            </div>
-            <div className="flex gap-2">
-              <button className="px-4 py-2 bg-white border border-slate-200 hover:bg-blue-50 text-slate-700 hover:text-[#155EEF] hover:border-blue-200 rounded-xl text-sm font-bold transition-colors shadow-xs cursor-pointer">
-                ត្រឡប់ទៅលំនាំដើម
-              </button>
-            </div>
-          </div>
-
-          {/* Settings Grid */}
-          <div className="flex flex-col gap-8">
-            
-            {/* Top Section */}
-            <div className="w-full space-y-6">
-              
-              {/* Grading Letters (និទ្ទេស) */}
-              <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 group">
-                <div className="flex items-center justify-between mb-5">
-                  <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                    <div className="p-1.5 bg-blue-50 border border-blue-100 text-[#155EEF] rounded-lg">
-                      <Trophy className="w-5 h-5" />
-                    </div>
-                    ការកំណត់និទ្ទេស (Grading Letters)
-                  </h3>
-                  <button 
-                    onClick={() => setIsEditingGrades(!isEditingGrades)}
-                    className="p-2 hover:bg-blue-50 rounded-xl text-slate-400 hover:text-[#155EEF] transition-all duration-300 shadow-sm border border-slate-100 cursor-pointer"
+      ) : (
+        editor.baseline && (
+          <>
+            {editor.subjects.length === 0 && (
+              <div className="bg-white border-2 border-dashed border-slate-200 rounded-3xl p-8 sm:p-12 text-center flex flex-col items-center justify-center max-w-2xl mx-auto my-12">
+                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6">
+                  <BookText className="w-10 h-10 text-blue-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800 mb-2">
+                  មិនទាន់មានស្តង់ដារមុខវិជ្ជាទេ
+                </h3>
+                <p className="text-slate-500 text-sm mb-8 max-w-md leading-relaxed">
+                  ចាប់ផ្ដើមកម្មវិធីសិក្សាថ្មី ឬពិនិត្យ
+                  និងចម្លងពីឆ្នាំសិក្សាចាស់។
+                  តម្លៃទាំងអស់ត្រូវបានពិនិត្យមុនរក្សាទុក។
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <button
+                    disabled={!editor.editable}
+                    onClick={start}
+                    className={primary}
                   >
-                    {isEditingGrades ? <Check className="w-4 h-4 text-[#155EEF]" /> : <PencilLine className="w-4 h-4" />}
+                    <Plus className="w-4 h-4" />
+                    បង្កើតកម្មវិធីសិក្សាថ្មី
+                  </button>
+                  <button
+                    disabled={!editor.editable}
+                    onClick={openClone}
+                    className={secondary}
+                  >
+                    <History className="w-4 h-4" />
+                    ចម្លងពីឆ្នាំសិក្សាចាស់
                   </button>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {gradingRanges.map((grade, index) => (
-                    <div key={grade.id} className={`flex items-center justify-between p-3 rounded-2xl border transition-all duration-300 hover:scale-[1.01] hover:shadow-md ${
-                      grade.color === 'emerald' ? 'border-emerald-100 bg-emerald-50/30' :
-                      grade.color === 'blue' ? 'border-blue-100 bg-blue-50/30' :
-                      grade.color === 'amber' ? 'border-amber-100 bg-amber-50/30' :
-                      grade.color === 'orange' ? 'border-orange-100 bg-orange-50/30' :
-                      'border-rose-100 bg-rose-50/30'
-                    }`}>
-                      <div className="flex items-center gap-3">
-                        <span className={`w-10 h-10 rounded-xl font-black flex items-center justify-center shadow-sm border ${
-                          grade.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                          grade.color === 'blue' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                          grade.color === 'amber' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                          grade.color === 'orange' ? 'bg-orange-50 text-orange-600 border-orange-100' :
-                          'bg-rose-50 text-rose-600 border-rose-100'
-                        }`}>{grade.id}</span>
-                        <span className={`text-sm font-bold ${
-                          grade.color === 'emerald' ? 'text-emerald-700' :
-                          grade.color === 'blue' ? 'text-blue-700' :
-                          grade.color === 'amber' ? 'text-amber-700' :
-                          grade.color === 'orange' ? 'text-orange-700' :
-                          'text-rose-700'
-                        }`}>{grade.label}</span>
-                      </div>
-                      {isEditingGrades ? (
-                        <div className="flex items-center gap-2">
-                          <input 
-                            type="number" 
-                            value={grade.min} 
-                            onChange={(e) => {
-                              const newRanges = [...gradingRanges];
-                              newRanges[index].min = parseInt(e.target.value) || 0;
-                              setGradingRanges(newRanges);
-                              setHasUnsavedChanges(true);
-                            }}
-                            className="w-16 px-2 py-1 text-center bg-white border border-slate-200 rounded text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF]"
-                          />
-                          <span className="text-slate-400 font-bold">-</span>
-                          <input 
-                            type="number" 
-                            value={grade.max} 
-                            onChange={(e) => {
-                              const newRanges = [...gradingRanges];
-                              newRanges[index].max = parseInt(e.target.value) || 0;
-                              setGradingRanges(newRanges);
-                              setHasUnsavedChanges(true);
-                            }}
-                            className="w-16 px-2 py-1 text-center bg-white border border-slate-200 rounded text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#155EEF]/50"
-                          />
-                        </div>
-                      ) : (
-                        <span className={`text-sm font-black ${
-                          grade.color === 'emerald' ? 'text-emerald-900' :
-                          grade.color === 'blue' ? 'text-blue-900' :
-                          grade.color === 'amber' ? 'text-amber-900' :
-                          grade.color === 'orange' ? 'text-orange-900' :
-                          'text-rose-900'
-                        }`}>
-                          {grade.id === 'F' ? `< ${grade.max + 1}%` : `${grade.min} - ${grade.max}%`}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
               </div>
-            </div>
-
-            {/* Bottom Section - Subject Coefficients */}
-            <div className="w-full bg-white rounded-[24px] shadow-sm border border-slate-100 flex flex-col h-full overflow-hidden">
-              <div className="p-6 border-b border-slate-100 bg-transparent">
-                <div className="flex flex-col gap-5">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                        <div className="p-1.5 bg-blue-50 border border-blue-100 text-[#155EEF] rounded-lg">
+            )}
+            {tab === "subjects" && (
+              <div className="space-y-6 max-w-6xl">
+                {editor.subjects.length > 0 && (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                    {[
+                      {
+                        label: "មុខវិជ្ជាសរុប",
+                        count: new Set(
+                          editor.subjects.map((row) => row.subject_name),
+                        ).size,
+                        style:
+                          "bg-[#155EEF] text-white border-blue-400/30 shadow-blue-500/20",
+                      },
+                      {
+                        label: "អនុវិទ្យាល័យ",
+                        count: editor.subjects.filter(
+                          (row) => row.grade_level < 10,
+                        ).length,
+                        style:
+                          "bg-[#FFCF59] text-slate-900 border-yellow-400/30",
+                      },
+                      {
+                        label: "វិទ្យាល័យ",
+                        count: editor.subjects.filter(
+                          (row) => row.grade_level >= 10,
+                        ).length,
+                        style: "bg-white text-slate-900 border-slate-100",
+                      },
+                      {
+                        label: "មុខវិជ្ជាកំហិត",
+                        count: editor.subjects.filter((row) => row.is_core)
+                          .length,
+                        style: "bg-white text-slate-900 border-slate-100",
+                      },
+                    ].map((card) => (
+                      <div
+                        key={card.label}
+                        className={`rounded-[24px] p-6 border shadow-sm min-h-[130px] flex flex-col justify-between ${card.style}`}
+                      >
+                        <div className="flex justify-between">
+                          <h2 className="text-4xl font-black">{card.count}</h2>
                           <BookText className="w-5 h-5" />
                         </div>
-                        ការកំណត់មេគុណមុខវិជ្ជា
+                        <p className="text-sm font-bold mt-4">{card.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="bg-white rounded-[24px] shadow-sm border border-slate-100/80 overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between p-6 gap-3">
+                    <div>
+                      <h3 className="font-extrabold text-slate-900 text-[17px]">
+                        បញ្ជីមុខវិជ្ជា និងមេគុណ
                       </h3>
-                      <p className="text-[11px] font-semibold text-slate-500 mt-1 ml-9">
-                        កំណត់មេគុណមុខវិជ្ជាទៅតាមកម្រិតថ្នាក់នីមួយៗ
+                      <p className="text-xs font-semibold text-slate-500 mt-1">
+                        មួយជួរសម្រាប់ថ្នាក់ និងកម្មវិធីមួយ។
+                        មិនចម្លងតម្លៃទៅថ្នាក់ផ្សេងដោយស្វ័យប្រវត្តិទេ។
                       </p>
                     </div>
-                    <button 
-                      onClick={() => { setGlobalSubjects([...globalSubjects, { id: Date.now().toString(), name: '', grades: ['7','8','9','10','11','12'], type: 'កំហិត', sci: 1, soc: 1, gen: 1, maxSci: 50, maxSoc: 50, maxGen: 50 }]); setHasUnsavedChanges(true); }}
-                      className="px-3 py-1.5 bg-blue-50 text-[#155EEF] hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 border border-blue-100 shrink-0 shadow-sm cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" /> បន្ថែមមុខវិជ្ជា
-                    </button>
-                  </div>
-                  <div className="flex bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/50 overflow-x-auto no-scrollbar shadow-inner w-full backdrop-blur-sm">
-                    {[
-                      { id: '7-8', label: '៧-៨' },
-                      { id: '9', label: '៩' },
-                      { id: '10', label: '១០' },
-                      { id: '11-12-sci', label: '១១-១២ (វិទ្យាសាស្ត្រ)' },
-                      { id: '11-12-soc', label: '១១-១២ (សង្គម)' },
-                    ].map(tab => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setCoefficientView(tab.id)}
-                        className={`px-4 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition-all duration-300 flex-1 cursor-pointer ${
-                          coefficientView === tab.id 
-                            ? 'bg-white text-[#155EEF] shadow-sm scale-[1.02] border border-slate-100' 
-                            : 'text-slate-500 hover:text-slate-800 hover:bg-white/50'
-                        }`}
+                    <div className="flex flex-wrap gap-2">
+                      <select
+                        aria-label="ចម្រោះថ្នាក់"
+                        value={gradeFilter}
+                        onChange={(event) => setGradeFilter(event.target.value)}
+                        className="rounded-xl border border-slate-200 p-2 text-sm"
                       >
-                        {tab.label}
+                        <option value="all">ថ្នាក់ទាំងអស់</option>
+                        {CURRICULUM_GRADES.map((grade) => (
+                          <option key={grade}>{grade}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={openClone}
+                        disabled={!editor.editable}
+                        className={secondary}
+                      >
+                        <History className="w-4 h-4" />
+                        ចម្លងពីឆ្នាំសិក្សាចាស់
                       </button>
-                    ))}
+                      <button
+                        disabled={!editor.editable}
+                        onClick={start}
+                        className={secondary}
+                      >
+                        <Plus className="w-4 h-4 text-emerald-600" />
+                        បន្ថែមមុខវិជ្ជា
+                      </button>
+                    </div>
                   </div>
+                  <fieldset disabled={!editor.editable} className="min-w-0">
+                    <div className="overflow-auto max-h-[650px] px-4 sm:px-6 pb-4">
+                      <table
+                        className="w-full text-left min-w-[950px]"
+                        style={{
+                          borderSpacing: "0 8px",
+                          borderCollapse: "separate",
+                        }}
+                      >
+                        <thead className="sticky top-0 z-10 bg-[#f8fafc]">
+                          <tr>
+                            {[
+                              "មុខវិជ្ជា",
+                              "ថ្នាក់",
+                              "កម្មវិធី",
+                              "ប្រភេទ",
+                              "មេគុណ",
+                              "ពិន្ទុអតិបរមា",
+                              "",
+                            ].map((label, i) => (
+                              <th
+                                key={i}
+                                className="px-3 py-3 text-[11px] font-black text-slate-400 uppercase"
+                              >
+                                {label}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {editor.subjects
+                            .filter(
+                              (row) =>
+                                gradeFilter === "all" ||
+                                String(row.grade_level) === gradeFilter,
+                            )
+                            .map((row, index) => (
+                              <tr
+                                key={row.key}
+                                data-testid="subject-row"
+                                className="bg-white hover:bg-emerald-50/30 group"
+                              >
+                                <td className="border-y border-l border-slate-200 rounded-l-2xl p-1">
+                                  <input
+                                    aria-label={`មុខវិជ្ជា ${index + 1}`}
+                                    value={row.subject_name}
+                                    onChange={(event) =>
+                                      editor.editSubject(row.key, {
+                                        subject_name: event.target.value,
+                                      })
+                                    }
+                                    placeholder="បញ្ចូលឈ្មោះមុខវិជ្ជា..."
+                                    className={inputStyle}
+                                  />
+                                </td>
+                                <td className="border-y border-slate-200 p-1">
+                                  <select
+                                    aria-label={`ថ្នាក់ ${index + 1}`}
+                                    value={row.grade_level}
+                                    onChange={(event) =>
+                                      editor.editSubject(row.key, {
+                                        grade_level: Number(event.target.value),
+                                        ...(Number(event.target.value) < 10
+                                          ? { stream_type: "general" as const }
+                                          : {}),
+                                      })
+                                    }
+                                    className={inputStyle}
+                                  >
+                                    {CURRICULUM_GRADES.map((grade) => (
+                                      <option key={grade}>{grade}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="border-y border-slate-200 p-1">
+                                  <select
+                                    aria-label={`កម្មវិធី ${index + 1}`}
+                                    value={row.stream_type}
+                                    onChange={(event) =>
+                                      editor.editSubject(row.key, {
+                                        stream_type: event.target
+                                          .value as typeof row.stream_type,
+                                      })
+                                    }
+                                    className={inputStyle}
+                                  >
+                                    {CURRICULUM_STREAMS.filter(
+                                      (stream) =>
+                                        row.grade_level >= 10 ||
+                                        stream === "general",
+                                    ).map((stream) => (
+                                      <option key={stream} value={stream}>
+                                        {STREAM_LABELS[stream]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="border-y border-slate-200 p-1">
+                                  <select
+                                    aria-label={`ប្រភេទ ${index + 1}`}
+                                    value={String(row.is_core)}
+                                    onChange={(event) =>
+                                      editor.editSubject(row.key, {
+                                        is_core: event.target.value === "true",
+                                      })
+                                    }
+                                    className={inputStyle}
+                                  >
+                                    <option value="true">កំហិត</option>
+                                    <option value="false">ជ្រើសរើស</option>
+                                  </select>
+                                </td>
+                                {(["coefficient", "max_score"] as const).map(
+                                  (field) => (
+                                    <td
+                                      key={field}
+                                      className="border-y border-slate-200 p-1"
+                                    >
+                                      <input
+                                        aria-label={`${field === "coefficient" ? "មេគុណ" : "ពិន្ទុអតិបរមា"} ${index + 1}`}
+                                        type="number"
+                                        min="0"
+                                        step="0.1"
+                                        value={row[field]}
+                                        onChange={(event) =>
+                                          editor.editSubject(row.key, {
+                                            [field]:
+                                              event.target.value === ""
+                                                ? ""
+                                                : Number(event.target.value),
+                                          })
+                                        }
+                                        className={inputStyle + " text-center"}
+                                      />
+                                    </td>
+                                  ),
+                                )}
+                                <td className="border-y border-r border-slate-200 rounded-r-2xl p-1">
+                                  <button
+                                    aria-label={`លុបមុខវិជ្ជា ${index + 1}`}
+                                    onClick={() =>
+                                      editor.remove(row.key, "subject")
+                                    }
+                                    className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </fieldset>
                 </div>
               </div>
-              
-              <div className="overflow-x-auto flex-1">
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200 shadow-xs">
-                    <tr>
-                      <th className="px-6 py-4 text-xs font-black text-slate-500 uppercase tracking-wider">មុខវិជ្ជា (Subject)</th>
-                      {coefficientView === '11-12-sci' ? (
-                        <>
-                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">មេគុណ (វិទ្យាសាស្ត្រ)</th>
-                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">ពិន្ទុអតិបរមា</th>
-                        </>
-                      ) : coefficientView === '11-12-soc' ? (
-                        <>
-                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">មេគុណ (សង្គម)</th>
-                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">ពិន្ទុអតិបរមា</th>
-                        </>
-                      ) : (
-                        <>
-                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">មេគុណ (ទូទៅ)</th>
-                          <th className="px-6 py-4 text-xs font-black text-slate-600 bg-slate-100/50 text-center uppercase tracking-wider">ពិន្ទុអតិបរមា</th>
-                        </>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {globalSubjects.map((subject, idx) => (
-                      <tr key={subject.id} className="hover:bg-slate-50 transition-all duration-200 group">
-                        <td className="px-6 py-3.5 transition-all duration-300">
-                          <div className="flex items-center">
-                            <div className="w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 -ml-2">
-                              <button onClick={() => { setGlobalSubjects(globalSubjects.filter(s => s.id !== subject.id)); setHasUnsavedChanges(true); }} className="p-1 text-slate-300 hover:text-rose-500 transition-colors cursor-pointer">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                            <input 
-                              type="text" 
-                              value={subject.name}
-                              placeholder="ឈ្មោះមុខវិជ្ជា..."
-                              onChange={(e) => {
-                                const newSubjects = [...globalSubjects];
-                                newSubjects[idx].name = e.target.value;
-                                setGlobalSubjects(newSubjects);
-                                setHasUnsavedChanges(true);
-                              }}
-                              className="bg-transparent border border-transparent outline-none font-extrabold text-slate-700 hover:border-slate-200 focus:border-[#155EEF] focus:bg-white focus:ring-2 focus:ring-[#155EEF]/20 rounded px-2 py-1 w-full text-sm transition-all" 
+            )}
+            {tab === "grading" && (
+              <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 p-6 max-w-6xl">
+                <div className="flex justify-between gap-3 mb-5">
+                  <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-[#155EEF]" />
+                    ការកំណត់និទ្ទេស (Grading Letters)
+                  </h3>
+                  <button
+                    disabled={!editor.editable}
+                    onClick={editor.addScale}
+                    className={secondary}
+                  >
+                    <Plus className="w-4 h-4" />
+                    បន្ថែមនិទ្ទេស
+                  </button>
+                </div>
+                <p className="text-sm text-slate-500 mb-4">
+                  បញ្ចូលតែចន្លោះ និង GPA ដែលសាលាបានអនុម័ត។ បើទុកទទេ
+                  ប្រព័ន្ធបន្តប្រើការគណនាលំនាំដើមដែលមានស្រាប់។
+                </p>
+                <fieldset
+                  disabled={!editor.editable}
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                >
+                  {editor.scales.map((row, index) => (
+                    <div
+                      key={row.key}
+                      className={`p-4 rounded-2xl border ${["A", "B"].includes(row.grade_letter) ? "border-emerald-100 bg-emerald-50/30" : row.grade_letter === "C" ? "border-blue-100 bg-blue-50/30" : "border-amber-100 bg-amber-50/30"}`}
+                    >
+                      <div className="flex gap-2">
+                        <input
+                          aria-label={`និទ្ទេស ${index + 1}`}
+                          value={row.grade_letter}
+                          placeholder="A"
+                          onChange={(event) =>
+                            editor.editScale(row.key, {
+                              grade_letter: event.target.value,
+                            })
+                          }
+                          className={inputStyle}
+                        />
+                        <button
+                          aria-label={`លុបនិទ្ទេស ${index + 1}`}
+                          onClick={() => editor.remove(row.key, "scale")}
+                          className="p-2 text-slate-400 hover:text-rose-500"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <input
+                        aria-label={`ពិពណ៌នា ${index + 1}`}
+                        value={row.description_khmer || ""}
+                        maxLength={50}
+                        placeholder="ពិពណ៌នានិទ្ទេស"
+                        onChange={(event) =>
+                          editor.editScale(row.key, {
+                            description_khmer: event.target.value,
+                          })
+                        }
+                        className={inputStyle}
+                      />
+                      <div className="grid grid-cols-3 gap-2 mt-2">
+                        {(
+                          [
+                            "min_percentage",
+                            "max_percentage",
+                            "gpa_point",
+                          ] as const
+                        ).map((field) => (
+                          <label
+                            key={field}
+                            className="text-[11px] font-bold text-slate-500"
+                          >
+                            {field === "min_percentage"
+                              ? "អប្បបរមា %"
+                              : field === "max_percentage"
+                                ? "អតិបរមា %"
+                                : "GPA"}
+                            <input
+                              aria-label={`${field} ${index + 1}`}
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={row[field]}
+                              onChange={(event) =>
+                                editor.editScale(row.key, {
+                                  [field]:
+                                    event.target.value === ""
+                                      ? ""
+                                      : Number(event.target.value),
+                                })
+                              }
+                              className={inputStyle}
                             />
-                          </div>
-                        </td>
-                        {coefficientView === '11-12-sci' ? (
-                          <>
-                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
-                              <input type="number" value={subject.sci} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].sci = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
-                            </td>
-                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
-                              <input type="number" value={subject.maxSci || 0} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].maxSci = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
-                            </td>
-                          </>
-                        ) : coefficientView === '11-12-soc' ? (
-                          <>
-                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
-                              <input type="number" value={subject.soc} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].soc = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
-                            </td>
-                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
-                              <input type="number" value={subject.maxSoc || 0} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].maxSoc = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
-                              <input type="number" value={subject.gen} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].gen = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
-                            </td>
-                            <td className="px-6 py-3.5 text-center bg-slate-50/50 group-hover:bg-white transition-colors border-l border-slate-50">
-                              <input type="number" value={subject.maxGen || 0} onChange={(e) => { const newSubj = [...globalSubjects]; newSubj[idx].maxGen = parseInt(e.target.value)||0; setGlobalSubjects(newSubj); setHasUnsavedChanges(true); }} className="w-16 px-2 py-1.5 text-center font-black text-slate-800 bg-transparent border border-transparent rounded-xl focus:bg-white focus:border-[#155EEF] focus:ring-2 focus:ring-[#155EEF]/20 outline-none hover:bg-white hover:border-slate-200 transition-all" />
-                            </td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </fieldset>
               </div>
-            </div>
-          </div>
-
-          {/* Sticky Action Bar */}
-          <div className={`sticky bottom-6 mt-8 z-20 transition-all duration-500 ease-in-out ${hasUnsavedChanges ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none'}`}>
-            <div className="bg-white/80 backdrop-blur-xl border border-white/40 shadow-[0_8px_30px_rgb(0,0,0,0.12)] rounded-2xl p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-                  <Save className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-extrabold text-slate-800">រក្សាទុកការផ្លាស់ប្តូរ (Save Changes)</h4>
-                  <p className="text-[11px] font-bold text-slate-500">ការផ្លាស់ប្តូរនិទ្ទេស និងមេគុណនឹងត្រូវអនុវត្តភ្លាមៗ។</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => setHasUnsavedChanges(false)}
-                  className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  បោះបង់
-                </button>
-                <button 
-                  onClick={handleSaveStandards}
-                  disabled={isSaving}
-                  className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-[#155EEF] hover:bg-blue-700 disabled:opacity-50 hover:shadow-lg hover:shadow-blue-500/30 transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  <span>{isSaving ? 'កំពុងរក្សាទុក...' : 'រក្សាទុក'}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+            )}
+          </>
+        )
       )}
-
+      <Modal
+        isOpen={review}
+        onClose={() => {
+          if (!editor.saving) setReview(false);
+        }}
+        title="ពិនិត្យកម្មវិធីសិក្សាមុនរក្សាទុក"
+        size="5xl"
+      >
+        <p className="text-sm font-bold text-slate-600 mb-4">
+          ឆ្នាំសិក្សា {editor.year?.name} · {editor.subjects.length} មុខវិជ្ជា ·{" "}
+          {editor.scales.length} និទ្ទេស · {removed} ស្នើលុប
+        </p>
+        <CurriculumPreview subjects={editor.subjects} scales={editor.scales} />
+        {removed > 0 && (
+          <label className="flex gap-2 my-4 text-sm font-bold text-rose-700">
+            <input
+              type="checkbox"
+              checked={confirmDelete}
+              onChange={(event) => setConfirmDelete(event.target.checked)}
+            />
+            ខ្ញុំបញ្ជាក់ការលុប៖{" "}
+            {[
+              ...editor.removedSubjects.map(
+                (row) =>
+                  `${row.subject_name} (${row.grade_level}/${STREAM_LABELS[row.stream_type]})`,
+              ),
+              ...editor.removedScales.map((row) => row.grade_letter),
+            ].join(" · ")}
+          </label>
+        )}
+        {editor.error && (
+          <p role="alert" className="text-rose-700 text-sm my-3">
+            {editor.error}
+          </p>
+        )}
+        <button
+          disabled={editor.saving || (removed > 0 && !confirmDelete)}
+          onClick={async () => {
+            if (await editor.save(confirmDelete)) setReview(false);
+          }}
+          className={primary}
+        >
+          {editor.saving ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          បញ្ជាក់ និងរក្សាទុក
+        </button>
+      </Modal>
+      <Modal
+        isOpen={cloneOpen}
+        onClose={() => {
+          if (!editor.saving) setCloneOpen(false);
+        }}
+        title="ចម្លងពីឆ្នាំសិក្សាចាស់"
+        size="5xl"
+      >
+        <label className="text-sm font-bold text-slate-700">
+          ឆ្នាំសិក្សាប្រភព
+          <select
+            aria-label="ឆ្នាំសិក្សាប្រភព"
+            disabled={editor.saving}
+            value={sourceId}
+            onChange={(event) => {
+              setSource(null);
+              setPreviewLoading(false);
+              setPreviewError("");
+              setSourceId(event.target.value);
+            }}
+            className="block w-full rounded-xl border border-slate-200 p-3 my-3"
+          >
+            <option value="">ជ្រើសរើសឆ្នាំសិក្សាចាស់</option>
+            {eligibleYears.map((year) => (
+              <option key={year.id} value={year.id}>
+                {year.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!eligibleYears.length && (
+          <p className="text-sm text-slate-500">
+            មិនមានឆ្នាំសិក្សាចាស់ដែលអាចចម្លងបានទេ។
+            អ្នកអាចបង្កើតកម្មវិធីសិក្សាថ្មីបាន។
+          </p>
+        )}
+        {previewLoading && <Loader2 className="w-5 h-5 animate-spin" />}
+        {previewError && (
+          <p role="alert" className="text-rose-700">
+            {previewError}
+          </p>
+        )}
+        {source && (
+          <>
+            <p className="text-sm font-bold mb-3">
+              {source.subjects.length} មុខវិជ្ជា · {source.gradingScales.length}{" "}
+              និទ្ទេស នឹងចម្លងទៅ {editor.year?.name}
+            </p>
+            <CurriculumPreview
+              subjects={source.subjects}
+              scales={source.gradingScales}
+            />
+            {!source.subjects.length && (
+              <p className="text-sm text-amber-700 my-3">
+                ឆ្នាំប្រភពមិនមានមុខវិជ្ជាទេ។
+              </p>
+            )}
+          </>
+        )}
+        {hasTarget && (
+          <label className="flex gap-2 my-4 text-sm font-bold text-rose-700">
+            <input
+              type="checkbox"
+              checked={replace}
+              onChange={(event) => setReplace(event.target.checked)}
+            />
+            ខ្ញុំបញ្ជាក់ជំនួសមុខវិជ្ជា និងនិទ្ទេសដែលមានស្រាប់ក្នុងឆ្នាំគោលដៅ
+          </label>
+        )}
+        {editor.error && (
+          <p role="alert" className="text-rose-700 text-sm my-3">
+            {editor.error}
+          </p>
+        )}
+        <button
+          className={primary}
+          disabled={
+            editor.saving ||
+            previewLoading ||
+            !source?.subjects.length ||
+            (hasTarget && !replace)
+          }
+          onClick={async () => {
+            if (source && (await editor.clone(sourceId, source, replace)))
+              setCloneOpen(false);
+          }}
+        >
+          {editor.saving ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <History className="w-4 h-4" />
+          )}
+          បញ្ជាក់ការចម្លង
+        </button>
+      </Modal>
+    </div>
+  );
+}
+function CurriculumPreview({
+  subjects,
+  scales,
+}: {
+  subjects: Array<{
+    subject_name: string;
+    grade_level: number;
+    stream_type: keyof typeof STREAM_LABELS;
+    coefficient: number | "";
+    max_score: number | "";
+    is_core: boolean;
+  }>;
+  scales: Array<{
+    grade_letter: string;
+    min_percentage: number | "";
+    max_percentage: number | "";
+    gpa_point: number | "";
+    description_khmer: string | null;
+  }>;
+}) {
+  return (
+    <div className="max-h-[45vh] overflow-auto rounded-xl border border-slate-200 mb-4">
+      <table className="w-full min-w-[650px] text-xs">
+        <thead className="bg-slate-50 text-slate-500">
+          <tr>
+            {[
+              "មុខវិជ្ជា",
+              "ថ្នាក់",
+              "កម្មវិធី",
+              "ប្រភេទ",
+              "មេគុណ",
+              "អតិបរមា",
+            ].map((label) => (
+              <th className="p-3 text-left" key={label}>
+                {label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {subjects.map((row, index) => (
+            <tr key={index} className="border-t border-slate-100">
+              <td className="p-3 font-bold">{row.subject_name || "—"}</td>
+              <td>{row.grade_level}</td>
+              <td>{STREAM_LABELS[row.stream_type]}</td>
+              <td>{row.is_core ? "កំហិត" : "ជ្រើសរើស"}</td>
+              <td>{row.coefficient}</td>
+              <td>{row.max_score}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {scales.map((row, index) => (
+        <p
+          key={index}
+          className="p-3 text-xs font-bold border-t border-slate-100"
+        >
+          {row.grade_letter} · {row.description_khmer} · {row.min_percentage}–
+          {row.max_percentage}% · GPA {row.gpa_point}
+        </p>
+      ))}
     </div>
   );
 }

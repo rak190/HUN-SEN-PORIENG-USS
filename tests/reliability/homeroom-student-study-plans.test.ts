@@ -95,15 +95,8 @@ describe('Homeroom Student Study Plan Generator Suite', () => {
       'Page must filter out archived classes'
     );
 
-    // Schema column verification (must use canonical room_number, never invalid room column)
-    assert.ok(
-      pageContent.includes('room_number'),
-      'Page must select canonical room_number column from classes'
-    );
-    assert.ok(
-      !pageContent.includes("room,") && !pageContent.includes("'room'"),
-      'Page must NOT query invalid non-existent column room from classes'
-    );
+    // Actual selected columns and the year-specific curriculum passed to the client are
+    // exercised in study-plan-curriculum-page.test.ts. Substring checks also matched "classroom,".
 
     // Multi-class teacher support & ordered resolution
     assert.ok(
