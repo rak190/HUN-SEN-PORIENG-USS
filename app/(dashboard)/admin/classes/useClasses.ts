@@ -1,4 +1,5 @@
 import { useState, useEffect, useDeferredValue } from 'react';
+import { assignClassMonitorAction } from '../monitors/actions';
 
 // --- Types ---
 export interface AcademicYear {
@@ -21,6 +22,8 @@ export interface ClassData {
   grade: string;
   track?: string;
   teacher_id?: string | null;
+  monitor_id?: string | null;
+  academic_year_id?:string;
   teacher?: string | null; // legacy or computed
   room_number?: string;
   profiles?: { full_name: string } | null; // joined teacher profile
@@ -43,6 +46,7 @@ export function useClasses() {
   // Data States
   const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
   const [classes, setClasses] = useState<ClassData[]>([]);
+  const [monitors,setMonitors]=useState<UserProfile[]>([]);
   const [teachers, setTeachers] = useState<UserProfile[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<string | null>(null);
 
@@ -101,6 +105,7 @@ export function useClasses() {
       const res = await fetch('/api/admin/users');
       const data = await res.json();
       if (data.users) {
+        setMonitors(data.users.filter((u:{role:string;is_active?:boolean})=>u.role==='monitor'&&u.is_active===true).map((u:{id:string;name:string;role:string})=>({id:u.id,full_name:u.name,role:u.role})));
         const teacherList = data.users
           .filter((u: any) => u.role === 'teacher' || u.role === 'principal' || u.role === 'admin')
           .map((u: any) => ({
@@ -129,6 +134,15 @@ export function useClasses() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMonitorAssignment=async(c:ClassData,monitorId:string)=>{
+    const previous=classes.find(other=>other.id!==c.id&&other.monitor_id===monitorId);
+    if((c.monitor_id||'')===monitorId)return;
+    if((c.monitor_id||previous)&&!confirm('ការចាត់ប្រធានថ្នាក់ចាស់នឹងត្រូវដកចេញ។ ចង់ផ្លាស់ប្ដូរមែនទេ?'))return;
+    if(!c.academic_year_id)return;setSavingClassId(c.id);
+    try{await assignClassMonitorAction({classId:c.id,yearId:c.academic_year_id,monitorId:monitorId||null,previousMonitorId:c.monitor_id||null,previousClassId:previous?.id||null});await fetchClasses(selectedYearId||undefined);alert('បានរក្សាទុកប្រធានថ្នាក់ដោយជោគជ័យ។');}
+    catch(error){alert(error instanceof Error?error.message:'មិនអាចចាត់ប្រធានថ្នាក់បានទេ។');await fetchClasses(selectedYearId||undefined);}finally{setSavingClassId(null);}
   };
 
   const handleDeleteClass = async (classId: string, className: string) => {
@@ -418,6 +432,8 @@ export function useClasses() {
     loading,
     classes,
     teachers,
+    monitors,
+    handleMonitorAssignment,
     academicYears,
     selectedYearId,
     isAddingClass,

@@ -1,0 +1,51 @@
+// Playwright CLI run-code file; exercises real page components with local fixture boundaries.
+// eslint-disable-next-line @typescript-eslint/no-unused-expressions -- The CLI evaluates this file as a function expression.
+async page => {
+  const check=(value,message)=>{if(!value)throw new Error(message);};
+  await page.addInitScript(()=>{globalThis.qaConfirmResult=true;globalThis.qaConfirmations=[];window.confirm=message=>{globalThis.qaConfirmations.push(message);return globalThis.qaConfirmResult;};window.alert=()=>{};});
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('http://127.0.0.1:4187/monitor/attendance');
+  await page.evaluate(()=>sessionStorage.clear());await page.reload();
+  await page.getByText('សិស្សសាកល្បង 50',{exact:true}).waitFor();
+  check(await page.getByRole('button',{name:'វត្តមាន (វ)'}).count()===50,'Full roster must load');
+  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile page must not overflow');
+  let first=page.getByRole('button',{name:'វត្តមាន (វ)'}).first();await first.click();
+  await page.getByRole('button',{name:'អត់ច្បាប់ (អ.ច)'}).click();
+  await page.getByRole('button',{name:'មកយឺត (យ)'}).click();
+  await page.getByRole('button',{name:'ច្បាប់ (ច)'}).waitFor();
+  await page.getByRole('button',{name:'វត្តមាន (វ)'}).first().click();
+  await page.getByRole('button',{name:'អត់ច្បាប់ (អ.ច)'}).click();
+  await page.getByRole('button',{name:'វត្តមាន (វ)'}).first().click();
+  const date=page.getByLabel('កាលបរិច្ឆេទវត្តមាន');const before=await date.inputValue();
+  await page.evaluate(()=>globalThis.qaConfirmResult=false);await date.fill('2026-10-01');check(await date.inputValue()===before,'Date cancellation must keep drafts');
+  check(await page.evaluate(()=>globalThis.qaConfirmations.length)===1,'Draft discard requires confirmation');
+  await page.evaluate(()=>globalThis.monitorFixture.failNext=true);
+  const submit=()=>page.getByRole('button',{name:'បញ្ជូនទៅគ្រូបន្ទុកថ្នាក់',exact:true});
+  await submit().click();check(await page.getByRole('button',{name:'កំពុងបញ្ជូន...'}).isDisabled(),'Pending submission disabled');
+  await page.getByText('បណ្ដាញដាច់។ ទិន្នន័យព្រាងនៅរក្សាទុក។',{exact:true}).waitFor();
+  check(await page.getByRole('button',{name:'ច្បាប់ (ច)'}).count()===1,'Failed save keeps permission draft');
+  await submit().click();await page.getByText('បញ្ជូនវត្តមានប្រចាំថ្ងៃទៅកាន់គ្រូដោយជោគជ័យ!',{exact:true}).waitFor();
+  check(await page.evaluate(()=>globalThis.monitorFixture.calls)===2,'Exactly two intentional submissions');
+  await page.reload();await page.getByRole('button',{name:'មកយឺត (យ)'}).waitFor();
+  await page.getByText('សិស្សសាកល្បង 50',{exact:true}).scrollIntoViewIfNeeded();
+  const last=page.getByText('សិស្សសាកល្បង 50',{exact:true});const box=await last.boundingBox();
+  check(box&&box.y+box.height<844-65,'Last row remains reachable above submit control');
+  await page.screenshot({path:'.playwright-cli/monitor-mobile.png',fullPage:false});
+  await page.goto('http://127.0.0.1:4187/monitor/missing');await page.getByText('ល្អណាស់!',{exact:true}).waitFor();
+  check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Missing screen mobile width');
+  await page.setViewportSize({width:1440,height:1000});
+  await page.goto('http://127.0.0.1:4187/admin/teachers');
+  const combo=page.getByRole('combobox',{name:'ថ្នាក់ដែលទទួលបន្ទុក Monitor One',exact:true});await combo.waitFor();
+  await page.evaluate(()=>globalThis.qaConfirmResult=false);await combo.fill('8B');await page.getByRole('option',{name:'8B · មានប្រធានថ្នាក់'}).click();check(await combo.inputValue()==='8A','Cancel replacement restores canonical value');
+  check(await page.evaluate(()=>globalThis.qaConfirmations.length)===1,'Replacement requires confirmation');
+  await page.evaluate(()=>globalThis.qaConfirmResult=true);await combo.fill('8B');await page.getByRole('option',{name:'8B · មានប្រធានថ្នាក់'}).click();
+  await page.waitForFunction(()=>globalThis.monitorFixture.assignments.length===1);
+  check(await page.evaluate(()=>globalThis.monitorFixture.assignments[0].previousClassId)==='a','Explicit reassignment carries previous class');
+  await page.screenshot({path:'.playwright-cli/monitor-admin-accounts.png',fullPage:false});
+  await page.goto('http://127.0.0.1:4187/admin/classes');
+  const monitor=page.getByRole('combobox',{name:'ប្រធានថ្នាក់ 8A',exact:true});await monitor.waitFor();await monitor.fill('Inactive');check(await page.getByRole('option',{name:/Inactive Monitor/}).count()===0,'Inactive Monitors excluded');
+  await monitor.fill('Monitor Two');await page.getByRole('option',{name:'Monitor Two · មានថ្នាក់រួចហើយ'}).click();
+  await page.waitForFunction(()=>globalThis.monitorFixture.assignments.length===1);
+  await page.screenshot({path:'.playwright-cli/monitor-admin-classes.png',fullPage:false});
+  return {mobile:'390×844; 50 students; all four statuses; network retry; reload; final row reachable; missing resolved',admin:'1440×1000; searchable assignments; replacement confirmation; ineligible accounts excluded',services:'Synthetic local fixtures only, no real Auth or Supabase HTTP'};
+}

@@ -27,6 +27,8 @@ export default function AdminClassesPage() {
     loading,
     classes,
     teachers,
+    monitors,
+    handleMonitorAssignment,
     isAddingClass,
     savingClassId,
     draftGrid,
@@ -206,12 +208,13 @@ export default function AdminClassesPage() {
                   <th className="px-4 py-2.5 text-[11px] font-black text-slate-400 uppercase tracking-wider w-[25%]">គ្រូបន្ទុកថ្នាក់ (Teacher)</th>
                   <th className="px-4 py-2.5 text-[11px] font-black text-slate-400 uppercase tracking-wider w-[15%]">បន្ទប់ (Room)</th>
                   <th className="px-4 py-2.5 text-[11px] font-black text-slate-400 uppercase tracking-wider w-12 text-right"></th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 min-w-[180px]">ប្រធានថ្នាក់ (Monitor)</th>
                 </tr>
               </thead>
               <tbody onPaste={handlePaste}>
                 {filteredClasses.length === 0 && draftGrid.every(d => !d.name) && (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-slate-400 font-semibold text-sm">
+                    <td colSpan={7} className="text-center py-8 text-slate-400 font-semibold text-sm">
                       សូមវាយឈ្មោះថ្នាក់នៅខាងក្រោម ឬទាញទិន្នន័យចូលតាម Excel (Paste)
                     </td>
                   </tr>
@@ -298,6 +301,7 @@ export default function AdminClassesPage() {
                           </button>
                         </div>
                       </td>
+                    <td className="px-4 py-1.5 border-y border-slate-100 text-left"><TeacherCombobox allowClear fallbackLabel="គណនីត្រូវបានផ្អាក" label={`ប្រធានថ្នាក់ ${c.name}`} placeholder="ស្វែងរកប្រធានថ្នាក់..." teachers={monitors.map(m=>({...m,full_name:m.full_name+(classes.some(other=>other.id!==c.id&&other.monitor_id===m.id)?' · មានថ្នាក់រួចហើយ':'' )}))} value={c.monitor_id||null} disabled={savingClassId===c.id} onChange={id=>void handleMonitorAssignment(c,id)}/>{c.monitor_id&&!monitors.some(m=>m.id===c.monitor_id)&&<span className="text-[10px] text-amber-600">គណនីត្រូវបានផ្អាក · អាចដកការចាត់ថ្នាក់ចេញ</span>}</td>
                     </tr>
                   ))}
                   
@@ -376,7 +380,8 @@ export default function AdminClassesPage() {
                         </td>
                         <td className="px-4 py-1.5 text-right rounded-r-xl border-y border-r border-slate-200 border-dashed">
                         </td>
-                      </tr>
+                      <td className="px-4 text-xs text-slate-400">កំណត់ក្រោយបង្កើតថ្នាក់</td>
+                    </tr>
                     );
                   })}
                 </tbody>

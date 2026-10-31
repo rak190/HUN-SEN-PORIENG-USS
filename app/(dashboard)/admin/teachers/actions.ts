@@ -1,217 +1,74 @@
 'use server';
-
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 import { getServerAuth } from '@/lib/auth-server';
-import crypto from 'crypto';
-
-export async function toggleStaffStatusAction(userId: string, targetStatus: boolean) {
-  const { user, role } = await getServerAuth();
-  if (!user || role !== 'admin') {
-    throw new Error('Unauthorized. Only admins can modify staff status.');
-  }
-
-  if (user.id === userId) {
-    throw new Error('អ្នកមិនអាចបិទគណនីខ្លួនឯងបានទេ (Cannot deactivate your own account).');
-  }
-
-  const supabase = createAdminClient();
-  if (!supabase) throw new Error('Database unavailable');
-
-  // 1. Update profiles table
-  const { error: profileError } = await supabase
-    .from('profiles')
-    .update({ is_active: targetStatus })
-    .eq('id', userId);
-
-  if (profileError) {
-    throw new Error('បរាជ័យក្នុងការធ្វើបច្ចុប្បន្នភាពទម្រង់ (Failed to update profile)');
-  }
-
-  // 2. Update Supabase Auth ban duration
-  // If targetStatus is true (active), unban (none). If false (inactive), ban for 100 years.
-  const { error: authError } = await supabase.auth.admin.updateUserById(userId, {
-    ban_duration: targetStatus ? 'none' : '876000h'
-  });
-
-  if (authError) {
-    throw new Error('បរាជ័យក្នុងការធ្វើបច្ចុប្បន្នភាពសិទ្ធិចូលប្រើ (Failed to update auth status)');
-  }
-
-  // 3. Log audit event
-  await supabase.from('audit_logs').insert([{
-    action: targetStatus ? 'បានបើកដំណើរការគណនីបុគ្គលិកឡើងវិញ (Reactivated Staff)' : 'បានបិទដំណើរការគណនីបុគ្គលិក (Deactivated Staff)',
-    type: targetStatus ? 'info' : 'warning',
-    user_id: user.id
-  }]);
-
-  return { success: true };
+import { z } from 'zod';
+import crypto from 'node:crypto';
+async function managedStaff(userId:string){
+  z.uuid().parse(userId);
+  const {user,profile,role}=await getServerAuth();
+  if(!user || role!=='admin' || profile?.is_active!==true || !profile.school_id)throw new Error('មិនមានសិទ្ធិគ្រប់គ្រងគណនីទេ។');
+  const admin=createAdminClient(),session=await createClient();
+  const {data:target,error}=await admin.from('profiles').select('id,role,is_active,school_id').eq('id',userId).eq('school_id',profile.school_id).single();
+  if(error||!target)throw new Error('គណនីមិនមានក្នុងសាលានេះទេ។');
+  return{user,profile,admin,session,target};
 }
-
-export async function deleteStaffPermanentlyAction(userId: string) {
-  const { user, role } = await getServerAuth();
-  if (!user || role !== 'admin') {
-    throw new Error('Unauthorized. Only admins can delete staff.');
+export async function toggleStaffStatusAction(userId:string,targetStatus:boolean){
+  z.boolean().parse(targetStatus);
+  const {user,profile,admin,session,target}=await managedStaff(userId);
+  if(user.id===userId)throw new Error('មិនអាចផ្អាកគណនីខ្លួនឯងបានទេ។');
+  const {error}=await session.from('profiles').update({is_active:targetStatus}).eq('id',userId).eq('school_id',profile.school_id);
+  if(error)throw new Error('មិនអាចកែស្ថានភាពគណនីបានទេ។');
+  const auth=await admin.auth.admin.updateUserById(userId,{ban_duration:targetStatus?'none':'876000h'});
+  if(auth.error){
+    // Compensate the profile update, and report failure instead of a false success.
+    const rollback=await session.from('profiles').update({is_active:target.is_active}).eq('id',userId);
+    if(rollback.error)throw new Error('គណនីត្រូវការអ្នកគ្រប់គ្រងពិនិត្យស្ថានភាពឡើងវិញ។');
+    throw new Error('មិនអាចកែសិទ្ធិចូលប្រើបានទេ។ សូមសាកម្ដងទៀត។');
   }
-
-  if (user.id === userId) {
-    throw new Error('អ្នកមិនអាចលុបគណនីខ្លួនឯងបានទេ (Cannot delete your own account).');
-  }
-
-  const supabase = createAdminClient();
-  if (!supabase) throw new Error('Database unavailable');
-
-  // 1. Guard against deleting the last active administrator
-  const { data: targetProfile } = await supabase
-    .from('profiles')
-    .select('role, school_id')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (targetProfile?.role === 'admin') {
-    let adminCountQuery = supabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'admin')
-      .eq('is_active', true);
-
-    if (targetProfile.school_id) {
-      adminCountQuery = adminCountQuery.eq('school_id', targetProfile.school_id);
-    }
-    const { count: adminCount } = await adminCountQuery;
-    if ((adminCount || 0) <= 1) {
-      throw new Error('មិនអាចលុបអ្នកគ្រប់គ្រងចុងក្រោយបានទេ (Cannot delete the last active administrator).');
-    }
-  }
-
-  // 2. Relational Pre-Checks (Protect historical data integrity)
-  const { count: classesCount } = await supabase
-    .from('classes')
-    .select('*', { count: 'exact', head: true })
-    .eq('teacher_id', userId);
-
-  const { count: attendanceCount } = await supabase
-    .from('attendance_records')
-    .select('*', { count: 'exact', head: true })
-    .eq('recorded_by', userId);
-
-  const { data: teacherClasses } = await supabase
-    .from('classes')
-    .select('id')
-    .eq('teacher_id', userId);
-
-  const teacherClassIds = (teacherClasses || []).map(c => c.id);
-  let gradesCount = 0;
-  if (teacherClassIds.length > 0) {
-    const { count } = await supabase
-      .from('grades')
-      .select('*', { count: 'exact', head: true })
-      .in('class_id', teacherClassIds);
-    gradesCount = count || 0;
-  }
-
-  const { count: snapshotsCount } = await supabase
-    .from('grade_snapshots')
-    .select('*', { count: 'exact', head: true })
-    .eq('created_by', userId);
-
-  const { count: activityCount } = await supabase
-    .from('activity_logs')
-    .select('*', { count: 'exact', head: true })
-    .eq('created_by', userId);
-
-  if (
-    (classesCount && classesCount > 0) || 
-    (attendanceCount && attendanceCount > 0) || 
-    gradesCount > 0 ||
-    (snapshotsCount && snapshotsCount > 0) ||
-    (activityCount && activityCount > 0)
-  ) {
-    throw new Error("មិនអាចលុបគណនីនេះជាអចិន្ត្រៃយ៍បានទេ ព្រោះលោកគ្រូ/អ្នកគ្រូមានប្រវត្តិបង្រៀន និងបញ្ចូលទិន្នន័យក្នុងប្រព័ន្ធរួចហើយ។ សូមប្រើមុខងារ 'បិទដំណើរការ (Deactivate)' ជំនួសវិញ ដើម្បីការពារទិន្នន័យប្រវត្តិសាស្ត្រ។");
-  }
-
-  // 2. Safe Atomic Deletion
-  const { error: profileError } = await supabase.from('profiles').delete().eq('id', userId);
-  if (profileError) {
-    throw new Error('បរាជ័យក្នុងការលុបទម្រង់ (Failed to delete profile)');
-  }
-
-  const { error: authError } = await supabase.auth.admin.deleteUser(userId);
-  if (authError) {
-    throw new Error('បរាជ័យក្នុងការលុបគណនី Auth (Failed to delete auth user): ' + authError.message);
-  }
-
-  // 3. Log audit event
-  await supabase.from('audit_logs').insert([{
-    action: 'បានលុបគណនីបុគ្គលិកជាអចិន្ត្រៃយ៍ (Deleted Staff Account Permanently)',
-    type: 'error',
-    user_id: user.id
-  }]);
-
-  return { success: true };
+  await admin.from('audit_logs').insert({user_id:user.id,school_id:profile.school_id,action:'STAFF_STATUS_CHANGED',type:'info',details:{profile_id:userId,is_active:targetStatus}});
+  return{success:true};
 }
-
-export async function resetStaffPasswordAction(userId: string, explicitPassword?: string) {
-  const { user, role } = await getServerAuth();
-  if (!user || role !== 'admin') {
-    throw new Error('Unauthorized. Only admins can reset passwords.');
-  }
-
-  const supabase = createAdminClient();
-  if (!supabase) throw new Error('Database unavailable');
-
-  const newPassword = explicitPassword || crypto.randomBytes(4).toString('hex'); // 8 char hex
-
-  const { error } = await supabase.auth.admin.updateUserById(userId, {
-    password: newPassword
-  });
-
-  if (error) {
-    throw new Error('បរាជ័យក្នុងការកំណត់ពាក្យសម្ងាត់ថ្មី (Failed to reset password)');
-  }
-
-  await supabase.from('audit_logs').insert([{
-    action: 'បានកំណត់ពាក្យសម្ងាត់បុគ្គលិកឡើងវិញ (Reset Staff Password)',
-    type: 'warning',
-    user_id: user.id
-  }]);
-
-  return { success: true, newPassword };
+export async function resetStaffPasswordAction(userId:string,explicitPassword?:string){
+  const {user,profile,admin}=await managedStaff(userId);
+  const newPassword=explicitPassword?z.string().min(6).parse(explicitPassword):crypto.randomBytes(4).toString('hex');
+  const {error}=await admin.auth.admin.updateUserById(userId,{password:newPassword});
+  if(error)throw new Error('មិនអាចកំណត់ពាក្យសម្ងាត់ថ្មីបានទេ។');
+  await admin.from('audit_logs').insert({user_id:user.id,school_id:profile.school_id,action:'STAFF_PASSWORD_RESET',type:'info',details:{profile_id:userId}});
+  return{success:true,newPassword};
 }
-
-export async function updateStaffProfileAction(userId: string, updates: { role?: string, subject?: string, phone?: string, full_name?: string }) {
-  const { user, role } = await getServerAuth();
-  if (!user || role !== 'admin') {
-    throw new Error('Unauthorized. Only admins can update profiles.');
+export async function updateStaffProfileAction(userId:string,updates:{role?:string;subject?:string;phone?:string;full_name?:string}){
+  const {user,profile,session,admin}=await managedStaff(userId);
+  const value=z.object({role:z.enum(['teacher','principal','admin','monitor']).optional(),subject:z.string().max(200).optional(),phone:z.string().max(80).optional(),full_name:z.string().trim().min(1).max(200).optional()}).strict().parse(updates);
+  if(user.id===userId&&value.role&&value.role!=='admin')throw new Error('មិនអាចទម្លាក់តួនាទីខ្លួនឯងបានទេ។');
+  const {error}=await session.from('profiles').update(value).eq('id',userId).eq('school_id',profile.school_id);
+  if(error)throw new Error(error.code==='23514'?'សូមដកការចាត់ថ្នាក់របស់ប្រធានថ្នាក់ជាមុនសិន។':'មិនអាចកែព័ត៌មានគណនីបានទេ។');
+  await admin.from('audit_logs').insert({user_id:user.id,school_id:profile.school_id,action:'STAFF_PROFILE_UPDATED',type:'info',details:{profile_id:userId,fields:Object.keys(value)}});
+  return{success:true};
+}
+export async function deleteStaffPermanentlyAction(userId:string){
+  const {user,profile,admin,target}=await managedStaff(userId);
+  if(user.id===userId)throw new Error('មិនអាចលុបគណនីខ្លួនឯងបានទេ។');
+  if(target.role==='admin'){
+    const {count,error}=await admin.from('profiles').select('id',{count:'exact',head:true}).eq('school_id',profile.school_id).eq('role','admin').eq('is_active',true);
+    if(error || (count||0)<=1)throw new Error('មិនអាចលុបអ្នកគ្រប់គ្រងចុងក្រោយបានទេ។');
   }
-
-  if (updates.role && user.id === userId && updates.role !== 'admin') {
-    throw new Error('អ្នកមិនអាចទម្លាក់តួនាទីខ្លួនឯងបានទេ (Cannot demote your own admin account).');
-  }
-
-  if (updates.role) {
-    const validRoles = ['teacher', 'principal', 'admin', 'staff', 'monitor'];
-    if (!validRoles.includes(updates.role)) {
-      throw new Error('តួនាទីមិនត្រឹមត្រូវ (Invalid role)');
-    }
-  }
-
-  const supabase = createAdminClient();
-  if (!supabase) throw new Error('Database unavailable');
-
-  const { error } = await supabase
-    .from('profiles')
-    .update(updates)
-    .eq('id', userId);
-
-  if (error) {
-    throw new Error('បរាជ័យក្នុងការកែប្រែព័ត៌មាន (Failed to update profile)');
-  }
-
-  await supabase.from('audit_logs').insert([{
-    action: `បានផ្លាស់ប្តូរព័ត៌មានគណនីបុគ្គលិក (Updated Staff Profile)`,
-    type: 'info',
-    user_id: user.id
-  }]);
-
-  return { success: true };
+  const taught=await admin.from('classes').select('id').eq('teacher_id',userId);
+  if(taught.error)throw new Error('មិនអាចផ្ទៀងផ្ទាត់ប្រវត្តិថ្នាក់បានទេ។');
+  const classIds=(taught.data||[]).map(c=>c.id);
+  const grades=classIds.length?await admin.from('grades').select('id',{count:'exact',head:true}).in('class_id',classIds):{count:0,error:null};
+  if(grades.error || (grades.count||0)>0)throw new Error('គណនីនេះមានប្រវត្តិពិន្ទុ។ សូមផ្អាកគណនីជំនួសការលុប។');
+  const checks=await Promise.all([
+    admin.from('classes').select('id',{count:'exact',head:true}).or(`teacher_id.eq.${userId},monitor_id.eq.${userId}`),
+    admin.from('attendance_records').select('id',{count:'exact',head:true}).eq('recorded_by',userId),
+    admin.from('grade_snapshots').select('id',{count:'exact',head:true}).eq('created_by',userId),
+    admin.from('activity_logs').select('id',{count:'exact',head:true}).eq('created_by',userId),
+  ]);
+  if(checks.some(check=>check.error))throw new Error('មិនអាចផ្ទៀងផ្ទាត់ប្រវត្តិគណនីបានទេ។');
+  if(checks.some(check=>(check.count||0)>0))throw new Error('គណនីនេះមានថ្នាក់ ឬប្រវត្តិទិន្នន័យ។ សូមផ្អាកគណនីជំនួសការលុប។');
+  // Auth deletion cascades its profile in one database transaction; never delete the profile first.
+  const {error}=await admin.auth.admin.deleteUser(userId);
+  if(error)throw new Error('មិនអាចលុបគណនីបានទេ។ ទិន្នន័យនៅរក្សាទុក។');
+  await admin.from('audit_logs').insert({user_id:user.id,school_id:profile.school_id,action:'STAFF_ACCOUNT_DELETED',type:'info',details:{profile_id:userId}});
+  return{success:true};
 }

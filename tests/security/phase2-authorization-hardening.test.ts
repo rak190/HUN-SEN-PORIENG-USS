@@ -11,7 +11,6 @@ test('Phase 2: Authorization & Security Hardening Test Suite', async (t) => {
   const principalActionsPath = path.join(rootDir, 'app', '(dashboard)', 'principal', 'actions.ts');
   const masterScoresActionsPath = path.join(rootDir, 'app', '(dashboard)', 'admin', 'master-scores', 'actions.ts');
   const homeroomActionsPath = path.join(rootDir, 'app', '(dashboard)', 'homeroom', 'actions.ts');
-  const teachersActionsPath = path.join(rootDir, 'app', '(dashboard)', 'admin', 'teachers', 'actions.ts');
   const telegramWebhookPath = path.join(rootDir, 'app', 'api', 'telegram', 'webhook', 'route.ts');
   const verifySudoPath = path.join(rootDir, 'app', 'api', 'auth', 'verify-sudo', 'route.ts');
 
@@ -142,39 +141,12 @@ test('Phase 2: Authorization & Security Hardening Test Suite', async (t) => {
   // --------------------------------------------------------------------------
   // Scenario 6: Relational Integrity & Last Admin Protection in Staff Deletion
   // --------------------------------------------------------------------------
-  await t.test('Scenario 6: deleteStaffPermanentlyAction checks all relational foreign key tables and protects last admin', () => {
-    assert.ok(fs.existsSync(teachersActionsPath), 'Teachers actions file must exist');
-    const content = fs.readFileSync(teachersActionsPath, 'utf8');
-
-    // 1. Last active administrator protection
-    assert.ok(
-      content.includes('targetProfile?.role === \'admin\'') &&
-      content.includes('Cannot delete the last active administrator'),
-      'deleteStaffPermanentlyAction must protect the last active administrator from deletion'
-    );
-
-    // 2. Attendance records check by recorded_by
-    assert.ok(
-      content.includes('.from(\'attendance_records\')') &&
-      content.includes('.eq(\'recorded_by\', userId)'),
-      'deleteStaffPermanentlyAction must check attendance_records using recorded_by column'
-    );
-
-    // 3. Grades check via teacher classes
-    assert.ok(
-      content.includes('.from(\'classes\')') &&
-      content.includes('.eq(\'teacher_id\', userId)') &&
-      content.includes('.from(\'grades\')') &&
-      content.includes('.in(\'class_id\', teacherClassIds)'),
-      'deleteStaffPermanentlyAction must check grades across all classes taught by this teacher'
-    );
-
-    // 4. Snapshots & Activity logs check
-    assert.ok(
-      content.includes('.from(\'grade_snapshots\')') &&
-      content.includes('.from(\'activity_logs\')'),
-      'deleteStaffPermanentlyAction must check grade_snapshots and activity_logs created by the user'
-    );
+  await t.test('Scenario 6: staff deletion and password reset reject unauthenticated callers',async()=>{
+    const {deleteStaffPermanentlyAction,resetStaffPasswordAction}=await import('../../app/(dashboard)/admin/teachers/actions');
+    const target='00000000-0000-4000-8000-000000000003';
+    await assert.rejects(deleteStaffPermanentlyAction(target));
+    await assert.rejects(resetStaffPasswordAction(target));
+    // Last-admin, historical data and school-boundary behavior is in staff-account-lifecycle.test.ts.
   });
 
   // --------------------------------------------------------------------------

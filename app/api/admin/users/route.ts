@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getServerAuth } from '@/lib/auth-server';
 import crypto from 'crypto';
-import { UserCreateSchema } from '@/lib/validations/schemas';
+import { createClient } from '@/lib/supabase/server';
+import { provisionSchoolAccount } from '@/lib/accounts/provision-school-account';
+import { toggleStaffStatusAction,resetStaffPasswordAction,updateStaffProfileAction,deleteStaffPermanentlyAction } from '@/app/(dashboard)/admin/teachers/actions';
+import { UserRoleSchema } from '@/lib/validations/schemas';
 
 const generatePin = () => crypto.randomInt(100000, 999999).toString();
 
@@ -13,7 +16,7 @@ const getRoleKh = (role: string) => {
 export async function GET() {
   const { user, role, profile } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || !profile?.is_active || !profile.school_id || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
   }
 
@@ -30,7 +33,7 @@ export async function GET() {
       .order('created_at', { ascending: false })
       .limit(500);
       
-    if (role === 'principal' && profile?.school_id) {
+    if (profile?.school_id) {
       query = query.eq('school_id', profile.school_id);
     }
 
@@ -48,10 +51,16 @@ export async function GET() {
       console.warn('Failed to fetch auth list, continuing with profiles:', authErr);
     }
 
+    const {data: years,error:yearError}=await adminClient.from('academic_years').select('id').eq('school_id',profile.school_id).eq('is_active',true).eq('status','active');
+    if(yearError)throw yearError;
+    const {data: monitorClasses,error:assignmentError}=await adminClient.from('classes').select('id,name,monitor_id,academic_year_id').eq('school_id',profile.school_id).eq('is_archived',false).in('academic_year_id',(years||[]).map(y=>y.id));
+    if(assignmentError)throw assignmentError;
     const mappedUsers = (profiles || []).map(p => {
       const authUser = authUserMap.get(p.id);
       return {
         id: p.id,
+        is_active:p.is_active,
+        monitor_classes:(monitorClasses||[]).filter(c=>c.monitor_id===p.id),
         username: p.username || p.full_name,
         name: p.full_name || p.username,
         full_name: p.full_name || p.username,
@@ -66,156 +75,28 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ isDemo: false, users: mappedUsers });
+    return NextResponse.json({ isDemo: false, users: mappedUsers, monitorClasses:monitorClasses||[] });
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || 'Failed to fetch users' }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
-  const { user, role, profile } = await getServerAuth();
-
-  if (!user || (role !== 'admin' && role !== 'principal')) {
-    return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
-  }
-
-  const adminClient = createAdminClient();
-  const body = await req.json();
-  
-  let usersToCreate = [];
-  if (Array.isArray(body.users)) {
-    usersToCreate = body.users;
-  } else if (body.username && body.fullName) {
-    usersToCreate = [body];
-  } else {
-    return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
-  }
-
-  if (!adminClient) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
-  }
-
-  const createdUsers = [];
-  const errors = [];
-
-  for (const rawUser of usersToCreate) {
-    try {
-      const validationResult = UserCreateSchema.safeParse(rawUser);
-      if (!validationResult.success) {
-        errors.push({ username: rawUser.username || 'មិនស្គាល់', error: validationResult.error.issues[0].message });
-        continue;
-      }
-
-      const u = validationResult.data;
-      const cleanUsername = u.username.trim().toLowerCase();
-      
-      // Phase 2: Role Hierarchy Check
-      if (u.role === 'admin' && role !== 'admin') {
-        errors.push({ username: u.username, error: 'នាយកសាលាមិនអាចបង្កើតគណនីអ្នកគ្រប់គ្រង (Admin) បានទេ។' });
-        continue;
-      }
-
-      // Phase 3: Validate uniqueness before provisioning
-      const { data: existingProfile } = await adminClient
-        .from('profiles')
-        .select('id')
-        .eq('username', cleanUsername)
-        .maybeSingle();
-        
-      if (existingProfile) {
-        errors.push({ username: u.username, error: 'ឈ្មោះគណនីមានរួចហើយ (Username taken)' });
-        continue;
-      }
-
-      // Resolve school UUID from code (or enforce Principal's school)
-      let resolvedSchoolId = null;
-      let resolvedSchoolCode = null;
-
-      if (role === 'principal' && profile?.school_id) {
-        resolvedSchoolId = profile.school_id;
-        resolvedSchoolCode = profile.school_code || 'Porieng-2026';
-      } else {
-        const { data: schoolObj } = await adminClient
-          .from('schools')
-          .select('id, code')
-          .eq('code', u.schoolCode || 'Porieng-2026')
-          .maybeSingle();
-
-        if (!schoolObj) {
-          errors.push({ username: u.username, error: 'លេខកូដសាលាមិនត្រឹមត្រូវ (Invalid school code)' });
-          continue;
-        }
-        resolvedSchoolId = schoolObj.id;
-        resolvedSchoolCode = schoolObj.code;
-      }
-
-      const email = `${cleanUsername}@kruai.app`;
-      const generatedPassword = u.password?.trim() || generatePin();
-      const newUserId = crypto.randomUUID();
-      
-      const { data: authCreated, error: createErr } = await adminClient.auth.admin.createUser({
-        id: newUserId,
-        email,
-        password: generatedPassword,
-        email_confirm: true,
-        user_metadata: { full_name: u.fullName.trim(), role: u.role || 'teacher' },
-      });
-
-      if (createErr || !authCreated?.user) {
-        const safeError = createErr?.message?.includes('password')
-          ? 'ពាក្យសម្ងាត់ខ្សោយពេក ឬមិនត្រឹមត្រូវ (Weak password)'
-          : createErr?.message || 'មានបញ្ហាក្នុងការបង្កើតគណនី (Auth Error)';
-        errors.push({ username: u.username, error: safeError });
-        continue;
-      }
-      
-      const authUserId = authCreated.user.id;
-
-      const { error: insertProfileErr } = await adminClient.from('profiles').insert([{
-        id: authUserId,
-        username: cleanUsername,
-        full_name: u.fullName.trim(),
-        role: u.role || 'teacher',
-        school_id: resolvedSchoolId,
-        school_code: resolvedSchoolCode,
-        phone: u.phone || null,
-        subject: u.subject || null,
-        is_archived: false,
-      }]);
-
-      if (insertProfileErr) {
-        // Rollback Auth user creation
-        await adminClient.auth.admin.deleteUser(authUserId);
-        errors.push({ username: u.username, error: 'បរាជ័យក្នុងការរក្សាទុកទិន្នន័យទៅកាន់ Database (Profile error)' });
-        continue;
-      }
-
-      createdUsers.push({
-        id: authUserId,
-        username: cleanUsername,
-        name: u.fullName.trim(),
-        role: u.role || 'teacher',
-        roleKh: getRoleKh(u.role || 'teacher'),
-        school: u.schoolCode || 'Porieng-2026',
-        status: 'សកម្ម',
-        lastLogin: 'មិនធ្លាប់',
-        phone: u.phone || '',
-        subject: u.subject || '',
-        created_at: new Date().toISOString(),
-        tempPassword: !u.password?.trim() ? generatedPassword : null
-      });
-    } catch (err: any) {
-      errors.push({ username: rawUser.username || 'មិនស្គាល់', error: err.message });
-    }
-  }
-
-  return NextResponse.json({ isDemo: false, users: createdUsers, errors });
+  const {user,role,profile}=await getServerAuth();
+  if(!user || !profile?.is_active || !profile.school_id || !role || !['admin','principal'].includes(role)) return NextResponse.json({error:'មិនមានសិទ្ធិគ្រប់គ្រងគណនីទេ។'},{status:403});
+  try {
+    const body=await req.json(); const rows=Array.isArray(body.users)?body.users:[body];
+    if(!rows.length || rows.length>50)return NextResponse.json({error:'សូមបញ្ចូលពី 1 ដល់ 50 គណនី។'},{status:400});
+    const admin=createAdminClient(), session=await createClient(); const users=[], errors=[];
+    for(const raw of rows){try{const account=await provisionSchoolAccount(raw,admin,session,profile.school_id,role);users.push({...account,roleKh:getRoleKh(account.role)});}catch(error){errors.push({username:typeof raw?.username==='string'?raw.username:'—',error:error instanceof Error?error.message:'មិនអាចបង្កើតគណនីបានទេ។'});}}
+    return NextResponse.json({isDemo:false,users,errors,successCount:users.length,failCount:errors.length});
+  }catch{return NextResponse.json({error:'មិនអាចដំណើរការបញ្ជីគណនីបានទេ។'},{status:500});}
 }
 
 export async function PATCH(req: Request) {
-  const { user, role } = await getServerAuth();
+  const { user, role, profile } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || !profile?.is_active || !profile.school_id || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -228,8 +109,14 @@ export async function PATCH(req: Request) {
   if (!id) return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
 
   try {
-    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active').eq('id', id).single();
+    if(role==='admin'){
+      if(action==='toggle_status')return NextResponse.json(await toggleStaffStatusAction(id,updates?.status!=='បានផ្អាក'));
+      if(action==='reset_password')return NextResponse.json(await resetStaffPasswordAction(id));
+      if(action==='update_profile'&&!updates?.username)return NextResponse.json(await updateStaffProfileAction(id,{role:updates?.role,full_name:updates?.name,subject:updates?.subject,phone:updates?.phone}));
+    }
+    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active, school_id').eq('id', id).eq('school_id',profile.school_id).single();
     
+    if (!targetProfile) return NextResponse.json({error:'គណនីមិនមានក្នុងសាលានេះទេ។'},{status:403});
     if (targetProfile?.role === 'admin' && role !== 'admin') {
       return NextResponse.json({ error: 'Principal cannot modify an admin account.' }, { status: 403 });
     }
@@ -237,7 +124,7 @@ export async function PATCH(req: Request) {
     if (action === 'toggle_status') {
       const { status } = updates;
       
-      if (targetProfile?.role === 'admin' && status === 'បានផ្អាក') {
+    if (targetProfile?.role === 'admin' && status === 'បានផ្អាក') {
         const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin').eq('is_active', true);
         if (count !== null && count <= 1) {
           return NextResponse.json({ error: 'Cannot suspend the last active admin.' }, { status: 400 });
@@ -248,7 +135,7 @@ export async function PATCH(req: Request) {
         const banDuration = status === 'បានផ្អាក' ? '876000h' : 'none';
         const { error: banErr } = await adminClient.auth.admin.updateUserById(id, { ban_duration: banDuration });
         if (banErr) throw banErr;
-        const { error: updErr } = await adminClient.from('profiles').update({ is_active: status !== 'បានផ្អាក' }).eq('id', id);
+        const { error: updErr } = await (await createClient()).from('profiles').update({ is_active: status !== 'បានផ្អាក' }).eq('id', id);
         if (updErr) throw updErr;
       } catch (err: any) {
         return NextResponse.json({ error: err.message || 'Failed to toggle status' }, { status: 500 });
@@ -269,13 +156,14 @@ export async function PATCH(req: Request) {
 
     if (action === 'update_profile') {
       const { name, role: newRole, username, phone, subject } = updates;
+      if(newRole)UserRoleSchema.parse(newRole);
       const profileUpdates: Record<string, unknown> = {};
       
       if (newRole === 'admin' && role !== 'admin') {
         return NextResponse.json({ error: 'Principal cannot assign admin role.' }, { status: 403 });
       }
 
-      if (targetProfile?.role === 'admin' && newRole && newRole !== 'admin') {
+    if (targetProfile?.role === 'admin' && newRole && newRole !== 'admin') {
         const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin').eq('is_active', true);
         if (count !== null && count <= 1) {
           return NextResponse.json({ error: 'Cannot demote the last active admin.' }, { status: 400 });
@@ -298,7 +186,7 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ error: err.message || 'Failed to update auth metadata' }, { status: 500 });
       }
 
-      const { error: profileErr } = await adminClient.from('profiles').update(profileUpdates).eq('id', id);
+      const { error: profileErr } = await (await createClient()).from('profiles').update(profileUpdates).eq('id', id).eq('school_id',profile.school_id);
       if (profileErr) throw profileErr;
       
       return NextResponse.json({ success: true });
@@ -310,52 +198,9 @@ export async function PATCH(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
-  const { user, role } = await getServerAuth();
-
-  if (!user || role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
-  }
-
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get('id');
-
-  if (!id) return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
-
-  const adminClient = createAdminClient();
-  if (!adminClient) return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
-
-  try {
-    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active').eq('id', id).single();
-    
-    if (targetProfile?.role === 'admin' && role !== 'admin') {
-      return NextResponse.json({ error: 'Principal cannot delete an admin account.' }, { status: 403 });
-    }
-
-    if (targetProfile?.role === 'admin') {
-      const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
-      if (count !== null && count <= 1) {
-        return NextResponse.json({ error: 'Cannot delete the last admin account.' }, { status: 400 });
-      }
-    }
-
-    // Delete profile
-    await adminClient.from('profiles').delete().eq('id', id);
-    try {
-      await adminClient.auth.admin.deleteUser(id);
-    } catch (_) {}
-    
-    // Log the deletion
-    await adminClient.from('audit_logs').insert([
-      {
-        action: `បានលុបគណនីលេខសម្គាល់ ${id}`,
-        type: 'warn',
-        user_id: user.id,
-      }
-    ]);
-    
-    return NextResponse.json({ success: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
+export async function DELETE(req:Request){
+  const id=new URL(req.url).searchParams.get('id');
+  if(!id)return NextResponse.json({error:'លេខសម្គាល់គណនីត្រូវបានទាមទារ។'},{status:400});
+  try{await deleteStaffPermanentlyAction(id);return NextResponse.json({success:true});}
+  catch(error){return NextResponse.json({error:error instanceof Error?error.message:'មិនអាចលុបគណនីបានទេ។'},{status:403});}
 }

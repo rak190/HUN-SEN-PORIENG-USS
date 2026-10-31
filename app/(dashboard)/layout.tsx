@@ -5,18 +5,21 @@ import Sidebar from '@/components/layout/Sidebar';
 import { useAuth } from '@/lib/auth-context';
 import { AlertCircle, RefreshCw, LogOut, Menu } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { authStatus, authError, retryAuth, logout } = useAuth();
+  const { authStatus, authError, retryAuth, logout, profile } = useAuth();
   const [leftMenuOpen, setLeftMenuOpen] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (authStatus === 'unauthenticated') {
       router.replace('/login');
+    } else if (authStatus === 'authenticated' && profile?.role === 'monitor' && pathname && !pathname.startsWith('/monitor/')) {
+      router.replace('/monitor/attendance');
     }
-  }, [authStatus, router]);
+  }, [authStatus, router, profile?.role, pathname]);
 
   // 1. Initial Loading Splash Screen
   if (authStatus === 'loading') {

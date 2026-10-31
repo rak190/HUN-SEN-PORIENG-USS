@@ -13,6 +13,7 @@ interface AuthContextType {
   activeClass: Classroom | null;
   activeAcademicYear: AcademicYear | null;
   classes: Classroom[];
+  classesLoading: boolean;
   loading: boolean;
   authStatus: AuthStatus;
   authError: string | null;
@@ -30,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [classes, setClasses] = useState<Classroom[]>([]);
+  const [classesLoading,setClassesLoading]=useState(false);
   const [activeClass, setActiveClass] = useState<Classroom | null>(null);
   const [activeAcademicYear, setActiveAcademicYear] = useState<AcademicYear | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
@@ -43,82 +45,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
 
   // Helper to fetch and refresh classes scoped strictly by role, school, and active year
-  async function refreshClassesForUser(userId: string, userRole?: string, userSchoolId?: string) {
+  async function refreshClassesForUser(userId:string,userRole?:string,userSchoolId?:string,seq=authSeqRef.current) {
+    if(seq===authSeqRef.current)setClassesLoading(true);
+    const clear=()=>{if(seq===authSeqRef.current){setClasses([]);setActiveClass(null);setClassesLoading(false);}};
+    if(!userSchoolId || !userRole || !['teacher','monitor','principal','admin'].includes(userRole)){clear();return;}
     try {
-      // Resolve active academic year ID defensively if not already set
-      let yearId = activeAcademicYear?.id;
-      if (!yearId) {
-        const { data: actYear } = await supabase
-          .from('academic_years')
-          .select('id')
-          .eq('is_active', true)
-          .maybeSingle();
-        if (actYear) yearId = actYear.id;
-      }
-
-      // 1. Try to find classes assigned to this teacher or monitor
-      let assignedQuery = supabase
-        .from('classes')
-        .select('*')
-        .or(`teacher_id.eq.${userId},monitor_id.eq.${userId}`)
-        .eq('is_archived', false)
-        .order('name');
-
-      if (yearId) {
-        assignedQuery = assignedQuery.eq('academic_year_id', yearId);
-      }
-
-      const { data: assignedClasses } = await assignedQuery;
-
-      if (assignedClasses && assignedClasses.length > 0) {
-        setClasses(assignedClasses as Classroom[]);
-        setActiveClass(prev => (prev && assignedClasses.some(c => c.id === prev.id)) ? prev : assignedClasses[0] as Classroom);
-        return;
-      }
-
-      // If the user is explicitly a teacher, do not fallback to fetching all classes
-      // This prevents unassigned teachers from seeing other teachers' classes
-      if (userRole === 'teacher') {
-        setClasses([]);
-        setActiveClass(null);
-        return;
-      }
-
-      // If the user is explicitly a monitor, do not fallback to fetching all classes
-      // This prevents unassigned monitors from seeing other classes
-      if (userRole === 'monitor') {
-        setClasses([]);
-        setActiveClass(null);
-        return;
-      }
-
-      // 2. If no classes assigned to this user (e.g. Admin or Principal), fetch classes scoped to school and active year
-      let query = supabase
-        .from('classes')
-        .select('*')
-        .eq('is_archived', false)
-        .order('name');
-
-      if (yearId) {
-        query = query.eq('academic_year_id', yearId);
-      }
-
-      const targetSchool = userSchoolId || profileRef.current?.school_id;
-      if (targetSchool) {
-        query = query.eq('school_id', targetSchool);
-      }
-
-      const { data: allClasses } = await query;
-
-      if (allClasses && allClasses.length > 0) {
-        setClasses(allClasses as Classroom[]);
-        setActiveClass(prev => (prev && allClasses.some(c => c.id === prev.id)) ? prev : allClasses[0] as Classroom);
-      } else {
-        setClasses([]);
-        setActiveClass(null);
-      }
-    } catch (e) {
-      console.error('Error fetching classes:', e);
+      const {data:year,error:yearError}=await supabase.from('academic_years').select('id').eq('school_id',userSchoolId).eq('is_active',true).eq('status','active').maybeSingle();
+      if(yearError)throw yearError;
+      if(!year){clear();return;}
+      let query=supabase.from('classes').select('*').eq('school_id',userSchoolId).eq('academic_year_id',year.id).eq('is_archived',false).order('name');
+      if(userRole==='monitor')query=query.eq('monitor_id',userId);
+      else if(userRole==='teacher')query=query.eq('teacher_id',userId);
+      const {data,error}=await query;
+      if(seq!==authSeqRef.current)return;
+      if(error)throw error;
+      const assigned=(data||[]) as Classroom[];
+      setClasses(assigned);
+      setClassesLoading(false);
+      setAuthError(null);
+      setActiveClass(previous=>{const next=assigned.find(c=>c.id===previous?.id)||assigned[0]||null;return previous&&next&&JSON.stringify(previous)===JSON.stringify(next)?previous:next;});
+    }catch{
+      if(seq!==authSeqRef.current)return;
+      setClassesLoading(false);
+      setAuthError('មិនអាចផ្ទុកថ្នាក់បានទេ។ សូមសាកម្ដងទៀត។');
     }
   }
 
@@ -144,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return data as AcademicYear | null;
       })();
 
-      const classesPromise = refreshClassesForUser(userId, userProfile.role, userProfile.school_id);
+      const classesPromise = refreshClassesForUser(userId, userProfile.role, userProfile.school_id, seq);
 
       const [academicYear] = await Promise.all([yearPromise, classesPromise]);
 
@@ -160,7 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase]);
 
   // Synchronize authenticated session in a race-safe, decoupled manner
-  const syncSession = useCallback(async (session: any, eventName: string) => {
+  const syncSession = useCallback(async (session: any) => {
     const seq = ++authSeqRef.current;
 
     // 1. Case: No authenticated user session
@@ -181,11 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const userId = session.user.id;
     const isExistingActiveSession = userId === currentUserIdRef.current && !!profileRef.current;
 
-    // 2. Case: Token Refreshed for same active user (deduplicate database queries)
-    if (eventName === 'TOKEN_REFRESHED' && isExistingActiveSession) {
-      setUser(session.user);
-      return;
-    }
+    // Role/assignment may change while a token remains valid. Recheck the profile on refresh.
 
     // 3. Case: New user or identity switch — immediately clear old sensitive context
     if (userId !== currentUserIdRef.current) {
@@ -240,7 +185,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Check active account status
-      if (dbProfile.is_active === false) {
+      if (dbProfile.is_active !== true) {
         currentUserIdRef.current = null;
         profileRef.current = null;
         setUser(null);
@@ -301,7 +246,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       queueMicrotask(() => {
         if (!isMounted) return;
-        syncSession(session, event);
+        syncSession(event === 'SIGNED_OUT' ? null : session);
       });
     });
 
@@ -314,16 +259,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Manual retry handler
   const retryAuth = useCallback(async () => {
-    setAuthStatus('loading');
+    if(!profileRef.current || !currentUserIdRef.current)setAuthStatus('loading');
     setAuthError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await syncSession(session, 'RETRY');
+      await syncSession(session);
     } catch (err: any) {
       setAuthError(err?.message || 'បរាជ័យក្នុងការតភ្ជាប់ឡើងវិញ');
       setAuthStatus('error');
     }
   }, [supabase, syncSession]);
+
+  useEffect(()=>{
+    if(profile?.role!=='monitor')return;
+    const refresh=()=>{void retryAuth();};
+    window.addEventListener('focus',refresh);
+    return()=>window.removeEventListener('focus',refresh);
+  },[profile?.role,retryAuth]);
 
   // Refresh classes on demand (e.g., after creating a class or switching academic year)
   const refreshClasses = useCallback(async () => {
@@ -366,7 +318,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: 'រកមិនឃើញទិន្នន័យគណនីនៅក្នុងប្រព័ន្ធទេ។' };
       }
 
-      const effectiveRole = dbProfile.role || 'teacher';
+      if(dbProfile.is_active!==true || !['admin','principal','teacher','monitor'].includes(dbProfile.role)){await supabase.auth.signOut();return {error:'គណនីនេះត្រូវបានផ្អាក ឬមិនមានតួនាទីត្រឹមត្រូវទេ។'};}
+      const effectiveRole = dbProfile.role;
 
       // Enforce expected role guard
       if (expectedRole && effectiveRole !== expectedRole) {
@@ -394,6 +347,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     currentUserIdRef.current = null;
     profileRef.current = null;
     clearAllClientCaches();
+    setUser(null);setProfile(null);setClasses([]);setActiveClass(null);setActiveAcademicYear(null);setAuthStatus('unauthenticated');
 
     try {
       await supabase.auth.signOut();
@@ -439,6 +393,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile,
         activeClass,
         classes,
+        classesLoading,
         loading: authStatus === 'loading',
         authStatus,
         authError,

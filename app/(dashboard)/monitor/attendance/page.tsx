@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { 
   Calendar as CalendarIcon, 
@@ -15,9 +15,10 @@ import {
   Send
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { phnomPenhToday, normalizeAttendance, type AttendanceWorkspace, type AttendanceRow } from '@/lib/attendance/types';
+import { invalidateClassAttendance } from '@/lib/cache/client-cache';
 
-import { submitMonitorAttendanceAction } from '@/app/(dashboard)/attendance/actions';
+import { submitMonitorAttendanceAction, loadAttendanceWorkspaceAction } from '@/app/(dashboard)/attendance/actions';
 
 type AttendanceStatus = 'present' | 'absent' | 'late' | 'permission';
 
@@ -31,13 +32,14 @@ interface StudentRow {
 const cycleStatus = (currentStatus: AttendanceStatus): AttendanceStatus => {
   switch (currentStatus) {
     case 'present': return 'absent';
-    case 'absent': return 'permission';
+    case 'absent': return 'late';
+    case 'late': return 'permission';
     case 'permission': return 'present';
     default: return 'present';
   }
 };
 
-const StatusButton = ({ status, onClick }: { status: AttendanceStatus, onClick: () => void }) => {
+const StatusButton = ({ status, onClick, disabled }: { status: AttendanceStatus, onClick: () => void, disabled?:boolean }) => {
   let bgClass = '';
   let textClass = '';
   let icon = null;
@@ -56,6 +58,8 @@ const StatusButton = ({ status, onClick }: { status: AttendanceStatus, onClick: 
       icon = <XCircle className="w-4 h-4" />;
       label = 'អត់ច្បាប់ (អ.ច)';
       break;
+    case 'late':
+      bgClass='bg-amber-50 border-amber-200'; textClass='text-amber-700'; icon=<Clock className="w-4 h-4"/>;label='មកយឺត (យ)';break;
     case 'permission':
       bgClass = 'bg-purple-50 border-purple-200';
       textClass = 'text-purple-700';
@@ -66,6 +70,7 @@ const StatusButton = ({ status, onClick }: { status: AttendanceStatus, onClick: 
   
   return (
     <button 
+      disabled={disabled}
       onClick={onClick} 
       className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border ${bgClass} ${textClass} font-black text-xs w-[115px] shadow-sm transition-transform active:scale-95 touch-manipulation cursor-pointer`}
     >
@@ -75,171 +80,61 @@ const StatusButton = ({ status, onClick }: { status: AttendanceStatus, onClick: 
 };
 
 export default function MonitorAttendancePage() {
-  const { activeClass, profile } = useAuth();
-  const searchParams = useSearchParams();
-  const dateQuery = searchParams?.get('date');
-  
-  const [students, setStudents] = useState<StudentRow[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>(dateQuery || new Date().toISOString().split('T')[0]);
-  const [formattedDate, setFormattedDate] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [missingDays, setMissingDays] = useState<string[]>([]);
-  const [showMissingBanner, setShowMissingBanner] = useState(true);
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
-  const supabase = createClient();
-
-  useEffect(() => {
-    const dateObj = new Date(selectedDate);
-    const options: Intl.DateTimeFormatOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    setFormattedDate(dateObj.toLocaleDateString('km-KH', options));
-    
-    async function fetchAttendance() {
-      setIsLoading(true);
-      if (!activeClass?.id) {
-         setStudents([]);
-         setIsLoading(false);
-         return;
-      }
-      
-      const { data: studentsData, error } = await supabase
-        .from('active_class_rosters')
-        .select('id, full_name, gender')
-        .eq('enrollment_class_id', activeClass.id)
-        .order('full_name', { ascending: true });
-        
-      if (studentsData && !error) {
-        const { data: attData } = await supabase
-          .from('attendance_records')
-          .select('student_id, status')
-          .eq('class_id', activeClass.id)
-          .eq('date', selectedDate);
-          
-        const attMap = new Map(attData?.map(a => [a.student_id, a.status]) || []);
-        
-        setStudents(studentsData.map(s => ({
-          id: s.id,
-          name: s.full_name,
-          gender: (s.gender as 'M' | 'F') || 'F',
-          status: (attMap.get(s.id) as AttendanceStatus) || 'present'
-        })));
-      } else {
-        setStudents([]);
-      }
-      setIsLoading(false);
-    }
-    
-    fetchAttendance();
-  }, [activeClass?.id, selectedDate]);
-
-  // Fetch missing days (last 7 weekdays)
-  useEffect(() => {
-    async function checkMissingDays() {
-      if (!activeClass?.id) {
-        setMissingDays([]);
-        return;
-      }
-      
-      const today = new Date();
-      const pastDays: string[] = [];
-      for (let i = 1; i <= 7; i++) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        // Exclude Saturday (6) and Sunday (0)
-        if (d.getDay() !== 0 && d.getDay() !== 6) {
-          pastDays.push(d.toISOString().split('T')[0]);
-        }
-      }
-
-      if (pastDays.length === 0) return;
-
-      const { data } = await supabase
-        .from('attendance_records')
-        .select('date')
-        .eq('class_id', activeClass.id)
-        .in('date', pastDays);
-
-      const recordedDates = new Set(data?.map(r => r.date) || []);
-      const missing = pastDays.filter(d => !recordedDates.has(d));
-      
-      if (missing.length === 7) {
-         // If literally all 7 days are missing (e.g. brand new DB), just show 2 recent missing days to not overwhelm UI
-         setMissingDays(missing.slice(0, 2));
-      } else {
-         setMissingDays(missing);
-      }
-    }
-    checkMissingDays();
-  }, [activeClass?.id]);
-
-  const handleCycle = (id: string, currentStatus: AttendanceStatus) => {
-    const nextStatus = cycleStatus(currentStatus);
-    setStudents(prev => prev.map(s => s.id === id ? { ...s, status: nextStatus } : s));
+  const {activeClass,authError,classesLoading}=useAuth();
+  const searchParams=useSearchParams();
+  const [selectedDate,setSelectedDate]=useState(searchParams?.get('date')||phnomPenhToday());
+  const [students,setStudents]=useState<StudentRow[]>([]);
+  const [baseline,setBaseline]=useState<AttendanceRow[]>([]);
+  const [isSaving,setIsSaving]=useState(false),[isLoading,setIsLoading]=useState(true);
+  const [missingDays,setMissingDays]=useState<string[]>([]),[showMissingBanner,setShowMissingBanner]=useState(true);
+  const [toast,setToast]=useState<{message:string;type:'success'|'error'}|null>(null);
+  const [loadError,setLoadError]=useState(''),[canRecord,setCanRecord]=useState(false),[dirty,setDirty]=useState(false),[reload,setReload]=useState(0);
+  const busy=useRef(false),sequence=useRef(0);
+  const applyWorkspace=(workspace:AttendanceWorkspace)=>{
+    const saved=new Map(workspace.records.map(record=>[record.student_id,record]));
+    const rows=workspace.students.map(student=>{const status=saved.get(student.id)?.status;const normalized=status?normalizeAttendance(status):'present';if(!normalized)throw new Error('ស្ថានភាពវត្តមានមិនត្រឹមត្រូវ។');return{id:student.id,name:student.name,gender:student.gender as 'M'|'F',status:normalized};});
+    setStudents(rows);setBaseline(workspace.records);setMissingDays(workspace.missingDays);setCanRecord(workspace.canRecord);setDirty(false);
   };
-
-  const markAllPresent = () => {
-    setStudents(prev => prev.map(s => ({ ...s, status: 'present' })));
-  };
-
-  const handleSave = async (type: 'submit') => {
-    if (!activeClass?.id) {
-      setToast({ message: 'សូមជ្រើសរើសថ្នាក់រៀនជាមុនសិន', type: 'error' });
-      return;
-    }
-
-    if (students.length === 0) {
-      setToast({ message: 'មិនមានទិន្នន័យសិស្សដើម្បីបញ្ជូនវត្តមានទេ', type: 'error' });
-      return;
-    }
-
-    setIsSaving(true);
-    
-    try {
-      let targetYearId = activeClass.academic_year_id;
-      if (!targetYearId) {
-        const { data: classInfo } = await supabase
-          .from('classes')
-          .select('academic_year_id')
-          .eq('id', activeClass.id)
-          .maybeSingle();
-        targetYearId = classInfo?.academic_year_id;
-      }
-
-      if (!targetYearId) {
-        throw new Error('រកមិនឃើញឆ្នាំសិក្សាសកម្មសម្រាប់ថ្នាក់រៀននេះទេ');
-      }
-
-      // Authoritative Server-Side Monitor Attendance Action
-      // Matches authoritative constraint onConflict: 'student_id,date,academic_year_id' with academic_year_id: targetYearId
-      const result = await submitMonitorAttendanceAction({
-        class_id: activeClass.id,
-        date: selectedDate,
-        records: students.map(s => ({
-          student_id: s.id,
-          status: s.status,
-        })),
-        academic_year_id: targetYearId,
-      });
-
-      if (!result.success) {
-        throw new Error(result.error || 'បរាជ័យក្នុងការបញ្ជូនវត្តមាន');
-      }
-
-      setMissingDays(prev => prev.filter(d => d !== selectedDate));
-      setToast({ message: 'បញ្ជូនវត្តមានប្រចាំថ្ងៃទៅកាន់គ្រូដោយជោគជ័យ!', type: 'success' });
-      setTimeout(() => setToast(null), 3000);
-    } catch (error: any) {
-      console.error('Failed to submit monitor attendance:', error);
-      setToast({ message: `មានកំហុសក្នុងការបញ្ជូនទិន្នន័យ៖ ${error?.message || 'សូមសាកល្បងម្តងទៀត'}`, type: 'error' });
-      setTimeout(() => setToast(null), 4000);
-    }
-    
-    setIsSaving(false);
+  useEffect(()=>{
+    let cancelled=false;const token=++sequence.current;setStudents([]);setBaseline([]);setDirty(false);setIsLoading(true);setLoadError('');setCanRecord(false);
+    if(!activeClass?.id||!activeClass.academic_year_id){setMissingDays([]);setIsLoading(false);return;}
+    void loadAttendanceWorkspaceAction({class_id:activeClass.id,academic_year_id:activeClass.academic_year_id,date:selectedDate}).then(result=>{
+      if(cancelled||token!==sequence.current)return;
+      if(!result.success||!result.workspace)throw new Error(result.error||'មិនអាចផ្ទុកវត្តមានបានទេ។');
+      applyWorkspace(result.workspace);
+    }).catch(error=>{if(!cancelled&&token===sequence.current)setLoadError(error instanceof Error?error.message:'មានបញ្ហាបណ្ដាញ។ សូមសាកម្ដងទៀត។');}).finally(()=>{if(!cancelled&&token===sequence.current)setIsLoading(false);});
+    return()=>{cancelled=true;};
+  },[activeClass?.id,activeClass?.academic_year_id,selectedDate,reload]);
+  useEffect(()=>{
+    const prevent=(event:BeforeUnloadEvent)=>{if(dirty){event.preventDefault();event.returnValue='';}};
+    const context=(event:Event)=>{if(busy.current || (dirty&&!confirm('មានវត្តមានមិនទាន់រក្សាទុក។ បោះបង់ការកែប្រែមែនទេ?')))event.preventDefault();};
+    const focus=()=>{if(!dirty&&!busy.current)setReload(value=>value+1);};
+    const navigation=(event:MouseEvent)=>{if(!dirty||event.ctrlKey||event.metaKey||event.shiftKey||event.button!==0)return;const anchor=(event.target as Element)?.closest('a[href]');if(anchor&&new URL((anchor as HTMLAnchorElement).href).pathname!==window.location.pathname&&!confirm('បោះបង់វត្តមានមិនទាន់រក្សាទុកមែនទេ?')){event.preventDefault();event.stopPropagation();}};
+    document.addEventListener('click',navigation,true);
+    window.addEventListener('beforeunload',prevent);window.addEventListener('student-context-change',context);window.addEventListener('focus',focus);
+    return()=>{document.removeEventListener('click',navigation,true);window.removeEventListener('beforeunload',prevent);window.removeEventListener('student-context-change',context);window.removeEventListener('focus',focus);};
+  },[dirty]);
+  const changeDate=(value:string)=>{if(busy.current || (dirty&&!confirm('មានវត្តមានមិនទាន់រក្សាទុក។ បោះបង់ការកែប្រែមែនទេ?')))return;setSelectedDate(value);setToast(null);};
+  const handleCycle=(id:string,status:AttendanceStatus)=>{if(busy.current||isLoading||!canRecord)return;setStudents(previous=>previous.map(student=>student.id===id?{...student,status:cycleStatus(status)}:student));setDirty(true);};
+  const markAllPresent=()=>{if(busy.current||isLoading||!canRecord)return;setStudents(previous=>previous.map(student=>({...student,status:'present'})));setDirty(true);};
+  const handleSave=async()=>{
+    if(busy.current || isLoading || !canRecord || !students.length || !activeClass?.id || !activeClass.academic_year_id)return;
+    busy.current=true;setIsSaving(true);setToast(null);const token=sequence.current;
+    try{
+      const originals=new Map(baseline.map(record=>[record.student_id,record]));
+      const result=await submitMonitorAttendanceAction({class_id:activeClass.id,academic_year_id:activeClass.academic_year_id,date:selectedDate,records:students.map(student=>({student_id:student.id,status:student.status,previous_updated_at:originals.get(student.id)?.updated_at||null,root_cause:originals.get(student.id)?.root_cause||null}))});
+      if(!result.success||!result.workspace)throw new Error(result.error||'បរាជ័យក្នុងការបញ្ជូនវត្តមាន។');
+      if(token!==sequence.current)return;
+      applyWorkspace(result.workspace);invalidateClassAttendance(activeClass.id);window.dispatchEvent(new Event('attendance-updated'));
+      setToast({message:'បញ្ជូនវត្តមានប្រចាំថ្ងៃទៅកាន់គ្រូដោយជោគជ័យ!',type:'success'});
+    }catch(error){if(token===sequence.current)setToast({message:error instanceof Error?error.message:'មានបញ្ហាបណ្ដាញ។ ទិន្នន័យព្រាងនៅរក្សាទុក។',type:'error'});}
+    finally{busy.current=false;setIsSaving(false);}
   };
 
   const stats = {
     present: students.filter(s => s.status === 'present').length,
     absent: students.filter(s => s.status === 'absent').length,
+    late: students.filter(student=>student.status==='late').length,
     permission: students.filter(s => s.status === 'permission').length,
   };
 
@@ -279,12 +174,18 @@ export default function MonitorAttendancePage() {
                 <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">ច</div>
              </div>
           </div>
-          <button onClick={markAllPresent} className="text-[10px] font-black text-[#155EEF] bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg border border-blue-100 transition-colors shadow-sm cursor-pointer">
+<div className="text-center text-amber-600 font-black text-sm">{stats.late}<span className="block text-[9px] text-slate-400">យឺត</span></div>
+          <button disabled={isSaving||isLoading||!canRecord} onClick={markAllPresent} className="text-[10px] font-black text-[#155EEF] bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg border border-blue-100 transition-colors shadow-sm cursor-pointer">
             ទាំងអស់
           </button>
         </div>
       </div>
 
+      <div className="px-5 pt-3 space-y-2"><label className="flex items-center gap-2 text-xs font-bold text-slate-600"><CalendarIcon className="w-4 h-4"/>កាលបរិច្ឆេទ<input aria-label="កាលបរិច្ឆេទវត្តមាន" type="date" value={selectedDate} max={phnomPenhToday()} disabled={isSaving} onChange={event=>changeDate(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 min-w-0"/></label>
+      {dirty&&<p className="text-xs font-bold text-amber-700">វត្តមានមិនទាន់រក្សាទុក</p>}
+      {!isLoading&&!canRecord&&activeClass&&<p className="text-xs font-bold text-amber-700">កាលបរិច្ឆេទនេះក្រៅឆ្នាំសិក្សា ឬមិនអាចកត់ត្រាបានទេ។</p>}
+      {(loadError||authError)&&<p role="alert" className="text-xs font-bold text-rose-600">{loadError||authError}</p>}
+      <button type="button" disabled={isSaving||isLoading} onClick={()=>{if(!dirty||confirm('បោះបង់ទិន្នន័យព្រាង ហើយផ្ទុកវត្តមានថ្មីមែនទេ?'))setReload(value=>value+1);}} className="text-xs font-bold text-[#155EEF]">ផ្ទុកវត្តមានថ្មី</button></div>
       {/* List Area */}
       <div className="flex-1 overflow-y-auto pb-28 px-4 pt-4 flex flex-col gap-4">
         
@@ -307,10 +208,10 @@ export default function MonitorAttendancePage() {
                   {missingDays.map(d => (
                     <button 
                       key={d} 
-                      onClick={() => setSelectedDate(d)}
+                      onClick={() => changeDate(d)}
                       className="px-3.5 py-1.5 bg-white border border-rose-100 shadow-sm rounded-lg text-rose-600 text-xs font-bold hover:bg-rose-50 hover:border-rose-200 transition-all hover:-translate-y-0.5 cursor-pointer"
                     >
-                      {new Date(d).toLocaleDateString('km-KH', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      {new Date(d).toLocaleDateString('km-KH', { timeZone:'Asia/Phnom_Penh',weekday: 'short', day: 'numeric', month: 'short' })}
                     </button>
                   ))}
                 </div>
@@ -320,7 +221,7 @@ export default function MonitorAttendancePage() {
         )}
 
         {/* Student List */}
-        {isLoading ? (
+        {isLoading||classesLoading ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="divide-y divide-slate-100">
               {[1, 2, 3, 4, 5, 6].map(i => (
@@ -338,10 +239,10 @@ export default function MonitorAttendancePage() {
           <div className="bg-white/90 backdrop-blur-md rounded-2xl border border-slate-200/60 p-8 text-center flex flex-col items-center justify-center my-auto shadow-[0_4px_20px_rgb(0,0,0,0.02)]">
             <AlertCircle className="w-10 h-10 text-slate-300 mb-3" />
             <h3 className="font-extrabold text-slate-700 text-sm mb-1">
-              {!activeClass?.id ? 'សូមជ្រើសរើសថ្នាក់រៀនជាមុនសិន' : 'មិនទាន់មានទិន្នន័យសិស្សក្នុងថ្នាក់នេះនៅឡើយទេ'}
+              {!activeClass?.id ? 'មិនទាន់បានចាត់ថ្នាក់ឱ្យអ្នកទេ' : 'មិនទាន់មានទិន្នន័យសិស្សក្នុងថ្នាក់នេះនៅឡើយទេ'}
             </h3>
             <p className="text-xs text-slate-400 font-bold">
-              {!activeClass?.id ? 'សូមជ្រើសរើសថ្នាក់ដែលអ្នកទទួលបន្ទុក' : 'សូមទាក់ទងអ្នកគ្រប់គ្រងដើម្បីបញ្ចូលឈ្មោះសិស្ស'}
+              {!activeClass?.id ? 'សូមទាក់ទងអ្នកគ្រប់គ្រងដើម្បីចាត់ថ្នាក់' : 'សូមទាក់ទងអ្នកគ្រប់គ្រងដើម្បីបញ្ចូលឈ្មោះសិស្ស'}
             </p>
           </div>
         ) : (
@@ -358,7 +259,7 @@ export default function MonitorAttendancePage() {
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{student.gender}</span>
                     </div>
                   </div>
-                  <StatusButton status={student.status} onClick={() => handleCycle(student.id, student.status)} />
+                  <StatusButton disabled={isSaving||!canRecord} status={student.status} onClick={() => handleCycle(student.id, student.status)} />
                 </div>
               ))}
             </div>
@@ -369,8 +270,8 @@ export default function MonitorAttendancePage() {
       {/* Floating Action Button */}
       <div className="fixed sm:absolute bottom-6 left-0 right-0 max-w-md mx-auto px-4 pointer-events-none z-20">
          <button 
-           onClick={() => handleSave('submit')} 
-           disabled={isSaving} 
+           onClick={handleSave}
+           disabled={isSaving||isLoading||!canRecord||!students.length}
            className="w-full py-4 bg-[#155EEF] hover:bg-blue-700 text-white font-black text-sm rounded-2xl shadow-xl shadow-blue-500/30 flex items-center justify-center gap-2 pointer-events-auto transition-transform active:scale-95 disabled:opacity-50 border border-blue-600 cursor-pointer"
          >
             {isSaving ? (

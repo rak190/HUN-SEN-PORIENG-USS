@@ -22,7 +22,7 @@ interface ClassData {
 export async function GET(req: Request) {
   const { user, role, profile } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || !profile?.is_active || !profile.school_id || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -45,7 +45,7 @@ export async function GET(req: Request) {
       query = query.eq('academic_year_id', academicYearId);
     }
     
-    if (role === 'principal' && profile?.school_id) {
+    if (profile?.school_id) {
       query = query.eq('school_id', profile.school_id);
     }
 
@@ -105,7 +105,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const { user, role, profile } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || !profile?.is_active || !profile.school_id || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
   // Batch insert support (e.g. from Bulk Generate or Excel Import)
   if (Array.isArray(body.classes)) {
     try {
-      const resolvedSchoolId = role === 'principal' ? profile?.school_id : null;
+      const resolvedSchoolId = profile.school_id;
       
       const records = body.classes.map((c: Partial<ClassData>) => ({
         name: c.name,
@@ -168,7 +168,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `ថ្នាក់ឈ្មោះ "${name}" មានរួចហើយនៅក្នុងឆ្នាំសិក្សានេះ!` }, { status: 400 });
     }
 
-    const resolvedSchoolId = role === 'principal' ? profile?.school_id : null;
+    const resolvedSchoolId = profile.school_id;
     
     const { data: newClass, error } = await adminClient
       .from('classes')
@@ -199,12 +199,13 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const { user, role, profile } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || !profile?.is_active || !profile.school_id || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
   const body = await req.json();
   const { id, teacher_id, name, grade, shift, room_number, track } = body;
+  if('monitor_id' in body)return NextResponse.json({error:'សូមប្រើការចាត់ប្រធានថ្នាក់ដែលបានផ្ទៀងផ្ទាត់។'},{status:400});
 
   const adminClient = createAdminClient();
 
@@ -226,7 +227,7 @@ export async function PATCH(req: Request) {
       .update(updateData)
       .eq('id', id);
 
-    if (role === 'principal' && profile?.school_id) {
+    if (profile?.school_id) {
       updateQuery = updateQuery.eq('school_id', profile.school_id);
     }
 
@@ -243,7 +244,7 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   const { user, role, profile } = await getServerAuth();
 
-  if (!user || (role !== 'admin' && role !== 'principal')) {
+  if (!user || !profile?.is_active || !profile.school_id || (role !== 'admin' && role !== 'principal')) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   }
 
@@ -280,7 +281,7 @@ export async function DELETE(req: Request) {
       .delete()
       .eq('id', id);
 
-    if (role === 'principal' && profile?.school_id) {
+    if (profile?.school_id) {
       deleteQuery = deleteQuery.eq('school_id', profile.school_id);
     }
 

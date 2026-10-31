@@ -5,7 +5,7 @@ import { Profile, Classroom, Role } from '@/types';
 
 /**
  * Stage 1 Behavioral Resilience & Security Suite
- * Tests actual state machines, race-condition guards, token refresh deduplication,
+ * Tests state machines, race-condition guards,
  * fail-closed timeouts, exact EWS at-risk statistics, and React.cache per-request scoping.
  */
 
@@ -123,37 +123,9 @@ test('Stage 1 Performance & Security Resilience Suite', async (t) => {
   });
 
   // --------------------------------------------------------------------------
-  // Scenario 3: Token Refresh Deduplication
+  // Token refresh is covered by the actual AuthProvider in monitor-auth-context.test.ts.
+  // It must recheck database roles, including Teacher -> Monitor changes during a session.
   // --------------------------------------------------------------------------
-  await t.test('Scenario 3: TOKEN_REFRESHED for active user skips database queries and updates session only', async () => {
-    let dbQueryCount = 0;
-    const currentUserIdRef = { current: 'user-active-123' };
-    const profileRef = { current: { id: 'user-active-123', role: 'admin' } as Profile };
-    let activeUser = { id: 'user-active-123', tokenVersion: 1 };
-
-    async function handleAuthEvent(event: string, session: any) {
-      const userId = session?.user?.id;
-
-      // Deduplication invariant
-      if (event === 'TOKEN_REFRESHED' && userId === currentUserIdRef.current && profileRef.current) {
-        activeUser = session.user;
-        return; // Skip DB queries!
-      }
-
-      // Full query path
-      dbQueryCount++;
-    }
-
-    // Simulate token refresh
-    await handleAuthEvent('TOKEN_REFRESHED', { user: { id: 'user-active-123', tokenVersion: 2 } });
-
-    assert.strictEqual(dbQueryCount, 0, 'No database queries should execute on TOKEN_REFRESHED for same user');
-    assert.strictEqual(activeUser.tokenVersion, 2, 'User session reference must update');
-
-    // If identity changes on refresh, query MUST run
-    await handleAuthEvent('TOKEN_REFRESHED', { user: { id: 'user-new-456', tokenVersion: 1 } });
-    assert.strictEqual(dbQueryCount, 1, 'Database query must run when user ID changes');
-  });
 
   // --------------------------------------------------------------------------
   // Scenario 4: Timeout Fail-Closed Protection

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useTeachers } from './useTeachers';
 import Modal from '@/components/ui/Modal';
+import { TeacherCombobox } from '../classes/TeacherCombobox';
 
 export default function TeacherAccountsPage() {
   const {
@@ -17,6 +18,9 @@ export default function TeacherAccountsPage() {
     setFilterRole,
     loading,
     accounts,
+    monitorClasses,
+    handleMonitorAssignment,
+    handleDraftMonitorClass,
     filteredAccounts,
     isAddingTeacher,
     savingTeacherId,
@@ -295,6 +299,7 @@ export default function TeacherAccountsPage() {
                           <option value="principal">នាយក (Principal)</option>
                           <option value="monitor">ប្រធានថ្នាក់ (Monitor)</option>
                         </select>
+                        {a.role==='monitor'&&<div className="mt-1 min-w-[180px] text-left"><label className="text-[10px] font-bold text-slate-400">ថ្នាក់ដែលទទួលបន្ទុក</label><TeacherCombobox allowClear label={`ថ្នាក់ដែលទទួលបន្ទុក ${a.name}`} placeholder="ស្វែងរកថ្នាក់..." teachers={monitorClasses.map(c=>({id:c.id,full_name:c.name+(c.monitor_id&&c.monitor_id!==a.id?' · មានប្រធានថ្នាក់':'')}))} value={a.monitor_classes?.[0]?.id||null} fallbackLabel={a.monitor_classes?.[0]?.name||''} disabled={savingTeacherId===a.id} onChange={id=>void handleMonitorAssignment(a,id)}/></div>}
                       </td>
                       <td className="px-4 py-1.5 border-y border-slate-100 group-hover:border-emerald-200 transition-colors text-center">
                         <input
@@ -467,6 +472,7 @@ export default function TeacherAccountsPage() {
                           <option value="principal">នាយក (Principal)</option>
                           <option value="monitor">ប្រធានថ្នាក់ (Monitor)</option>
                         </select>
+                        {draft.role==='monitor'&&<div className="mt-1 min-w-[180px] text-left"><label className="text-[10px] font-bold text-slate-400">ថ្នាក់ដែលទទួលបន្ទុក</label><TeacherCombobox allowClear label={`ថ្នាក់ដែលទទួលបន្ទុកថ្មី ${index+1}`} placeholder="ស្វែងរកថ្នាក់..." teachers={monitorClasses.map(c=>({id:c.id,full_name:c.name+(c.monitor_id?' · មានប្រធានថ្នាក់':' · ទំនេរ')}))} value={draft.monitorClassId||null} disabled={isAddingTeacher} onChange={id=>handleDraftMonitorClass(index,id)}/></div>}
                       </td>
                       <td className="px-4 py-1.5 border-y border-slate-200 border-dashed text-center">
                         <input

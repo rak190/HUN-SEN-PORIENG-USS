@@ -6,9 +6,14 @@ import {
   Filter, UserX, Clock, Building2, Users, Check,
   AlertTriangle, Mic, ArrowUpRight, Phone, Download, TrendingDown, TrendingUp
 } from 'lucide-react';
+import { phnomPenhToday, normalizeAttendance } from '@/lib/attendance/types';
+import { calendarMonthBounds, attendanceCoverage } from '@/lib/attendance/summary';
+import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 
 export default function MasterAttendancePage() {
+  const {profile}=useAuth();
+  const [dataError,setDataError]=useState('');
   const [loading, setLoading] = useState(true);
   const [absentStudents, setAbsentStudents] = useState<any[]>([]);
   const [classesStatus, setClassesStatus] = useState<any[]>([]);
@@ -19,7 +24,7 @@ export default function MasterAttendancePage() {
   const [filterType, setFilterType] = useState<'all' | 'unexcused' | 'excused'>('all');
   
   // Date Picker State
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(phnomPenhToday());
   const [timeframe, setTimeframe] = useState<'daily'|'monthly'|'yearly'>('daily');
   const [activeTab, setActiveTab] = useState<'call-list'|'compliance'|'watchlist'>('call-list');
   const [dbClasses, setDbClasses] = useState<any[]>([]);
@@ -28,7 +33,7 @@ export default function MasterAttendancePage() {
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
   const [classSearchQuery, setClassSearchQuery] = useState('');
 
-  const todayStr = new Date().toLocaleDateString('km-KH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const todayStr = new Date().toLocaleDateString('km-KH', { timeZone:'Asia/Phnom_Penh',weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
   const supabase = createClient();
   const [academicYears, setAcademicYears] = useState<any[]>([]);
@@ -39,12 +44,13 @@ export default function MasterAttendancePage() {
 
   useEffect(() => {
     async function fetchData() {
-      setLoading(true);
+      if(!profile?.school_id)return;
+      setLoading(true);setDataError('');
       try {
         // 0. Fetch academic years
         const { data: yearsData } = await supabase
           .from('academic_years')
-          .select('id, name, status, is_active')
+          .select('id, name, status, is_active').eq('school_id',profile.school_id)
           .order('start_date', { ascending: false });
           
         let currentYearIdToFetch = activeYearId;
@@ -60,7 +66,7 @@ export default function MasterAttendancePage() {
         // Fetch real classes from database
         let classesQuery = supabase
           .from('classes')
-          .select('id, name, grade, teacher_id, profiles:teacher_id(full_name)')
+          .select('id, name, grade, teacher_id, profiles:teacher_id(full_name)').eq('school_id',profile.school_id).eq('is_archived',false)
           .order('grade')
           .order('name');
           
@@ -76,20 +82,13 @@ export default function MasterAttendancePage() {
         let startDateStr = selectedDate;
         let endDateStr = selectedDate;
 
-        if (timeframe === 'monthly') {
-           const date = new Date(selectedDate);
-           startDateStr = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
-           endDateStr = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
-        } else if (timeframe === 'yearly') {
-           const date = new Date(selectedDate);
-           startDateStr = new Date(date.getFullYear(), 0, 1).toISOString().split('T')[0];
-           endDateStr = new Date(date.getFullYear(), 11, 31).toISOString().split('T')[0];
-        }
+        if(timeframe==='monthly'){const bounds=calendarMonthBounds(selectedDate.slice(0,7));startDateStr=bounds.start;endDateStr=bounds.end;}
+        else if(timeframe==='yearly'){startDateStr=selectedDate.slice(0,4)+'-01-01';endDateStr=selectedDate.slice(0,4)+'-12-31';}
 
         // Fetch attendance
         let attQuery = supabase
           .from('attendance_records')
-          .select('*, students(full_name, student_id_number, gender)')
+          .select('*, students(full_name, student_id_number, gender)').in('class_id',validClasses.map(c=>c.id))
           .gte('date', startDateStr)
           .lte('date', endDateStr);
           
@@ -97,20 +96,27 @@ export default function MasterAttendancePage() {
           attQuery = attQuery.eq('academic_year_id', currentYearIdToFetch);
         }
 
-        const { data: attData } = await attQuery;
-        const records = attData || [];
+        const {data:attData,error:attendanceError}=await attQuery;
+        if(attendanceError)throw attendanceError;
+        const records=(attData||[]).map(record=>({...record,status:normalizeAttendance(record.status)||record.status}));
+        const {data:roster,error:rosterError}=await supabase.from('active_class_rosters').select('id,enrollment_class_id').in('enrollment_class_id',validClasses.map(c=>c.id)).eq('academic_year_id',currentYearIdToFetch||'');
+        if(rosterError)throw rosterError;
 
+        const calendar=validClasses.length?await supabase.rpc('attendance_school_dates',{p_class_id:validClasses[0].id,p_year_id:currentYearIdToFetch,p_from:startDateStr,p_to:endDateStr}):{data:[],error:null};
+        if(calendar.error)throw calendar.error;
+        const schoolDates=(calendar.data||[]) as string[];
+        const coverage=new Map(validClasses.map(c=>[c.id,attendanceCoverage(records.filter(r=>r.class_id===c.id),(roster||[]).filter(s=>s.enrollment_class_id===c.id).map(s=>s.id),schoolDates)]));
         // Build data structures
-        const classSubmissions = new Set(records.map(r => r.class_id));
         const newClassesStatus = validClasses.map(c => ({
           id: c.id,
           name: c.name,
-          isSubmitted: classSubmissions.has(c.id) // Simplistic check: if ANY record exists, it's submitted
+          isRequired: (coverage.get(c.id)?.required||0)>0,
+          isSubmitted: (coverage.get(c.id)?.required||0)>0 && coverage.get(c.id)?.completed===coverage.get(c.id)?.required
         }));
         setClassesStatus(newClassesStatus);
 
         // Process absentees (exclude 'present')
-        const absentees = records.filter(r => r.status !== 'present');
+        const absentees = records.filter(r => r.status === 'absent' || r.status === 'permission');
         
         if (timeframe === 'daily') {
            setAbsentStudents(absentees.map(a => {
@@ -123,7 +129,7 @@ export default function MasterAttendancePage() {
                class_name: cls?.name || '',
                reason: a.status === 'absent' || a.status === 'A' ? 'គ្មានការអនុញ្ញាត (Unexcused)' : 'សុំច្បាប់',
                unexcused: a.status === 'absent' || a.status === 'A' ? 1 : 0,
-               excused: a.status === 'permission' || a.status === 'P' ? 1 : 0
+               excused: a.status === 'permission' || a.status === 'E' ? 1 : 0
              };
            }));
         } else {
@@ -154,13 +160,7 @@ export default function MasterAttendancePage() {
 
         // Leaderboard (simplified to submission existence for the period)
         const lb = validClasses.map(c => {
-           // Count unique dates this class submitted
-           const classRecords = records.filter(r => r.class_id === c.id);
-           const uniqueDates = new Set(classRecords.map(r => r.date)).size;
-           // If daily, it's 100% or 0%. If monthly, max ~30 days. Let's just simulate rate based on unique dates.
-           // Actually, since we simplified, let's just make it 100% if they submitted *anything* in the selected period, else 0%
-           // A more complex query could calculate actual school days vs submitted days.
-           const rate = uniqueDates > 0 ? 100 : 0; 
+           const rate=coverage.get(c.id)?.rate??null;
            return {
              id: c.id,
              name: (c.profiles as any)?.full_name || 'មិនមានគ្រូ',
@@ -169,7 +169,7 @@ export default function MasterAttendancePage() {
              streak: 0 // Simplification requested by user
            };
         });
-        setLeaderboard(lb.sort((a,b) => b.rate - a.rate));
+        setLeaderboard(lb.sort((a,b) => (b.rate||0)-(a.rate||0)));
 
         // Watchlist (High absences this month/period)
         // Just reuse the aggregated data if monthly, otherwise we should calculate it.
@@ -197,13 +197,14 @@ export default function MasterAttendancePage() {
         setWatchlist(wl);
 
       } catch (err: any) {
-        console.error('Error fetching data:', err.message || err);
+        setDataError('មិនអាចផ្ទុករបាយការណ៍វត្តមានបានទេ។ សូមសាកម្ដងទៀត។');
+        console.error('Error fetching attendance report:',err?.code||'QUERY_FAILED');
       } finally {
         setLoading(false);
       }
     }
     fetchData();
-  }, [timeframe, selectedDate, activeYearId]); // Refresh when timeframe, date, or year changes
+  }, [timeframe, selectedDate, activeYearId, profile?.school_id]); // Refresh when timeframe, date, or year changes
 
 
   const filteredAbsentees = absentStudents.filter(a => {
@@ -233,7 +234,7 @@ export default function MasterAttendancePage() {
 
   const totalClasses = classesStatus.length;
   const submittedClasses = classesStatus.filter(c => c.isSubmitted).length;
-  const missingClasses = classesStatus.filter(c => !c.isSubmitted);
+  const missingClasses = classesStatus.filter(c => c.isRequired&&!c.isSubmitted);
 
   const groupedClasses = dbClasses.reduce((acc, cls) => {
     const grade = cls.grade || 'Other';
@@ -248,6 +249,7 @@ export default function MasterAttendancePage() {
 
   return (
     <div className="space-y-6 animate-fadeIn select-none">
+      {dataError&&<p role="alert" className="p-3 bg-rose-50 rounded-xl text-rose-700 text-xs font-bold">{dataError}</p>}
       {isReadOnly && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex items-center gap-3 shadow-sm mb-6">
           <AlertCircle className="w-5 h-5 shrink-0" />
@@ -447,7 +449,7 @@ export default function MasterAttendancePage() {
                     </div>
                     <div className="text-right">
                       <div className={`font-black text-sm ${teacher.rate === 100 ? 'text-emerald-500' : teacher.rate > 80 ? 'text-amber-500' : 'text-rose-500'}`}>
-                        {teacher.rate}%
+                        {teacher.rate===null?'—':`${teacher.rate}%`}
                       </div>
                       {teacher.streak > 0 && (
                         <div className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 mt-0.5 shadow-xs">

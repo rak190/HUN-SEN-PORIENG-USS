@@ -2,59 +2,36 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { createClient } from '@/lib/supabase/client';
+import { loadAttendanceWorkspaceAction } from '@/app/(dashboard)/attendance/actions';
+import { phnomPenhToday } from '@/lib/attendance/types';
 import { AlertCircle, Calendar, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function MissingDaysPage() {
-  const { activeClass } = useAuth();
+  const { activeClass,classesLoading } = useAuth();
   const [missingDays, setMissingDays] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const supabase = createClient();
+  const [loadError,setLoadError]=useState('');
+  const [hasRoster,setHasRoster]=useState(false);
+  const [reload,setReload]=useState(0);
   const router = useRouter();
 
-  useEffect(() => {
-    async function checkMissingDays() {
-      setIsLoading(true);
-      if (!activeClass?.id) {
-        setMissingDays([]);
-        setIsLoading(false);
-        return;
-      }
-      
-      const today = new Date();
-      const pastDays: string[] = [];
-      for (let i = 1; i <= 7; i++) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        if (d.getDay() !== 0 && d.getDay() !== 6) {
-          pastDays.push(d.toISOString().split('T')[0]);
-        }
-      }
-
-      if (pastDays.length === 0) {
-        setIsLoading(false);
-        return;
-      }
-
-      const { data } = await supabase
-        .from('attendance_records')
-        .select('date')
-        .eq('class_id', activeClass.id)
-        .in('date', pastDays);
-
-      const recordedDates = new Set(data?.map(r => r.date) || []);
-      const missing = pastDays.filter(d => !recordedDates.has(d));
-      
-      if (missing.length === 7) {
-         setMissingDays(missing.slice(0, 2));
-      } else {
-         setMissingDays(missing);
-      }
-      setIsLoading(false);
+  useEffect(()=>{
+    let cancelled=false;
+    async function load(){
+      setIsLoading(true);setLoadError('');setMissingDays([]);setHasRoster(false);
+      if(!activeClass?.id||!activeClass.academic_year_id){setIsLoading(false);return;}
+      try{
+        const result=await loadAttendanceWorkspaceAction({class_id:activeClass.id,academic_year_id:activeClass.academic_year_id,date:phnomPenhToday()});
+        if(cancelled)return;
+        if(!result.success||!result.workspace)throw new Error(result.error||'មិនអាចផ្ទុកបញ្ជីបានទេ។');
+        setMissingDays(result.workspace.missingDays);setHasRoster(result.workspace.students.length>0);
+      }catch(error){if(!cancelled)setLoadError(error instanceof Error?error.message:'មានបញ្ហាបណ្ដាញ។');}
+      finally{if(!cancelled)setIsLoading(false);}
     }
-    checkMissingDays();
-  }, [activeClass?.id]);
+    void load();return()=>{cancelled=true;};
+  },[activeClass?.id,activeClass?.academic_year_id,reload]);
+  useEffect(()=>{const refresh=()=>setReload(value=>value+1);window.addEventListener('focus',refresh);window.addEventListener('attendance-updated',refresh);return()=>{window.removeEventListener('focus',refresh);window.removeEventListener('attendance-updated',refresh);};},[]);
 
   const handleDayClick = (dateStr: string) => {
     router.push(`/monitor/attendance?date=${dateStr}`);
@@ -81,20 +58,20 @@ export default function MissingDaysPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {isLoading ? (
+        {isLoading||classesLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map(i => (
               <div key={i} className="bg-white h-16 rounded-2xl border border-slate-200 animate-pulse shadow-sm"></div>
             ))}
           </div>
-        ) : missingDays.length > 0 ? (
+        ) : !activeClass || loadError || !hasRoster ? (<div role="status" className="p-6 text-center text-sm font-bold text-slate-600"><p>{loadError || (!activeClass?'មិនទាន់បានចាត់ថ្នាក់ឱ្យអ្នកទេ។ សូមទាក់ទងអ្នកគ្រប់គ្រង។':'ថ្នាក់នេះមិនទាន់មានសិស្សសកម្ម។ សូមទាក់ទងអ្នកគ្រប់គ្រង។')}</p>{loadError&&<button type="button" onClick={()=>setReload(value=>value+1)} className="mt-3 text-[#155EEF]">សាកម្ដងទៀត</button>}</div>) : missingDays.length > 0 ? (
           <div className="space-y-3">
             <p className="text-sm font-bold text-slate-500 mb-4 px-1">
               សូមជ្រើសរើសថ្ងៃខាងក្រោមដើម្បីស្រង់អវត្តមានដែលបានរំលង៖
             </p>
             {missingDays.map(d => {
               const dateObj = new Date(d);
-              const formatted = dateObj.toLocaleDateString('km-KH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+              const formatted = dateObj.toLocaleDateString('km-KH', { timeZone:'Asia/Phnom_Penh',weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
               
               return (
                 <button 

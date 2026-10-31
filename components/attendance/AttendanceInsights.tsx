@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { calendarMonthBounds, attendanceHistory } from '@/lib/attendance/summary';
 import { AlertTriangle, CalendarDays, CheckCircle2, Filter, HeartHandshake, History, RefreshCw, UserCheck, Users } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
@@ -30,15 +31,13 @@ export default function AttendanceInsights({ mode }: { mode: 'alerts' | 'history
 
     setLoading(true);
     try {
-      const start = `${month}-01`;
-      const endDate = new Date(`${start}T00:00:00+07:00`);
-      endDate.setMonth(endDate.getMonth() + 1);
-      const end = endDate.toISOString().slice(0, 10);
+      const {start,next:end}=calendarMonthBounds(month);
       const [students, records, cases] = await Promise.all([
-        supabase.from('active_class_rosters').select('id, student_id_number, full_name').eq('enrollment_class_id', activeClass.id),
-        supabase.from('attendance_records').select('student_id, date, status').eq('class_id', activeClass.id).eq('academic_year_id', activeClass.academic_year_id).gte('date', start).lt('date', end),
+        supabase.from('active_class_rosters').select('id, student_id_number, full_name').eq('enrollment_class_id', activeClass.id).eq('academic_year_id',activeClass.academic_year_id),
+        supabase.from('attendance_records').select('student_id, date, status, updated_at, recorded_by').eq('class_id', activeClass.id).eq('academic_year_id', activeClass.academic_year_id).gte('date', start).lt('date', end),
         supabase.from('support_cases').select('student_id').eq('class_id', activeClass.id).neq('status', 'resolved'),
       ]);
+      if(students.error)throw students.error;if(records.error)throw records.error;if(cases.error)throw cases.error;
       const recordsData = records.data || [];
       const openCases = new Set((cases.data || []).map(item => item.student_id));
       setAlerts((students.data || []).map(student => {
@@ -46,7 +45,7 @@ export default function AttendanceInsights({ mode }: { mode: 'alerts' | 'history
         const absentDates = own.filter(item => ['absent', 'A'].includes(item.status)).map(item => item.date).sort();
         return { id: student.id, number: student.student_id_number || '-', name: student.full_name, absent: absentDates.length, permission: own.filter(item => ['permission', 'E'].includes(item.status)).length, late: own.filter(item => ['late', 'L'].includes(item.status)).length, latest: absentDates.at(-1) || '—', openCase: openCases.has(student.id) };
       }).filter(item => item.absent >= 3 || item.late >= 3).sort((a, b) => b.absent - a.absent));
-      setSubmissions([]);
+      setSubmissions(attendanceHistory(recordsData,(students.data||[]).map(student=>student.id),activeClass.teacher_id));
     } catch (e) {
       console.error('Error loading attendance insights:', e);
       setAlerts([]);

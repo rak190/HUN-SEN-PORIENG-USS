@@ -1,225 +1,44 @@
-import { NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+﻿import { NextResponse } from 'next/server';
 import { getServerAuth } from '@/lib/auth-server';
+import { resetStaffPasswordAction, updateStaffProfileAction, toggleStaffStatusAction, deleteStaffPermanentlyAction } from '@/app/(dashboard)/admin/teachers/actions';
+import { z } from 'zod';
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { user, role: userRole, profile } = await getServerAuth();
-
-  if (!user || (userRole !== 'admin' && userRole !== 'principal')) {
-    return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
-  }
-
-  const { id } = await params;
-  const adminClient = createAdminClient();
-  const body = await req.json();
-
-  const { fullName, role, schoolCode, password, homeroomClassId } = body;
-
-  if (!adminClient) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
-  }
-
+// Legacy per-id endpoint follows the same policy as the current /admin/teachers controls.
+// Assignment changes belong to the separate, context-checked class workflows.
+const patch = z.object({
+  fullName: z.string().trim().min(1).max(200).optional(),
+  role: z.enum(['teacher', 'monitor', 'principal', 'admin']).optional(),
+  phone: z.string().max(80).optional(),
+  subject: z.string().max(200).optional(),
+  password: z.string().min(6).optional(),
+}).strict().refine(value => !value.password || Object.keys(value).length === 1, 'Save profile edits and password changes separately.');
+type Context = { params: Promise<{ id: string }> };
+async function authorized() {
+  const { user, profile, role } = await getServerAuth();
+  return !!user && role === 'admin' && profile?.is_active === true && !!profile.school_id;
+}
+export async function PATCH(req: Request, { params }: Context) {
+  if (!await authorized()) return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   try {
-    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active, school_id').eq('id', id).single();
-
-    if (userRole === 'principal' && targetProfile?.school_id !== profile?.school_id) {
-      return NextResponse.json({ error: 'Forbidden: User belongs to another school.' }, { status: 403 });
-    }
-
-    if (targetProfile?.role === 'admin' && userRole !== 'admin') {
-      return NextResponse.json({ error: 'Principal cannot modify an admin account.' }, { status: 403 });
-    }
-
-    if (role === 'admin' && userRole !== 'admin') {
-      return NextResponse.json({ error: 'Principal cannot assign admin role.' }, { status: 403 });
-    }
-
-    if (targetProfile?.role === 'admin' && role && role !== 'admin') {
-      const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin').eq('is_active', true);
-      if (count !== null && count <= 1) {
-        return NextResponse.json({ error: 'Cannot demote the last active admin.' }, { status: 400 });
-      }
-    }
-
-    // 1. Update Profile row
-    const updateData: any = {};
-    if (fullName) updateData.full_name = fullName.trim();
-    if (role) updateData.role = role;
-    if (schoolCode) updateData.school_code = schoolCode;
-
-    if (Object.keys(updateData).length > 0) {
-      const { error: profileError } = await adminClient
-        .from('profiles')
-        .update(updateData)
-        .eq('id', id);
-
-      if (profileError) {
-        return NextResponse.json({ error: profileError.message }, { status: 400 });
-      }
-    }
-
-    // 2. Update Auth User if password is changed
-    if (password) {
-      try {
-        const { error: pwdErr } = await adminClient.auth.admin.updateUserById(id, {
-          password,
-          user_metadata: { full_name: fullName, role },
-        });
-        if (pwdErr) throw pwdErr;
-
-        // Log the password change
-        await adminClient.from('audit_logs').insert([
-          {
-            action: `បានប្តូរពាក្យសម្ងាត់សម្រាប់គណនីលេខសម្គាល់ ${id}`,
-            type: 'warn',
-            user_id: user.id,
-          }
-        ]);
-      } catch (err: any) {
-        return NextResponse.json({ error: err.message || 'Failed to update auth data' }, { status: 500 });
-      }
-    }
-
-    if (homeroomClassId && role === 'teacher') {
-      // Validate class ownership and school scope
-      const { data: classData, error: classErr } = await adminClient
-        .from('classes')
-        .select('id, school_id')
-        .eq('id', homeroomClassId)
-        .single();
-        
-      if (classErr || !classData) {
-        return NextResponse.json({ error: 'មិនមានថ្នាក់នេះទេ (Invalid class ID)' }, { status: 400 });
-      }
-      
-      if (classData.school_id !== (targetProfile?.school_id || schoolCode)) {
-        return NextResponse.json({ error: 'ថ្នាក់នេះមិនស្ថិតនៅក្នុងសាលារបស់អ្នកទេ (School mismatch)' }, { status: 403 });
-      }
-
-      // Unassign any previous class
-      await adminClient
-        .from('classes')
-        .update({ teacher_id: null })
-        .eq('teacher_id', id);
-
-      // Assign to new class
-      await adminClient
-        .from('classes')
-        .update({ teacher_id: id })
-        .eq('id', homeroomClassId);
-    }
-
-    const roleKh =
-      role === 'principal'
-        ? 'នាយកសាលា'
-        : role === 'admin'
-        ? 'អ្នកគ្រប់គ្រងប្រព័ន្ធ'
-        : role === 'monitor'
-        ? 'ប្រធានថ្នាក់'
-        : 'គ្រូបន្ទុកថ្នាក់';
-
-    return NextResponse.json({
-      isDemo: false,
-      user: {
-        id,
-        name: fullName,
-        role,
-        roleKh,
-        school: schoolCode || 'Porieng-2026',
-        homeroomClassId,
-      },
-    });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to update user' }, { status: 500 });
+    const { id } = await params;
+    const value = patch.parse(await req.json());
+    const result = value.password
+      ? await resetStaffPasswordAction(id, value.password)
+      : await updateStaffProfileAction(id, { full_name: value.fullName, role: value.role, phone: value.phone, subject: value.subject });
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Cannot update this account.' }, { status: error instanceof z.ZodError ? 400 : 403 });
   }
 }
-
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { user, role: userRole, profile } = await getServerAuth();
-
-  if (!user || (userRole !== 'admin' && userRole !== 'principal')) {
-    return NextResponse.json({ error: 'Unauthorized: Admin access required.' }, { status: 403 });
-  }
-
-  const { id } = await params;
-  const adminClient = createAdminClient();
-
-  if (!adminClient) {
-    return NextResponse.json({ error: 'Database unavailable' }, { status: 500 });
-  }
-
+export async function DELETE(req: Request, { params }: Context) {
+  if (!await authorized()) return NextResponse.json({ error: 'Unauthorized.' }, { status: 403 });
   try {
-    const { data: targetProfile } = await adminClient.from('profiles').select('role, is_active, school_id').eq('id', id).single();
-    
-    if (userRole === 'principal' && targetProfile?.school_id !== profile?.school_id) {
-      return NextResponse.json({ error: 'Forbidden: User belongs to another school.' }, { status: 403 });
-    }
-
-    if (targetProfile?.role === 'admin' && userRole !== 'admin') {
-      return NextResponse.json({ error: 'Principal cannot delete an admin account.' }, { status: 403 });
-    }
-
-    if (targetProfile?.role === 'admin') {
-      const { count } = await adminClient.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
-      if (count !== null && count <= 1) {
-        return NextResponse.json({ error: 'Cannot delete the last admin account.' }, { status: 400 });
-      }
-    }
-
-    const url = new URL(req.url);
-    const forceDelete = url.searchParams.get('force') === 'true';
-
-    // 1. Unassign teacher from any classes
-    await adminClient.from('classes').update({ teacher_id: null }).eq('teacher_id', id);
-
-    if (forceDelete) {
-      // Hard delete
-      const { error: profileErr } = await adminClient.from('profiles').delete().eq('id', id);
-      if (profileErr) throw profileErr;
-
-      try {
-        const { error: authDelErr } = await adminClient.auth.admin.deleteUser(id);
-        if (authDelErr) throw authDelErr;
-      } catch (err: any) {
-        return NextResponse.json({ error: err.message || 'Failed to delete auth user' }, { status: 500 });
-      }
-
-      await adminClient.from('audit_logs').insert([
-        {
-          action: `បានលុបគណនីលេខសម្គាល់ ${id} (Hard Delete)`,
-          type: 'warn',
-          user_id: user.id,
-        }
-      ]);
-    } else {
-      // Soft delete / Archive
-      const { error: profileErr } = await adminClient.from('profiles').update({ is_active: false, is_archived: true }).eq('id', id);
-      if (profileErr) throw profileErr;
-
-      // Suspend Auth user (ban for 100 years)
-      try {
-        await adminClient.auth.admin.updateUserById(id, { ban_duration: '876000h' });
-      } catch (err: any) {
-        return NextResponse.json({ error: err.message || 'Failed to suspend auth user' }, { status: 500 });
-      }
-
-      await adminClient.from('audit_logs').insert([
-        {
-          action: `បានដាក់ចូលបណ្ណសារគណនីលេខសម្គាល់ ${id} (Archive)`,
-          type: 'warn',
-          user_id: user.id,
-        }
-      ]);
-    }
-
-    return NextResponse.json({ isDemo: false, message: 'User deleted successfully' });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to delete user' }, { status: 500 });
+    const { id } = await params;
+    const result = new URL(req.url).searchParams.get('force') === 'true'
+      ? await deleteStaffPermanentlyAction(id)
+      : await toggleStaffStatusAction(id, false);
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Cannot delete this account.' }, { status: 403 });
   }
 }

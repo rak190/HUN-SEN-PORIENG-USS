@@ -7,14 +7,12 @@ const rootDir = path.resolve(__dirname, '../..');
 
 test('Phase 4: Workflow Polish & Mock Data Purge Suite', async (t) => {
   const migration073Path = path.join(rootDir, 'supabase', 'migrations', '073_create_giep_notes_and_monitor_assignment.sql');
-  const attendanceActionsPath = path.join(rootDir, 'app', '(dashboard)', 'attendance', 'actions.ts');
   const giepActionsPath = path.join(rootDir, 'app', '(dashboard)', 'giep', 'actions.ts');
   const giepPagePath = path.join(rootDir, 'app', '(dashboard)', 'giep', 'page.tsx');
   const monitorAttendancePath = path.join(rootDir, 'app', '(dashboard)', 'monitor', 'attendance', 'page.tsx');
   const monitorMissingPath = path.join(rootDir, 'app', '(dashboard)', 'monitor', 'missing', 'page.tsx');
   const gridModalPath = path.join(rootDir, 'components', 'students', 'StudentGridEntryModal.tsx');
   const importModalPath = path.join(rootDir, 'components', 'students', 'StudentImportModal.tsx');
-  const authContextPath = path.join(rootDir, 'lib', 'auth-context.tsx');
 
   // --------------------------------------------------------------------------
   // Scenario 1: Migration 073 Schema, Backfill, and RLS
@@ -60,57 +58,12 @@ test('Phase 4: Workflow Polish & Mock Data Purge Suite', async (t) => {
   // --------------------------------------------------------------------------
   // Scenario 2: submitMonitorAttendanceAction Server Authorization
   // --------------------------------------------------------------------------
-  await t.test('Scenario 2: submitMonitorAttendanceAction validates authentication, monitor assignment, and locks', () => {
-    assert.ok(fs.existsSync(attendanceActionsPath), 'attendance/actions.ts must exist');
-    const content = fs.readFileSync(attendanceActionsPath, 'utf8');
-
-    assert.ok(
-      content.includes('export async function submitMonitorAttendanceAction'),
-      'actions.ts must export submitMonitorAttendanceAction'
-    );
-
-    // Authentication and role guard
-    assert.ok(
-      content.includes("['monitor', 'teacher', 'admin', 'principal'].includes(role)"),
-      'submitMonitorAttendanceAction must restrict to monitor, teacher, admin, principal'
-    );
-
-    // Monitor assignment check
-    assert.ok(
-      content.includes('classData.monitor_id === user.id || classData.teacher_id === user.id'),
-      'submitMonitorAttendanceAction must verify monitor-to-class assignment'
-    );
-
-    // School boundary guard
-    assert.ok(
-      content.includes('classData.school_id !== profile.school_id'),
-      'submitMonitorAttendanceAction must verify school boundary'
-    );
-
-    // Academic year lock check
-    assert.ok(
-      content.includes("['closed', 'archived'].includes(yearData.status)"),
-      'submitMonitorAttendanceAction must verify academic year is not locked'
-    );
-
-    // Student enrollment check
-    assert.ok(
-      content.includes('.from(\'student_enrollments\')') &&
-      content.includes('.eq(\'enrollment_status\', \'active\')'),
-      'submitMonitorAttendanceAction must verify active student enrollments'
-    );
-
-    // Service role admin client upsert with authoritative constraint target
-    assert.ok(
-      content.includes("onConflict: 'student_id,date,academic_year_id'"),
-      'submitMonitorAttendanceAction must use onConflict: student_id,date,academic_year_id'
-    );
-
-    // Audit logging
-    assert.ok(
-      content.includes(".from('audit_logs').insert"),
-      'submitMonitorAttendanceAction must insert an audit log'
-    );
+  await t.test('Scenario 2: Monitor submission cannot bypass authentication',async()=>{
+    const {submitMonitorAttendanceAction}=await import('../../app/(dashboard)/attendance/actions');
+    const result=await submitMonitorAttendanceAction({class_id:'00000000-0000-4000-8000-000000000020',academic_year_id:'00000000-0000-4000-8000-000000000010',date:'2026-10-20',records:[{student_id:'00000000-0000-4000-8000-000000000101',status:'present'}]});
+    assert.equal(result.success,false);
+    assert.ok(result.error);
+    // Role/class/year, original-value conflicts, all-or-nothing writes and audit failure run in PostgreSQL.
   });
 
   // --------------------------------------------------------------------------
@@ -212,12 +165,6 @@ test('Phase 4: Workflow Polish & Mock Data Purge Suite', async (t) => {
       'giep/page.tsx must NOT insert activity logs into documents table'
     );
 
-    // auth-context.tsx monitor support
-    assert.ok(fs.existsSync(authContextPath), 'auth-context.tsx must exist');
-    const authContent = fs.readFileSync(authContextPath, 'utf8');
-    assert.ok(
-      authContent.includes('monitor_id.eq.'),
-      'auth-context.tsx must query monitor_id for class assignment'
-    );
+    // Monitor class resolution is covered behaviorally in monitor-auth-context.test.ts.
   });
 });

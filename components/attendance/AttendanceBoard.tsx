@@ -23,6 +23,7 @@ import {
   Users
 } from 'lucide-react';
 import Link from 'next/link';
+import { normalizeAttendance, phnomPenhToday, type AttendanceRow } from '@/lib/attendance/types';
 
 const ROOT_CAUSE_OPTIONS: { value: RootCauseAbsence; label: string }[] = [
   { value: 'farming', label: '🌾 ជួយការងារស្រែចម្ការ / គ្រួសារ' },
@@ -36,9 +37,10 @@ const ROOT_CAUSE_OPTIONS: { value: RootCauseAbsence; label: string }[] = [
 export default function AttendanceBoard() {
   const { activeClass, user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
+  const [originals,setOriginals]=useState<AttendanceRow[]>([]);
   const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
   const [rootCauses, setRootCauses] = useState<Record<string, RootCauseAbsence>>({});
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [selectedDate, setSelectedDate] = useState<string>(phnomPenhToday());
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
@@ -73,13 +75,14 @@ export default function AttendanceBoard() {
           .from('attendance_records')
           .select('*')
           .eq('class_id', activeClass?.id || '')
-          .eq('date', selectedDate);
+          .eq('date', selectedDate).eq('academic_year_id',activeClass?.academic_year_id||'');
 
+        setOriginals(attData||[]);
         const newMap: Record<string, AttendanceStatus> = {};
         const newCauseMap: Record<string, RootCauseAbsence> = {};
         if (attData) {
           attData.forEach((rec: any) => {
-            newMap[rec.student_id] = rec.status;
+            newMap[rec.student_id] = normalizeAttendance(rec.status)||rec.status;
             if (rec.root_cause) newCauseMap[rec.student_id] = rec.root_cause;
           });
         }
@@ -119,6 +122,7 @@ export default function AttendanceBoard() {
         student_id: studentId,
         date: selectedDate,
         status,
+        previous_updated_at:originals.find(row=>row.student_id===studentId)?.updated_at||null,
         root_cause: rootCauses[studentId] || null,
         academic_year_id: activeClass.academic_year_id || undefined,
       });
@@ -137,6 +141,7 @@ export default function AttendanceBoard() {
         return;
       }
 
+      if(res.workspace)setOriginals(res.workspace.records);
       setSyncStatus('synced');
     } catch (e: any) {
       console.error('Failed to sync attendance:', e);
@@ -182,6 +187,7 @@ export default function AttendanceBoard() {
         records: students.map(s => ({
           student_id: s.id,
           status,
+          previous_updated_at:originals.find(row=>row.student_id===s.id)?.updated_at||null,
           root_cause: rootCauses[s.id] || null,
         })),
         academic_year_id: activeClass.academic_year_id || undefined,

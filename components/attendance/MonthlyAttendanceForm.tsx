@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { Student, MonthlyAttendanceSummary, RootCauseAbsence, AttendanceRecord } from '@/types';
@@ -24,6 +24,8 @@ import {
   Download
 } from 'lucide-react';
 import Link from 'next/link';
+import { calendarMonthBounds, dailyAttendanceCounts, attendanceCoverage } from '@/lib/attendance/summary';
+import { normalizeAttendance, phnomPenhToday } from '@/lib/attendance/types';
 import { buildCacheKey, getOrFetchScoped, invalidateClassAttendance } from '@/lib/cache/client-cache';
 
 const ROOT_CAUSE_OPTIONS: { value: RootCauseAbsence; label: string }[] = [
@@ -40,12 +42,14 @@ export default function MonthlyAttendanceForm() {
   const [students, setStudents] = useState<Student[]>([]);
   
   // Format current month to YYYY-MM
-  const currentMonthStr = new Date().toISOString().slice(0, 7);
+  const currentMonthStr = phnomPenhToday().slice(0, 7);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error'>('synced');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [dataError,setDataError]=useState(''),[summaryMismatch,setSummaryMismatch]=useState(0),[reload,setReload]=useState(0);
+  const summaryBusy=useRef(false);
   const [viewMode, setViewMode] = useState<'monthly' | 'daily'>('monthly');
   const [rawDailyRecords, setRawDailyRecords] = useState<AttendanceRecord[]>([]);
   
@@ -154,7 +158,7 @@ export default function MonthlyAttendanceForm() {
             if (record.status === 'absent' || record.status === 'A') {
               cell.value = 'អ';
               cell.font = { name: 'Khmer OS Battambang', size: 10, color: { argb: 'FFDC2626' } };
-            } else if (record.status === 'permission' || record.status === 'P') {
+            } else if (record.status === 'permission' || record.status === 'E') {
               cell.value = 'ច';
               cell.font = { name: 'Khmer OS Battambang', size: 10, color: { argb: 'FFD97706' } };
             } else if (record.status === 'late' || record.status === 'L') {
@@ -230,6 +234,7 @@ export default function MonthlyAttendanceForm() {
           if (dayRecord) {
             if (dayRecord.status === 'permission') { displayChar = 'ច'; }
             if (dayRecord.status === 'absent') { displayChar = 'អ'; cellColor = '#e11d48'; }
+            if (dayRecord.status === 'late') { displayChar = 'យ'; cellColor = '#d97706'; }
             // present stays blank
           }
           daysHtml += `<td style="border: 1px solid #94a3b8; padding: 2px; text-align: center; font-weight: bold; color: ${cellColor}">${displayChar}</td>`;
@@ -382,6 +387,7 @@ export default function MonthlyAttendanceForm() {
   const supabase = createClient();
 
   useEffect(() => {
+    let cancelled=false;
     if (!activeClass) {
       setStudents([]);
       setMonitorDaysSubmitted(0);
@@ -395,8 +401,8 @@ export default function MonthlyAttendanceForm() {
     async function loadData() {
       setLoading(true);
       try {
-        const startDate = `${selectedMonth}-01`;
-        const endDate = `${selectedMonth}-31`;
+        const {start:startDate,end:endDate}=calendarMonthBounds(selectedMonth);
+        setDataError('');
 
         const rosterKey = buildCacheKey({
           userId: user?.id,
@@ -415,6 +421,7 @@ export default function MonthlyAttendanceForm() {
                 .from('active_class_rosters')
                 .select('id, full_name, student_id_number, gender')
                 .eq('enrollment_class_id', activeClass?.id || '')
+                .eq('academic_year_id', activeClass?.academic_year_id || '')
                 .order('full_name', { ascending: true });
               if (error) throw error;
               return (data as Student[]) || [];
@@ -428,22 +435,25 @@ export default function MonthlyAttendanceForm() {
             .eq('month', selectedMonth),
           supabase
             .from('attendance_records')
-            .select('id, class_id, student_id, date, status, notes')
+            .select('id, class_id, student_id, date, status, note, root_cause, academic_year_id, updated_at')
+            .eq('academic_year_id',activeClass?.academic_year_id||'')
             .eq('class_id', activeClass?.id || '')
             .gte('date', startDate)
             .lte('date', endDate),
         ]);
 
+        if(cancelled)return;
+        if(summaryRes.error)throw summaryRes.error;if(dailyRes.error)throw dailyRes.error;
         const stdData = rosterRes.data || [];
         setStudents(stdData);
 
-        const summaryData = summaryRes.data || [];
-        const dailyRecords = dailyRes.data || [];
+        const rosterIds=new Set(stdData.map(student=>student.id));
+        const summaryData = (summaryRes.data || []).filter(record=>rosterIds.has(record.student_id));
+        const dailyRecords=(dailyRes.data||[]).filter(record=>rosterIds.has(record.student_id)).map(record=>({...record,status:normalizeAttendance(record.status)||record.status}));
 
         const allStudents = stdData;
         const newMap: Record<string, any> = {};
         
-        const daysSubmitted = new Set<string>();
         let totalAbsences = 0;
         let dropoutCount = 0;
 
@@ -456,7 +466,6 @@ export default function MonthlyAttendanceForm() {
         if (dailyRecords) {
           setRawDailyRecords((dailyRecords as unknown) as AttendanceRecord[]);
           dailyRecords.forEach(rec => {
-            daysSubmitted.add(rec.date);
             if (!autoSums[rec.student_id]) autoSums[rec.student_id] = { absent_count: 0, permission_count: 0, late_count: 0 };
             
             if (rec.status === 'absent') { autoSums[rec.student_id].absent_count++; totalAbsences++; }
@@ -465,7 +474,7 @@ export default function MonthlyAttendanceForm() {
           });
         }
         
-        setMonitorDaysSubmitted(daysSubmitted.size);
+        setMonitorDaysSubmitted(attendanceCoverage(dailyRecords,stdData.map(student=>student.id),[]).completed);
 
         // 2. Initialize with Auto-Sums, then OVERRIDE with Teacher's manual input if it exists
         allStudents.forEach((s) => {
@@ -488,20 +497,28 @@ export default function MonthlyAttendanceForm() {
           });
         }
 
+        const counts=dailyAttendanceCounts(dailyRecords);
+        setSummaryMismatch(summaryData.filter(rec=>(['absent_count','permission_count','late_count'] as const).some(key=>(rec[key]||0)!==(counts[rec.student_id]?.[key]||0))).length);
         setTotalMonthlyAbsences(totalAbsences);
         setDropoutAlertsCount(dropoutCount);
 
         setFormData(newMap);
         setHasUnsavedChanges(false);
       } catch (e) {
-        console.error('Error loading monthly attendance:', e);
+        if(cancelled)return;
+        setDataError('មិនអាចផ្ទុកវត្តមានបានទេ។ សូមសាកម្ដងទៀត។');
+        console.error('Error loading monthly attendance:',e);
       } finally {
-        setLoading(false);
+        if(!cancelled)setLoading(false);
       }
     }
 
     loadData();
-  }, [activeClass, selectedMonth]);
+    return()=>{cancelled=true;};
+  }, [activeClass, selectedMonth,reload]);
+
+  useEffect(()=>{const refresh=()=>{if(!hasUnsavedChanges&&!summaryBusy.current)setReload(value=>value+1);};window.addEventListener('focus',refresh);window.addEventListener('attendance-updated',refresh);return()=>{window.removeEventListener('focus',refresh);window.removeEventListener('attendance-updated',refresh);};},[hasUnsavedChanges]);
+  const reconcileDaily=()=>{if(!confirm('យកចំនួនតាមវត្តមានប្រចាំថ្ងៃជំនួសសង្ខេបដែលខុសគ្នាមែនទេ?'))return;const counts=dailyAttendanceCounts(rawDailyRecords);setFormData(previous=>Object.fromEntries(Object.entries(previous).map(([id,value])=>[id,{...value,...(counts[id]||{absent_count:0,permission_count:0,late_count:0})}])));setHasUnsavedChanges(true);setSummaryMismatch(0);};
 
   async function handleInputChange(studentId: string, field: 'absent_count' | 'permission_count' | 'late_count', value: string) {
     const numValue = parseInt(value, 10) || 0;
@@ -538,6 +555,7 @@ export default function MonthlyAttendanceForm() {
   }
 
   async function handleSaveAll() {
+    if(summaryBusy.current)return;summaryBusy.current=true;
     setSyncStatus('syncing');
 
     if (!activeClass) {
@@ -545,7 +563,7 @@ export default function MonthlyAttendanceForm() {
         setSyncStatus('synced');
         setHasUnsavedChanges(false);
       }, 600);
-      return;
+      summaryBusy.current=false;return;
     }
 
     try {
@@ -553,6 +571,7 @@ export default function MonthlyAttendanceForm() {
         class_id: activeClass.id,
         student_id: s.id,
         month: selectedMonth,
+        academic_year_id:activeClass.academic_year_id,
         absent_count: formData[s.id]?.absent_count || 0,
         permission_count: formData[s.id]?.permission_count || 0,
         late_count: formData[s.id]?.late_count || 0,
@@ -574,6 +593,7 @@ export default function MonthlyAttendanceForm() {
       console.error('Failed to sync monthly attendance:', e);
       setSyncStatus('error');
     }
+    summaryBusy.current=false;
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, colIndex: number) => {
@@ -706,6 +726,8 @@ export default function MonthlyAttendanceForm() {
 
   return (
     <div className="space-y-6 animate-fadeIn select-none">
+      {dataError&&<p role="alert" className="p-3 rounded-xl bg-rose-50 text-rose-700 text-xs font-bold">{dataError}</p>}
+      {summaryMismatch>0&&<div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-800">សង្ខេបកែដោយគ្រូខុសនឹងវត្តមានប្រចាំថ្ងៃ៖ {summaryMismatch} នាក់។ សូមពិនិត្យមុនប្រើរបាយការណ៍។ <button type="button" onClick={reconcileDaily} className="text-[#155EEF] underline">យកចំនួនតាមវត្តមានប្រចាំថ្ងៃ</button></div>}
       
       {/* View Toggle Pill */}
       <div className="flex justify-center mb-6 print:hidden">
@@ -810,7 +832,7 @@ export default function MonthlyAttendanceForm() {
           <input
             type="month"
             value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
+            onChange={(e) => {if(!summaryBusy.current&&(!hasUnsavedChanges||confirm('បោះបង់ការកែប្រែសង្ខេបមុនប្ដូរខែមែនទេ?')))setSelectedMonth(e.target.value);}}
             className="bg-transparent border-none text-sm font-bold text-slate-700 focus:ring-0 cursor-pointer"
           />
         </div>

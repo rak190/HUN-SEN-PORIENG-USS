@@ -35,7 +35,7 @@ export async function proxy(request: NextRequest) {
   );
 
   let user: any = null;
-  let effectiveRole = 'teacher';
+  let effectiveRole: string | null = null;
 
   try {
     const { data } = await supabase.auth.getUser();
@@ -45,15 +45,15 @@ export async function proxy(request: NextRequest) {
       // Fetch authoritative role from DB instead of trusting cookies or metadata
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, is_active')
         .eq('id', user.id)
         .single();
         
-      if (profile?.role) {
+      if (profile?.is_active === true && ['teacher','monitor','admin','principal'].includes(profile.role)) {
         effectiveRole = profile.role;
-      }
+      } else { user=null; }
     }
-  } catch (e) {}
+  } catch { user=null; }
 
   const pathname = request.nextUrl.pathname;
 
@@ -87,6 +87,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (user && isProtectedRoute) {
+    if (effectiveRole === 'monitor' && !pathname.startsWith('/monitor')) return NextResponse.redirect(new URL('/monitor/attendance', request.url));
     // RBAC: Admin only routes
     if (pathname.startsWith('/admin') && effectiveRole !== 'admin' && effectiveRole !== 'principal') {
       return NextResponse.redirect(new URL('/homeroom', request.url));

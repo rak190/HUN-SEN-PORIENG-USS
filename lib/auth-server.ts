@@ -49,7 +49,7 @@ export const getServerAuth = cache(async (): Promise<AuthContextResult> => {
       .eq('id', userId)
       .maybeSingle();
 
-    if (profile && profile.is_active !== false) {
+    if (profile && profile.is_active === true) {
       return {
         user: { id: profile.id, email: email || `${profile.username}@kruai.app` },
         profile: profile as Profile,
@@ -102,6 +102,7 @@ export async function requireSchoolAccess(schoolId: string): Promise<{ user: { i
  */
 export async function requireClassAccess(classId: string): Promise<{ user: { id: string; email: string }; profile: Profile; role: Role }> {
   const auth = await requireAuth();
+  if (!['teacher','principal','admin'].includes(auth.role)) throw new Error('Forbidden: This operation is restricted to school staff.');
   if (auth.role === 'admin') return auth;
 
   const supabase = await createClient();

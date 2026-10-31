@@ -1,5 +1,7 @@
-import { useState, useEffect, useDeferredValue } from 'react';
+import { useState, useEffect, useDeferredValue, useRef } from 'react';
 import { toggleStaffStatusAction, resetStaffPasswordAction, deleteStaffPermanentlyAction, updateStaffProfileAction } from './actions';
+import { assignClassMonitorAction } from '../monitors/actions';
+export interface MonitorClass {id:string;name:string;monitor_id:string|null;academic_year_id:string}
 export interface Account {
   id: string;
   username: string;
@@ -12,9 +14,13 @@ export interface Account {
   phone?: string;
   subject?: string;
   created_at: string;
+  monitor_classes?:MonitorClass[];
+  is_active?:boolean;
 }
 
 export interface InlineNewTeacher {
+  monitorClassId?:string;
+  previousMonitorId?:string|null;
   username: string;
   fullName: string;
   password?: string;
@@ -29,6 +35,8 @@ export function useTeachers() {
   const [filterRole, setFilterRole] = useState('all');
   const [loading, setLoading] = useState(true);
 
+  const [monitorClasses,setMonitorClasses]=useState<MonitorClass[]>([]);
+  const createBusy=useRef(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   
   const [isAddingTeacher, setIsAddingTeacher] = useState(false);
@@ -57,6 +65,8 @@ export function useTeachers() {
     try {
       const res = await fetch('/api/admin/users');
       const data = await res.json();
+      if(!res.ok)throw new Error(data.error||'មិនអាចផ្ទុកគណនីបានទេ។');
+      setMonitorClasses(data.monitorClasses||[]);
       if (data.users) {
         setAccounts(data.users);
       }
@@ -144,9 +154,24 @@ export function useTeachers() {
     }
   };
 
+  const handleMonitorAssignment=async(account:Account,targetId:string)=>{
+    const previous=account.monitor_classes?.[0];const target=monitorClasses.find(c=>c.id===targetId);
+    if((previous?.id||'')===targetId)return;
+    if((previous || target?.monitor_id)&&!confirm('តើចង់ផ្លាស់ប្ដូរ ឬដកការចាត់ថ្នាក់នេះមែនទេ? ការចាត់ថ្នាក់ចាស់នឹងត្រូវដកចេញ។'))return;
+    const current=target||previous;if(!current)return;setSavingTeacherId(account.id);
+    try{await assignClassMonitorAction({classId:current.id,yearId:current.academic_year_id,monitorId:target?account.id:null,previousMonitorId:current.monitor_id,previousClassId:target&&previous&&target.id!==previous.id?previous.id:null});await fetchTeachers();alert('បានរក្សាទុកការចាត់ថ្នាក់ដោយជោគជ័យ។');}
+    catch(error){alert(error instanceof Error?error.message:'មិនអាចចាត់ថ្នាក់បានទេ។');await fetchTeachers();}finally{setSavingTeacherId(null);}
+  };
+  const handleDraftMonitorClass=(index:number,targetId:string)=>{
+    const target=monitorClasses.find(c=>c.id===targetId);
+    if(target?.monitor_id&&!confirm('ថ្នាក់នេះមានប្រធានថ្នាក់រួចហើយ។ ចង់ជំនួសមែនទេ?'))return;
+    setDraftGrid(previous=>previous.map((draft,i)=>i===index?{...draft,monitorClassId:targetId,previousMonitorId:target?.monitor_id||null}:draft));
+  };
+
   const handleDraftChange = (index: number, field: keyof InlineNewTeacher, value: string) => {
     const newGrid = [...draftGrid];
     newGrid[index] = { ...newGrid[index], [field]: value };
+    if(field==='role'&&value!=='monitor'){newGrid[index].monitorClassId='';newGrid[index].previousMonitorId=null;}
     
     // Automatically add a new row if we are typing in the last row
     if (index === draftGrid.length - 1 && value.trim() !== '') {
@@ -157,6 +182,7 @@ export function useTeachers() {
   };
 
   const handleSaveDrafts = async () => {
+    if(createBusy.current)return;
     // Filter out rows that don't have username and full name
     const validDrafts = draftGrid.filter(d => d.username.trim() !== '' && d.fullName.trim() !== '');
     
@@ -167,6 +193,7 @@ export function useTeachers() {
       return;
     }
 
+    createBusy.current=true;
     setIsAddingTeacher(true);
     setBatchResults(null);
     
@@ -174,14 +201,16 @@ export function useTeachers() {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ users: validDrafts })
+        body: JSON.stringify({ users: validDrafts.map(d=>({...d,monitorClassId:d.role==='monitor'&&d.monitorClassId?d.monitorClassId:null,previousMonitorId:d.role==='monitor'&&d.monitorClassId?d.previousMonitorId||null:null})) })
       });
       const data = await res.json();
       
       if (res.ok) {
         if (data.users && data.users.length > 0) {
           setAccounts(prev => [...data.users, ...prev]);
-          setDraftGrid(Array(5).fill(null).map(generateEmptyDraft));
+          const created=new Set(data.users.map((u:Account)=>u.username));
+          setDraftGrid(previous=>[...previous.filter(d=>d.username&&!created.has(d.username.trim().toLowerCase())),...Array(5).fill(null).map(generateEmptyDraft)]);
+          void fetchTeachers();
         }
         
         // Show results modal if there are generated passwords or errors
@@ -204,6 +233,7 @@ export function useTeachers() {
       alert('មានបញ្ហាក្នុងការរក្សាទុក');
     }
     
+    createBusy.current=false;
     setIsAddingTeacher(false);
   };
 
@@ -334,6 +364,9 @@ export function useTeachers() {
     setFilterRole,
     loading,
     accounts,
+    monitorClasses,
+    handleMonitorAssignment,
+    handleDraftMonitorClass,
     filteredAccounts,
     isAddingTeacher,
     savingTeacherId,

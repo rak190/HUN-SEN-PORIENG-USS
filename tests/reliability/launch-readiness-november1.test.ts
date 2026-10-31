@@ -66,12 +66,7 @@ test('November 1st School Launch Readiness Automated Verification Suite', async 
     assert.ok(homeroomContent.includes(".eq('is_archived', false)"), 'Homeroom page must exclude archived classes');
     assert.ok(homeroomContent.includes(".eq('academic_year_id', activeYear.id)"), 'Homeroom page must filter classes by active year id');
 
-    // 2. Auth Context Provider
-    const authContextPath = path.join(rootDir, 'lib', 'auth-context.tsx');
-    const authContextContent = fs.readFileSync(authContextPath, 'utf8');
-    assert.ok(authContextContent.includes(".eq('is_archived', false)"), 'AuthContext must exclude archived classes');
-    assert.ok(authContextContent.includes("assignedQuery.eq('academic_year_id', yearId)"), 'AuthContext must scope assigned classes to active academic year');
-    assert.ok(authContextContent.includes("query.eq('academic_year_id', yearId)"), 'AuthContext must scope all classes to active academic year');
+    // AuthProvider school/year/archive behavior is exercised in monitor-auth-context.test.ts.
 
     // 3. Admin Basic Import Modal
     const importModalPath = path.join(rootDir, 'components', 'admin', 'AdminBasicImportModal.tsx');
@@ -83,13 +78,12 @@ test('November 1st School Launch Readiness Automated Verification Suite', async 
   // --------------------------------------------------------------------------
   // Scenario 4: Attendance Action Monitor Authorization
   // --------------------------------------------------------------------------
-  await t.test('Scenario 4: Attendance batch action verifies monitor ownership strictly against class.monitor_id', () => {
-    const attendanceActionsPath = path.join(rootDir, 'app', '(dashboard)', 'attendance', 'actions.ts');
-    const attendanceContent = fs.readFileSync(attendanceActionsPath, 'utf8');
-
-    assert.ok(attendanceContent.includes("if (role === 'monitor')"), 'Must branch on monitor role');
-    assert.ok(attendanceContent.includes('classData.monitor_id !== user.id'), 'Must reject if monitor_id does not match user.id');
-    assert.ok(attendanceContent.includes('Forbidden: You are not authorized to record attendance for this class.'), 'Must return descriptive security error');
+  await t.test('Scenario 4: attendance batch action rejects unauthenticated class contexts', async () => {
+    const {saveAttendanceBatchAction}=await import('../../app/(dashboard)/attendance/actions');
+    const result=await saveAttendanceBatchAction({class_id:'00000000-0000-4000-8000-000000000020',academic_year_id:'00000000-0000-4000-8000-000000000010',date:'2026-10-20',records:[{student_id:'00000000-0000-4000-8000-000000000101',status:'present'}]});
+    assert.equal(result.success,false);
+    assert.ok(result.error);
+    // Real database assignment, role and school rejection is tested in monitor-workflow-database.test.ts.
   });
 
   // --------------------------------------------------------------------------
